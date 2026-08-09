@@ -1,0 +1,156 @@
+@import "tailwindcss";
+
+/* Hide duplicate inner headers when capturing PDF */
+.capturing-pdf .capturing-pdf-hide {
+  display: none !important;
+}
+
+/* Global baseline & typography tweaks */
+body {
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbars */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.5);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.8);
+}
+
+@media print {
+  /* Prevent parent components from hiding or clipping the printable document */
+  html, body, #root, #smarthub-application-workspace, main, .flex-1, .max-w-7xl, div {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    position: static !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+  }
+
+  /* Hide navigation, sidebar, header, modal overlays, and non-printable elements */
+  body * {
+    visibility: hidden;
+    background-color: transparent !important;
+  }
+
+  /* Hide dark modal backdrops, fixed overlays, and popups */
+  .fixed, .backdrop-blur-xs, .backdrop-blur-sm, .backdrop-blur, [role="dialog"] {
+    position: static !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  /* Show only our designated printable sheet components and descendants */
+  #printable-control-sheet,
+  #printable-control-sheet *,
+  #printable-landscape-sheet,
+  #printable-landscape-sheet *,
+  #printable-pdf-content,
+  #printable-pdf-content *,
+  #print-document-container,
+  #print-document-container *,
+  #printable-report-document,
+  #printable-report-document *,
+  #hr-a4-preview-page,
+  #hr-a4-preview-page *,
+  #offscreen-printable-report,
+  #offscreen-printable-report * {
+    visibility: visible !important;
+  }
+
+  /* Position portrait printable area with static flow for multi-page breaking */
+  #printable-control-sheet,
+  #print-document-container,
+  #printable-report-document,
+  #hr-a4-preview-page,
+  #offscreen-printable-report {
+    position: static !important;
+    display: block !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-size: 9.5pt !important;
+    z-index: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Position landscape printable area */
+  #printable-landscape-sheet,
+  #printable-pdf-content {
+    position: static !important;
+    display: block !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-size: 8.5pt !important;
+    overflow: visible !important;
+  }
+
+  /* Repeat table headers cleanly on page break */
+  thead {
+    display: table-header-group !important;
+  }
+  
+  tr, .print-card, .print-box, .avoid-break, .break-inside-avoid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  table th, table td {
+    padding: 6px 8px !important;
+    border: 1px solid #cbd5e1 !important;
+  }
+
+  /* Force background colors and colors to print accurately */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+}
+

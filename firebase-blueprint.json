@@ -1,0 +1,28 @@
+{
+  "entities": {
+    "documents": {
+      "title": "HR & Legal Documents",
+      "description": "Vault of employment agreements, compliance acknowledgements, and policy records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string" },
+        "htmlContent": { "type": "string" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "audit_logs": {
+      "title": "Audit Trail Logs",
+      "description": "System operational and compliance security audit logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "action": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "performedBy": { "type": "string" }
+      }
+    }
+  }
+}

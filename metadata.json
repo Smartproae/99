@@ -1,0 +1,6 @@
+{
+  "name": "SMARTHUB",
+  "description": "HealthProtection Compliance Manager for managing healthcare and non-healthcare clients compliance frameworks",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
