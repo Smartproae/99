@@ -300,6 +300,46 @@ export default function ClientManagement({
   const [quickAdminEmail, setQuickAdminEmail] = useState('');
   const [quickAdminPhone, setQuickAdminPhone] = useState('');
 
+  // Document Storage Preservations States
+  const [newStorageProvider, setNewStorageProvider] = useState<DocumentStorageProvider>('LOCAL_PC');
+  const [newLocalPath, setNewLocalPath] = useState('C:\\SmartHub_Documents\\Clients');
+  const [newCloudEmail, setNewCloudEmail] = useState('');
+  const [newCloudFolder, setNewCloudFolder] = useState('SmartHub_Compliance_Vault');
+
+  // Standalone Storage Management Modal State
+  const [cardStorageModalClient, setCardStorageModalClient] = useState<Client | null>(null);
+  const [cardStorageProvider, setCardStorageProvider] = useState<DocumentStorageProvider>('LOCAL_PC');
+  const [cardLocalPath, setCardLocalPath] = useState('');
+  const [cardCloudEmail, setCardCloudEmail] = useState('');
+  const [cardCloudFolder, setCardCloudFolder] = useState('SmartHub_Compliance_Vault');
+
+  const handleOpenCardStorageModal = (c: Client) => {
+    setCardStorageModalClient(c);
+    setCardStorageProvider(c.storage_config?.provider || 'LOCAL_PC');
+    setCardLocalPath(c.storage_config?.local_folder_path || `C:\\SmartHub_Documents\\${c.client_code}`);
+    setCardCloudEmail(c.storage_config?.cloud_account_email || c.email || '');
+    setCardCloudFolder(c.storage_config?.cloud_folder_name || 'SmartHub_Compliance_Vault');
+  };
+
+  const handleSaveCardStorage = () => {
+    if (!cardStorageModalClient) return;
+    const updated: Client = {
+      ...cardStorageModalClient,
+      storage_config: {
+        provider: cardStorageProvider,
+        local_folder_path: cardLocalPath,
+        cloud_account_email: cardCloudEmail,
+        cloud_folder_name: cardCloudFolder,
+        connected_status: 'CONNECTED',
+        last_synced_at: new Date().toISOString(),
+        sync_documents: true
+      }
+    };
+    onUpdateClient(updated);
+    setCardStorageModalClient(null);
+    alert(`✓ Storage Option Updated for ${cardStorageModalClient.company_name}!\n\nProvider: ${cardStorageProvider}\nSaved Location: ${cardStorageProvider === 'LOCAL_PC' ? cardLocalPath : cardCloudFolder}`);
+  };
+
   const handleQuickAssignAdmin = (clientId: string) => {
     if (!quickAdminName || !quickAdminEmail) {
       alert("Please provide at least a name and email for the Client Admin.");
@@ -498,7 +538,17 @@ export default function ClientManagement({
         name: clientAdminName,
         email: clientAdminEmail,
         phone: clientAdminPhone
-      } : undefined
+      } : undefined,
+
+      storage_config: {
+        provider: newStorageProvider,
+        local_folder_path: newLocalPath || `C:\\SmartHub_Documents\\${clientCode}`,
+        cloud_account_email: newCloudEmail || email,
+        cloud_folder_name: newCloudFolder || 'SmartHub_Compliance_Vault',
+        connected_status: 'CONNECTED',
+        last_synced_at: new Date().toISOString(),
+        sync_documents: true
+      }
     };
 
     onAddClient(newClient);
@@ -1586,6 +1636,112 @@ export default function ClientManagement({
               </div>
 
             </div>
+
+            {/* Section 7: Document Storage & File Preservation Options */}
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200/60 pb-1.5">
+                <h4 className="font-bold text-emerald-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                  <span>📂</span> Section 7: Separated Document Storage & Preservation Options
+                </h4>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded border border-emerald-200">
+                  Separated Storage Vault
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-500">
+                Client saved logo, signature, letterhead, pictures, and generated policy documents are stored on a separated storage option:
+              </p>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setNewStorageProvider('LOCAL_PC')}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    newStorageProvider === 'LOCAL_PC'
+                      ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="text-xs font-bold">Option 1: Save Local PC</div>
+                  <div className="text-[9.5px] text-slate-500 mt-0.5">Local PC Directory</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setNewStorageProvider('GOOGLE_DRIVE')}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    newStorageProvider === 'GOOGLE_DRIVE'
+                      ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="text-xs font-bold">Google Drive</div>
+                  <div className="text-[9.5px] text-slate-500 mt-0.5">Google Cloud Vault</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setNewStorageProvider('DROPBOX')}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    newStorageProvider === 'DROPBOX'
+                      ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="text-xs font-bold">Dropbox</div>
+                  <div className="text-[9.5px] text-slate-500 mt-0.5">Dropbox Directory</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setNewStorageProvider('ONE_DRIVE')}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    newStorageProvider === 'ONE_DRIVE'
+                      ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="text-xs font-bold">OneDrive</div>
+                  <div className="text-[9.5px] text-slate-500 mt-0.5">Microsoft 365 Cloud</div>
+                </button>
+              </div>
+
+              {newStorageProvider === 'LOCAL_PC' ? (
+                <div className="space-y-1.5 pt-1">
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase">Local PC Folder Path (Option 1)</label>
+                  <input
+                    type="text"
+                    value={newLocalPath}
+                    onChange={e => setNewLocalPath(e.target.value)}
+                    placeholder="C:\SmartHub_Documents\Clients"
+                    className="w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-white font-mono"
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase">Cloud Account Email</label>
+                    <input
+                      type="email"
+                      value={newCloudEmail}
+                      onChange={e => setNewCloudEmail(e.target.value)}
+                      placeholder="client.admin@facility.ae"
+                      className="w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-white font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase">Cloud Folder Vault Name</label>
+                    <input
+                      type="text"
+                      value={newCloudFolder}
+                      onChange={e => setNewCloudFolder(e.target.value)}
+                      placeholder="SmartHub_Compliance_Vault"
+                      className="w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-white font-mono"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex justify-end gap-2.5 pt-4 border-t border-slate-100">
@@ -2602,6 +2758,154 @@ export default function ClientManagement({
               </div>
 
             </div>
+
+            {/* Section 7: Document Storage & File Preservation Options */}
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200/60 pb-1.5">
+                <h4 className="font-bold text-emerald-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                  <span>📂</span> Section 7: Separated Document Storage & Preservation Options
+                </h4>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded border border-emerald-200">
+                  Separated Storage Vault
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-500">
+                Client saved logo, signature, letterhead, pictures, and generated policy documents are stored on a separated storage option:
+              </p>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingClient({
+                    ...editingClient,
+                    storage_config: {
+                      ...(editingClient.storage_config || { connected_status: 'CONNECTED', last_synced_at: new Date().toISOString() }),
+                      provider: 'LOCAL_PC'
+                    }
+                  })}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    (editingClient.storage_config?.provider || 'LOCAL_PC') === 'LOCAL_PC'
+                      ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="text-xs font-bold">Option 1: Save Local PC</div>
+                  <div className="text-[9.5px] text-slate-500 mt-0.5">Local PC Directory</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setEditingClient({
+                    ...editingClient,
+                    storage_config: {
+                      ...(editingClient.storage_config || { connected_status: 'CONNECTED', last_synced_at: new Date().toISOString() }),
+                      provider: 'GOOGLE_DRIVE'
+                    }
+                  })}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    editingClient.storage_config?.provider === 'GOOGLE_DRIVE'
+                      ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="text-xs font-bold">Google Drive</div>
+                  <div className="text-[9.5px] text-slate-500 mt-0.5">Google Cloud Vault</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setEditingClient({
+                    ...editingClient,
+                    storage_config: {
+                      ...(editingClient.storage_config || { connected_status: 'CONNECTED', last_synced_at: new Date().toISOString() }),
+                      provider: 'DROPBOX'
+                    }
+                  })}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    editingClient.storage_config?.provider === 'DROPBOX'
+                      ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="text-xs font-bold">Dropbox</div>
+                  <div className="text-[9.5px] text-slate-500 mt-0.5">Dropbox Directory</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setEditingClient({
+                    ...editingClient,
+                    storage_config: {
+                      ...(editingClient.storage_config || { connected_status: 'CONNECTED', last_synced_at: new Date().toISOString() }),
+                      provider: 'ONE_DRIVE'
+                    }
+                  })}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    editingClient.storage_config?.provider === 'ONE_DRIVE'
+                      ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="text-xs font-bold">OneDrive</div>
+                  <div className="text-[9.5px] text-slate-500 mt-0.5">Microsoft 365 Cloud</div>
+                </button>
+              </div>
+
+              {(editingClient.storage_config?.provider || 'LOCAL_PC') === 'LOCAL_PC' ? (
+                <div className="space-y-1.5 pt-1">
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase">Local PC Folder Path (Option 1)</label>
+                  <input
+                    type="text"
+                    value={editingClient.storage_config?.local_folder_path || `C:\\SmartHub_Documents\\${editingClient.client_code}`}
+                    onChange={e => setEditingClient({
+                      ...editingClient,
+                      storage_config: {
+                        ...(editingClient.storage_config || { provider: 'LOCAL_PC', connected_status: 'CONNECTED', last_synced_at: new Date().toISOString() }),
+                        local_folder_path: e.target.value
+                      }
+                    })}
+                    placeholder="C:\SmartHub_Documents\Clients"
+                    className="w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-white font-mono"
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase">Cloud Account Email</label>
+                    <input
+                      type="email"
+                      value={editingClient.storage_config?.cloud_account_email || editingClient.email || ''}
+                      onChange={e => setEditingClient({
+                        ...editingClient,
+                        storage_config: {
+                          ...(editingClient.storage_config || { provider: 'GOOGLE_DRIVE', connected_status: 'CONNECTED', last_synced_at: new Date().toISOString() }),
+                          cloud_account_email: e.target.value
+                        }
+                      })}
+                      placeholder="client.admin@facility.ae"
+                      className="w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-white font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase">Cloud Folder Vault Name</label>
+                    <input
+                      type="text"
+                      value={editingClient.storage_config?.cloud_folder_name || 'SmartHub_Compliance_Vault'}
+                      onChange={e => setEditingClient({
+                        ...editingClient,
+                        storage_config: {
+                          ...(editingClient.storage_config || { provider: 'GOOGLE_DRIVE', connected_status: 'CONNECTED', last_synced_at: new Date().toISOString() }),
+                          cloud_folder_name: e.target.value
+                        }
+                      })}
+                      placeholder="SmartHub_Compliance_Vault"
+                      className="w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-white font-mono"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex justify-end gap-2.5 pt-4 border-t border-slate-100">
@@ -2856,6 +3160,28 @@ export default function ClientManagement({
                       </div>
                     )}
                   </div>
+
+                  {/* Document Storage Location & Client Last Login Badge */}
+                  <div className="pt-2 border-t border-dashed border-slate-100 mt-2 space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="font-bold text-slate-500 uppercase tracking-wider text-[9px]">Storage Option:</span>
+                      <button
+                        onClick={() => handleOpenCardStorageModal(client)}
+                        className="text-[9px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded cursor-pointer transition-all"
+                      >
+                        ⚙️ Option: {client.storage_config?.provider === 'GOOGLE_DRIVE' ? 'Google Drive' : client.storage_config?.provider === 'DROPBOX' ? 'Dropbox' : client.storage_config?.provider === 'ONE_DRIVE' ? 'OneDrive' : 'Local PC'}
+                      </button>
+                    </div>
+                    <div className="text-[10px] font-mono text-slate-600 bg-slate-50 p-1 rounded border border-slate-150 truncate" title={client.storage_config?.local_folder_path || client.storage_config?.cloud_account_email || 'Default'}>
+                      📂 {client.storage_config?.provider === 'LOCAL_PC' ? (client.storage_config?.local_folder_path || `C:\\SmartHub_Documents\\${client.client_code}`) : `${client.storage_config?.cloud_account_email || 'cloud'} / ${client.storage_config?.cloud_folder_name || 'Vault'}`}
+                    </div>
+                    <div className="flex items-center justify-between text-[9.5px] text-slate-500 pt-0.5">
+                      <span className="font-semibold text-slate-400">Client Last Login:</span>
+                      <strong className="text-slate-800 font-mono">
+                        {client.last_login ? new Date(client.last_login).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' }) : 'Never Logged In'}
+                      </strong>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -2931,6 +3257,177 @@ export default function ClientManagement({
                 className="px-4 py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white rounded-lg cursor-pointer"
               >
                 Yes, Delete Context
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Standalone Storage Option Configuration Modal */}
+      {cardStorageModalClient && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 animate-fade-in p-4">
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl max-w-xl w-full p-6 space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600 font-bold">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">Configure Client Document Storage</h3>
+                  <p className="text-[11px] text-slate-500 font-medium">Facility: {cardStorageModalClient.company_name} ({cardStorageModalClient.client_code})</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setCardStorageModalClient(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-lg cursor-pointer"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-4 text-left">
+              <p className="text-xs text-slate-600">
+                Compliance Consultant & Client document storage option configuration. Choose where logos, signatures, custom letterheads, pictures, and documents are saved:
+              </p>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setCardStorageProvider('LOCAL_PC')}
+                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                    cardStorageProvider === 'LOCAL_PC'
+                      ? 'bg-emerald-50 border-emerald-500 text-emerald-950 ring-2 ring-emerald-500/20 font-bold'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="font-bold text-xs flex items-center justify-between">
+                    <span>Option 1: Save Local PC</span>
+                    <span>💻</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">Bind local PC directory path</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCardStorageProvider('GOOGLE_DRIVE')}
+                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                    cardStorageProvider === 'GOOGLE_DRIVE'
+                      ? 'bg-emerald-50 border-emerald-500 text-emerald-950 ring-2 ring-emerald-500/20 font-bold'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="font-bold text-xs flex items-center justify-between">
+                    <span>Google Drive</span>
+                    <span>☁️</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">Connect Drive Cloud folder</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCardStorageProvider('DROPBOX')}
+                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                    cardStorageProvider === 'DROPBOX'
+                      ? 'bg-emerald-50 border-emerald-500 text-emerald-950 ring-2 ring-emerald-500/20 font-bold'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="font-bold text-xs flex items-center justify-between">
+                    <span>Dropbox</span>
+                    <span>📦</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">Sync to Dropbox directory</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCardStorageProvider('ONE_DRIVE')}
+                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                    cardStorageProvider === 'ONE_DRIVE'
+                      ? 'bg-emerald-50 border-emerald-500 text-emerald-950 ring-2 ring-emerald-500/20 font-bold'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="font-bold text-xs flex items-center justify-between">
+                    <span>OneDrive</span>
+                    <span>🔷</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">Microsoft 365 Cloud Vault</p>
+                </button>
+              </div>
+
+              {cardStorageProvider === 'LOCAL_PC' ? (
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
+                  <label className="block text-xs font-bold text-slate-700">
+                    📁 Option 1: Local PC Directory Path
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={cardLocalPath}
+                      onChange={e => setCardLocalPath(e.target.value)}
+                      placeholder={`C:\\SmartHub_Documents\\${cardStorageModalClient.client_code}`}
+                      className="flex-1 text-xs p-2.5 rounded-xl border border-slate-200 bg-white font-mono focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const path = prompt('Enter or verify Local Directory path:', cardLocalPath || `C:\\SmartHub_Documents\\${cardStorageModalClient.client_code}`);
+                        if (path) setCardLocalPath(path);
+                      }}
+                      className="px-3 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 cursor-pointer"
+                    >
+                      Browse
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    Folder on local PC where all logos, stamps, signatures, pictures, and PDFs are preserved.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Cloud Account Email ({cardStorageProvider})
+                    </label>
+                    <input
+                      type="email"
+                      value={cardCloudEmail}
+                      onChange={e => setCardCloudEmail(e.target.value)}
+                      placeholder="compliance.admin@facility.ae"
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white font-mono"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Cloud Folder Vault Name
+                    </label>
+                    <input
+                      type="text"
+                      value={cardCloudFolder}
+                      onChange={e => setCardCloudFolder(e.target.value)}
+                      placeholder="SmartHub_Compliance_Vault"
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white font-mono"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setCardStorageModalClient(null)}
+                className="px-4 py-2 text-xs font-bold border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveCardStorage}
+                className="px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl cursor-pointer shadow-xs"
+              >
+                Save Storage Location
               </button>
             </div>
           </div>

@@ -151,33 +151,33 @@ export default function PolicyFrameworksSetup({
     const flushTable = () => {
       if (!inTable) return;
       if (tableHeader.length > 0 || tableRows.length > 0) {
-        let html = `<div class="my-3 overflow-x-auto border border-slate-300 rounded-xl bg-white shadow-2xs">`;
-        html += `<table class="w-full text-left border-collapse text-[11px] font-sans">`;
+        let html = `<div class="my-3 overflow-x-auto border border-slate-300 rounded-lg bg-white shadow-2xs">`;
+        html += `<table class="w-full text-left border-collapse text-[10.5px] font-sans">`;
         
         if (tableHeader.length > 0) {
-          html += `<thead class="bg-slate-100 border-b border-slate-300 font-extrabold text-slate-800 uppercase tracking-wider text-[10px]"><tr>`;
+          html += `<thead class="bg-slate-900 text-white font-bold text-[10px] uppercase tracking-wider"><tr>`;
           tableHeader.forEach((h, idx) => {
             const widthClass = idx === 0 ? 'w-3/12' : idx === 1 ? 'w-6/12' : 'w-3/12 text-center';
-            html += `<th class="p-2 border-r border-slate-200 ${widthClass}">${h.trim()}</th>`;
+            html += `<th class="p-2 border-r border-slate-800 ${widthClass}">${h.trim()}</th>`;
           });
           html += `</tr></thead>`;
         }
 
-        html += `<tbody class="divide-y divide-slate-100 font-medium text-slate-700">`;
+        html += `<tbody class="divide-y divide-slate-200 font-medium text-slate-800">`;
         tableRows.forEach(row => {
           html += `<tr class="hover:bg-slate-50 transition-colors">`;
           row.forEach((cell, idx) => {
             const trimmed = cell.trim();
-            if (idx === 2 || trimmed === 'Applicable' || trimmed === 'Not applicable') {
+            if (idx === 2 || trimmed.toLowerCase() === 'applicable' || trimmed.toLowerCase() === 'not applicable') {
               const isApplicable = trimmed.toLowerCase() === 'applicable';
               const badge = isApplicable
-                ? `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">✓ Applicable</span>`
-                : `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-300">Not applicable</span>`;
-              html += `<td class="p-2 text-center align-top border-r border-slate-100">${badge}</td>`;
+                ? `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">✓ Applicable</span>`
+                : `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">Not applicable</span>`;
+              html += `<td class="p-2 text-center align-top border-r border-slate-200">${badge}</td>`;
             } else if (idx === 0) {
-              html += `<td class="p-2 font-bold text-indigo-950 align-top border-r border-slate-100">${trimmed}</td>`;
+              html += `<td class="p-2 font-bold text-indigo-950 align-top border-r border-slate-200">${trimmed}</td>`;
             } else {
-              html += `<td class="p-2 text-slate-600 leading-snug align-top border-r border-slate-100">${trimmed}</td>`;
+              html += `<td class="p-2 text-slate-700 leading-snug align-top border-r border-slate-200">${trimmed}</td>`;
             }
           });
           html += `</tr>`;
@@ -217,7 +217,11 @@ export default function PolicyFrameworksSetup({
 
       // Check if line is already HTML tag or block
       if (/<[a-z][\s\S]*>/i.test(line)) {
-        resultLines.push(rawLine);
+        // Convert any <ol> to <ul> for bullet list enforcement
+        let cleanHtmlLine = rawLine
+          .replace(/<ol([^>]*)>/gi, '<ul$1 class="list-disc pl-5 my-2">')
+          .replace(/<\/ol>/gi, '</ul>');
+        resultLines.push(cleanHtmlLine);
         continue;
       }
 
@@ -228,13 +232,15 @@ export default function PolicyFrameworksSetup({
         resultLines.push(`<h2 class="text-xs font-black uppercase tracking-wider text-slate-900 mt-4 mb-2">${line.substring(3)}</h2>`);
       } else if (line.startsWith('# ')) {
         resultLines.push(`<h1 class="text-sm font-black text-slate-900 mt-4 mb-2">${line.substring(2)}</h1>`);
-      } else if (line.startsWith('• ') || line.startsWith('- ')) {
-        resultLines.push(`<li class="ml-4 list-disc text-slate-700 my-0.5 text-xs">${line.substring(2)}</li>`);
+      } else if (line.startsWith('• ') || line.startsWith('- ') || /^\d+[\.\)]\s/.test(line)) {
+        // Convert numbered or hypenated list items to bullet points
+        const itemContent = line.replace(/^(?:•|-|\d+[\.\)])\s*/, '');
+        resultLines.push(`<li class="ml-4 list-disc text-slate-800 my-0.5 text-xs font-serif font-medium">${itemContent}</li>`);
       } else if (line === '') {
         resultLines.push('<div class="h-1.5"></div>');
       } else {
         let formattedLine = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        resultLines.push(`<p class="my-1 text-slate-800 leading-relaxed text-xs">${formattedLine}</p>`);
+        resultLines.push(`<p class="my-1 text-slate-800 leading-relaxed text-xs font-serif">${formattedLine}</p>`);
       }
     }
 
@@ -277,20 +283,23 @@ export default function PolicyFrameworksSetup({
     cleaned = cleaned.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '');
     cleaned = cleaned.replace(/<\/?(?:html|body|head)[^>]*>/gi, '');
 
-    // 2. Strip duplicate top header/logo blocks
+    // 2. Convert <ol> tags to <ul> tags to enforce bullet points
+    cleaned = cleaned.replace(/<ol([^>]*)>/gi, '<ul$1 class="list-disc pl-5 my-2">').replace(/<\/ol>/gi, '</ul>');
+
+    // 3. Strip duplicate top header/logo blocks
     cleaned = cleaned.replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '');
 
-    // 3. Strip duplicate Document Control Information Log tables & text blocks if present in copied HTML
+    // 4. Strip duplicate Document Control Information Log tables & text blocks if present in copied HTML
     cleaned = cleaned.replace(/<table[^>]*>[\s\S]*?Document Control Information Log[\s\S]*?<\/table>/gi, '');
     cleaned = cleaned.replace(/<div[^>]*>[\s\S]*?Document Control Information Log[\s\S]*?<\/div>/gi, '');
 
-    // 4. Strip duplicate title banners at top if exact match
+    // 5. Strip duplicate title banners at top if exact match
     if (policyName) {
       const escapedTitle = policyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       cleaned = cleaned.replace(new RegExp(`^\\s*<h[1-6][^>]*>\\s*(?:<strong>|<b>)?\\s*${escapedTitle}\\s*(?:<\\/strong>|<\\/b>)?\\s*<\\/h[1-6]>`, 'gi'), '');
     }
 
-    // 5. Replace company placeholders
+    // 6. Replace company placeholders
     cleaned = cleaned
       .replace(/SmartPro Public Relations Consultancy & Cyber Risk Management Services/gi, actualCompanyName)
       .replace(/SmartPro Consultancy & Facility Services/gi, actualCompanyName)
@@ -300,7 +309,7 @@ export default function PolicyFrameworksSetup({
       .replace(/\[\s*Entity\s+Name\s*\]/gi, actualCompanyName)
       .replace(/\[\s*Facility\s+Name\s*\]/gi, actualCompanyName);
 
-    // 6. Convert Markdown syntax and format text line breaks
+    // 7. Convert Markdown syntax and format text line breaks
     cleaned = convertMarkdownToHtml(cleaned);
 
     return cleaned.trim();
@@ -1454,52 +1463,59 @@ export default function PolicyFrameworksSetup({
                             {p.status}
                           </span>
                         </td>
-                        <td className="p-3.5 text-right space-x-1.5">
-                          <button
-                            onClick={() => {
-                              setSelectedPolicy({ ...p });
-                              setIsEditingPolicy(false);
-                              setPreviewShowReviewedBy(p.show_reviewed_by !== false);
-                              setPreviewReviewedBy(p.reviewed_by || 'Compliance Officer');
-                            }}
-                            className="px-2.5 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1"
-                            title="Inspect Policy Details"
-                          >
-                            <Eye className="w-3.5 h-3.5" /> Inspect
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedPolicy({ ...p });
-                              setIsEditingPolicy(true);
-                              setPreviewShowReviewedBy(p.show_reviewed_by !== false);
-                              setPreviewReviewedBy(p.reviewed_by || 'Compliance Officer');
-                            }}
-                            className="px-2.5 py-1 bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200/60 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1"
-                            title="Edit Policy Record"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" /> Edit
-                          </button>
-                          <button
-                            onClick={() => {
-                              setEmailPolicy(p);
-                              setEmailRecipient(client?.email || 'compliance@smartpro.ae');
-                              setEmailCoverNote('');
-                            }}
-                            className="px-2.5 py-1 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200/60 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1"
-                            title="Send Email with PDF Report"
-                          >
-                            <Mail className="w-3.5 h-3.5" /> Send Email
-                          </button>
-                          {onDeletePolicy && (
+                        <td className="p-3.5 text-right">
+                          <div className="flex flex-wrap items-center justify-end gap-1.5">
                             <button
-                              type="button"
-                              onClick={() => setConfirmDeletePolicy(p)}
-                              className="px-2.5 py-1 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/60 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1"
-                              title="Delete Policy Record"
+                              onClick={() => {
+                                setSelectedPolicy({ ...p });
+                                setIsEditingPolicy(false);
+                                setPreviewShowReviewedBy(p.show_reviewed_by !== false);
+                                setPreviewReviewedBy(p.reviewed_by || 'Compliance Officer');
+                              }}
+                              className="px-2.5 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1"
+                              title="Inspect Policy Details in A4 Sheet View"
                             >
-                              <Trash2 className="w-3.5 h-3.5" /> Delete
+                              <Eye className="w-3.5 h-3.5" /> Inspect
                             </button>
-                          )}
+                            <button
+                              onClick={() => {
+                                setSelectedPolicy({ ...p });
+                                setIsEditingPolicy(true);
+                                setPreviewShowReviewedBy(p.show_reviewed_by !== false);
+                                setPreviewReviewedBy(p.reviewed_by || 'Compliance Officer');
+                              }}
+                              className="px-2.5 py-1 bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200/60 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1"
+                              title="Edit Policy Record"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" /> Edit
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEmailPolicy(p);
+                                setEmailRecipient(client?.email || 'compliance@smartpro.ae');
+                                setEmailCoverNote('');
+                              }}
+                              className="px-2.5 py-1 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200/60 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1"
+                              title="Send Email with PDF Report"
+                            >
+                              <Mail className="w-3.5 h-3.5" /> Send Email
+                            </button>
+                            {onDeletePolicy && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (window.confirm(`Are you sure you want to delete policy record [${p.policy_no}] "${p.policy_name}"?`)) {
+                                    onDeletePolicy(p.id);
+                                    showToast(`Deleted policy record [${p.policy_no}]`);
+                                  }
+                                }}
+                                className="px-2.5 py-1 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/60 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1"
+                                title="Delete Policy Record"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" /> Delete
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -2294,12 +2310,12 @@ export default function PolicyFrameworksSetup({
                     </div>
 
                     {/* MAIN DOCUMENT STATEMENT BODY WITH POLICY TITLE BANNER & BALANCED SIDE PADDING */}
-                    <div className="py-3 px-1 sm:px-2 space-y-3 min-h-[350px] w-full">
+                    <div className="py-3 px-1 sm:px-2 space-y-3 min-h-[350px] w-full flex-1">
                       <div className="bg-slate-900 text-white font-bold px-3 py-1.5 text-[11px] tracking-wider uppercase rounded-xs text-center shadow-xs w-full">
                         {resolveDocTitle(selectedPolicy.policy_name, selectedPolicy.company_name || client?.company_name)}
                       </div>
                       <div
-                        className="prose text-xs text-slate-800 leading-relaxed font-sans max-w-none w-full"
+                        className="prose text-xs text-slate-800 leading-relaxed max-w-none w-full [&_ol]:list-disc [&_ul]:list-disc [&_ol]:pl-5 [&_ul]:pl-5 [&_li]:my-0.5 [&_p]:font-serif [&_li]:font-serif [&_table]:w-full [&_table]:border-collapse [&_table]:my-3 [&_table]:border [&_table]:border-slate-300 [&_th]:bg-slate-900 [&_th]:text-white [&_th]:p-2 [&_th]:font-bold [&_th]:text-[10px] [&_th]:uppercase [&_td]:border [&_td]:border-slate-200 [&_td]:p-2 [&_td]:align-top"
                         dangerouslySetInnerHTML={{
                           __html: formatCleanPolicyStatement(
                             selectedPolicy.policy_statement || selectedPolicy.full_content || '',
@@ -2311,8 +2327,8 @@ export default function PolicyFrameworksSetup({
                     </div>
                   </div>
 
-                  {/* SIGNATORIES FOOTER */}
-                  <div className="pt-6 border-t-2 border-slate-900 w-full px-1 sm:px-2">
+                  {/* SIGNATORIES & LEGAL SEAL FOOTER */}
+                  <div className="pt-6 border-t-2 border-slate-900 w-full px-1 sm:px-2 mt-auto">
                     <div className={`grid ${previewShowReviewedBy ? 'grid-cols-3' : 'grid-cols-2'} gap-4 items-stretch w-full`}>
                       
                       {/* PREPARED BY */}
@@ -2345,6 +2361,28 @@ export default function PolicyFrameworksSetup({
                         <div className="mt-2 text-[9px] text-emerald-700 font-mono italic">
                           ✓ Digital Sign: Approved
                         </div>
+                      </div>
+                    </div>
+
+                    {/* OFFICIAL REGULATORY STAMP & FOOTER METADATA */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 mt-4 pt-3 border-t border-slate-200 text-[10px] text-slate-500">
+                      <div className="flex items-center gap-2">
+                        {generateFacilitySealPng(selectedPolicy.company_name || client?.company_name || 'Healthcare Facility', selectedPolicy.policy_no) && (
+                          <img
+                            src={generateFacilitySealPng(selectedPolicy.company_name || client?.company_name || 'Healthcare Facility', selectedPolicy.policy_no)}
+                            alt="Facility Legal Seal"
+                            className="w-16 h-16 object-contain shrink-0 opacity-90"
+                          />
+                        )}
+                        <div>
+                          <strong className="text-slate-800 font-bold block text-[10px]">OFFICIAL REGULATORY & COMPLIANCE SEAL</strong>
+                          <span className="text-[9px] text-slate-600 block">Sealed & Verified by Healthcare Facility Management</span>
+                          <span className="font-mono text-[8.5px] text-emerald-800 font-bold block">Hash: {selectedPolicy.policy_no}-VERIFIED-A4</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-mono text-[10px] font-bold text-slate-700 block">Standard A4 Document Format (210mm)</span>
+                        <span className="text-[9px] text-slate-500 block">Document Control Code: {selectedPolicy.policy_no}</span>
                       </div>
                     </div>
                   </div>

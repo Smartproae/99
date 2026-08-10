@@ -23,6 +23,18 @@ export interface ThirdPartySupport {
   phone: string;
 }
 
+export type DocumentStorageProvider = 'LOCAL_PC' | 'GOOGLE_DRIVE' | 'DROPBOX' | 'ONE_DRIVE';
+
+export interface StorageConfig {
+  provider: DocumentStorageProvider;
+  local_folder_path?: string; // Local PC folder directory location (e.g. C:\SmartHub_Documents\Client_Folder)
+  cloud_account_email?: string;
+  cloud_folder_name?: string;
+  connected_status?: 'CONNECTED' | 'DISCONNECTED' | 'PENDING_AUTHORIZATION';
+  last_synced_at?: string;
+  sync_documents?: boolean;
+}
+
 export interface Client {
   id: string;
   client_code: string;
@@ -41,6 +53,7 @@ export interface Client {
   status: 'ACTIVE' | 'INACTIVE';
   created_at: string;
   updated_at: string;
+  last_login?: string; // Client last login timestamp
   doh_license_no?: string;
   owner_name?: string;
   owner_email?: string;
@@ -56,6 +69,9 @@ export interface Client {
   is_group?: boolean;
   parent_id?: string;
   letterhead_image?: string; // Base64 or DataURL of custom letterhead (PDF/JPEG/PNG)
+
+  // Document Storage Provider Settings
+  storage_config?: StorageConfig;
   
   // New Facility Management fields
   clone_source_id?: string;

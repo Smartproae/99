@@ -878,10 +878,26 @@ export default function App() {
       return;
     }
     if (pendingMfaUser) {
+      const loginTimestamp = new Date().toISOString();
+      const updatedUser: User = {
+        ...pendingMfaUser,
+        last_login: loginTimestamp
+      };
+
+      // Update user in users list
+      setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+
+      // Update last_login on associated client record if client_id exists
+      if (updatedUser.client_id) {
+        setClients(prev => prev.map(c => c.id === updatedUser.client_id ? { ...c, last_login: loginTimestamp } : c));
+      } else if (activeClientId) {
+        setClients(prev => prev.map(c => c.id === activeClientId ? { ...c, last_login: loginTimestamp } : c));
+      }
+
       setIsAuthenticated(true);
       localStorage.setItem('sh_auth', 'true');
-      setCurrentUser(pendingMfaUser);
-      localStorage.setItem('sh_current_user', JSON.stringify(pendingMfaUser));
+      setCurrentUser(updatedUser);
+      localStorage.setItem('sh_current_user', JSON.stringify(updatedUser));
       setPendingMfaUser(null);
       setMfaCodeInput('123456');
       setMfaError('');
@@ -1617,6 +1633,7 @@ export default function App() {
                 currentUser={currentUser}
                 users={users}
                 onOpenChat={() => setIsChatOpen(true)}
+                onUpdateClient={(updated) => setClients(prev => prev.map(c => c.id === updated.id ? updated : c))}
               />
             )}
 
