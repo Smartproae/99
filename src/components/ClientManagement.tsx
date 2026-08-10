@@ -4,8 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { Client, User } from '../types';
-import { Plus, Edit2, Search, Building2, CheckCircle2, XCircle, MapPin, Globe, Phone, Mail, Trash2, Upload, Shield, Award, Send, Key, RefreshCw, Zap, Activity, ShieldCheck } from 'lucide-react';
+import { Client, User, DocumentStorageProvider } from '../types';
+import { Plus, Edit2, Search, Building2, CheckCircle2, XCircle, MapPin, Globe, Phone, Mail, Trash2, Upload, Shield, Award, Send, Key, RefreshCw, Zap, Activity, ShieldCheck, Database } from 'lucide-react';
 import { syncClientProfileAuthRep } from '../utils/clientSyncUtils';
 import FrameworkGroupModal from './FrameworkGroupModal';
 import { FrameworkGroupTier } from '../utils/frameworkGroupUtils';

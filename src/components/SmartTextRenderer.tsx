@@ -61,7 +61,7 @@ export function SmartTextRenderer({ text, fontSize = 'normal', themeColor = 'eme
       .trim();
     return (
       <div 
-        className={`prose max-w-none font-sans text-slate-800 leading-relaxed ${textClass} [&_table]:w-full [&_table]:border-collapse [&_table]:my-3 [&_table]:border [&_table]:border-slate-300 [&_th]:bg-slate-900 [&_th]:text-white [&_th]:border [&_th]:border-slate-800 [&_th]:p-2 [&_th]:font-bold [&_th]:text-[10px] [&_th]:uppercase [&_td]:border [&_td]:border-slate-200 [&_td]:p-2 [&_td]:align-top [&_p]:my-2 [&_h1]:text-base [&_h1]:font-black [&_h1]:mt-4 [&_h1]:mb-2 [&_h2]:text-sm [&_h2]:font-bold [&_h2]:mt-3 [&_h2]:mb-1.5 [&_h3]:text-xs [&_h3]:font-bold [&_h3]:mt-2.5 [&_h3]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ol]:list-disc [&_ol]:pl-5 [&_ol]:my-2 [&_li]:my-0.5`}
+        className={`prose max-w-none font-sans text-slate-800 leading-normal ${textClass} [&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_table]:border [&_table]:border-slate-300 [&_th]:bg-slate-900 [&_th]:text-white [&_th]:border [&_th]:border-slate-800 [&_th]:p-1.5 [&_th]:font-bold [&_th]:text-[10px] [&_th]:uppercase [&_td]:border [&_td]:border-slate-200 [&_td]:p-1.5 [&_td]:align-top [&_td]:text-justify [&_td]:[text-justify:inter-word] [&_p]:my-1 [&_p]:text-justify [&_p]:[text-justify:inter-word] [&_h1]:text-base [&_h1]:font-black [&_h1]:mt-3 [&_h1]:mb-1.5 [&_h2]:text-sm [&_h2]:font-bold [&_h2]:mt-2.5 [&_h2]:mb-1 [&_h3]:text-xs [&_h3]:font-bold [&_h3]:mt-2 [&_h3]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-disc [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_li]:text-justify [&_li]:[text-justify:inter-word]`}
         dangerouslySetInnerHTML={{ __html: cleanedHtml }}
       />
     );
@@ -130,7 +130,7 @@ export function SmartTextRenderer({ text, fontSize = 'normal', themeColor = 'eme
       } else {
         // Simple paragraph
         elements.push(
-          <p key={`p-${key}`} className={`${textClass} text-slate-700 leading-relaxed font-sans mb-3 whitespace-pre-wrap`}>
+          <p key={`p-${key}`} className={`${textClass} text-slate-700 leading-normal font-sans mb-1.5 whitespace-pre-wrap text-justify`} style={{ textAlign: 'justify', textJustify: 'inter-word' }}>
             {renderInLineFormatting(blockText)}
           </p>
         );

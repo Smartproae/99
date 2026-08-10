@@ -110,6 +110,7 @@ export default function PolicyFrameworksSetup({
   const [approvedBy, setApprovedBy] = useState('Medical Director / CEO');
   const [previewShowReviewedBy, setPreviewShowReviewedBy] = useState(true);
   const [previewReviewedBy, setPreviewReviewedBy] = useState('Compliance Officer');
+  const [printOrientation, setPrintOrientation] = useState<'portrait' | 'landscape'>('portrait');
   const [docContent, setDocContent] = useState(
     `<p><strong>1. PURPOSE & SCOPE</strong></p>\n<p>This Policy Framework sets forth the mandatory operational requirements for information security, administrative safeguards, and patient privacy under ADHICS guidelines.</p>\n\n<p><strong>2. RESPONSIBILITIES & GOVERNANCE</strong></p>\n<p>All facility staff and clinical operators must strictly adhere to compliance procedures and document control protocols.</p>`
   );
@@ -125,17 +126,34 @@ export default function PolicyFrameworksSetup({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Resolve Document Title replacing placeholders like (client.company_name) with Facility Name
+  // Resolve Document Title replacing placeholders and removing consultant name suffixes
   const resolveDocTitle = (title: string, companyNameOverride?: string): string => {
     if (!title) return '';
-    const actualCompanyName = companyNameOverride || client?.company_name || 'Healthcare Facility Management';
-    return title
-      .replace(/\(\s*client\.company_name\s*\)\s*/gi, `${actualCompanyName} `)
+    
+    // First strip out long consultancy company name or trailing suffixes from title
+    let clean = title
+      .replace(/\s*[—\-]\s*SmartPro Public Relations Consultancy & Cyber Risk Management Services/gi, '')
+      .replace(/\s*[—\-]\s*SmartPro Consultancy & Facility Services/gi, '')
+      .replace(/\s*[—\-]\s*SmartPro Public Relations Consultancy/gi, '')
+      .replace(/SmartPro Public Relations Consultancy & Cyber Risk Management Services/gi, '')
+      .replace(/SmartPro Consultancy & Facility Services/gi, '')
+      .replace(/SmartPro Public Relations Consultancy/gi, '');
+
+    const overrideName = companyNameOverride && !/smartpro/i.test(companyNameOverride) ? companyNameOverride : '';
+    const clientName = client?.company_name && !/smartpro/i.test(client.company_name) ? client.company_name : '';
+    const actualCompanyName = overrideName || clientName || '';
+
+    clean = clean
+      .replace(/\(\s*client\.company_name\s*\)\s*/gi, actualCompanyName ? `${actualCompanyName} ` : '')
       .replace(/\(\s*client\.company_name\s*\)/gi, actualCompanyName)
       .replace(/client\.company_name/gi, actualCompanyName)
       .replace(/\[\s*Entity\s+Name\s*\]/gi, actualCompanyName)
       .replace(/\[\s*Facility\s+Name\s*\]/gi, actualCompanyName)
+      .replace(/\s+/g, ' ')
       .trim();
+
+    clean = clean.replace(/\s*[—\-]\s*$/g, '').trim();
+    return clean;
   };
 
   // Convert Markdown syntax (headers, lists, bolding, and tables) to compact HTML
@@ -191,12 +209,30 @@ export default function PolicyFrameworksSetup({
       tableRows = [];
     };
 
+    let paraBuffer: string[] = [];
+
+    const flushPara = () => {
+      if (paraBuffer.length > 0) {
+        const fullPara = paraBuffer.join(' ').replace(/\s+/g, ' ').trim();
+        if (fullPara) {
+          let formattedLine = fullPara.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+          // Remove bold weight around client company name placeholders if bolded
+          formattedLine = formattedLine
+            .replace(/<strong>\s*\(\s*client\.company_name\s*\)\s*<\/strong>/gi, '(client.company_name)')
+            .replace(/<b>\s*\(\s*client\.company_name\s*\)\s*<\/b>/gi, '(client.company_name)');
+          resultLines.push(`<p class="my-1.5 text-slate-800 leading-normal text-xs font-serif text-justify" style="text-align: justify; text-justify: inter-word; hyphens: auto; word-break: normal; white-space: normal;">${formattedLine}</p>`);
+        }
+        paraBuffer = [];
+      }
+    };
+
     for (let i = 0; i < lines.length; i++) {
       const rawLine = lines[i];
       const line = rawLine.trim();
 
       // Check if line is a markdown table row
       if (line.startsWith('|') && line.endsWith('|') && line.length > 2) {
+        flushPara();
         const cells = line.slice(1, -1).split('|').map(c => c.trim());
         if (cells.every(c => /^[-:]+$/.test(c))) {
           // Divider row
@@ -217,33 +253,40 @@ export default function PolicyFrameworksSetup({
 
       // Check if line is already HTML tag or block
       if (/<[a-z][\s\S]*>/i.test(line)) {
+        flushPara();
         // Convert any <ol> to <ul> for bullet list enforcement
         let cleanHtmlLine = rawLine
-          .replace(/<ol([^>]*)>/gi, '<ul$1 class="list-disc pl-5 my-2">')
-          .replace(/<\/ol>/gi, '</ul>');
+          .replace(/<ol([^>]*)>/gi, '<ul$1 class="list-disc pl-5 my-1">')
+          .replace(/<\/ol>/gi, '</ul>')
+          .replace(/<strong>\s*\(\s*client\.company_name\s*\)\s*<\/strong>/gi, '(client.company_name)')
+          .replace(/<b>\s*\(\s*client\.company_name\s*\)\s*<\/b>/gi, '(client.company_name)');
         resultLines.push(cleanHtmlLine);
         continue;
       }
 
-      // Process Markdown headings, lists, bolding, or line breaks
+      // Process Headings - standardize all headings to h2 size
       if (line.startsWith('### ')) {
-        resultLines.push(`<h3 class="text-xs font-black uppercase tracking-wider text-indigo-900 mt-4 mb-1.5 border-b border-indigo-100 pb-1 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-indigo-600 inline-block"></span>${line.substring(4)}</h3>`);
+        flushPara();
+        resultLines.push(`<h2 class="text-xs font-bold uppercase tracking-wider text-slate-900 mt-3 mb-1 border-b border-slate-200 pb-0.5">${line.substring(4)}</h2>`);
       } else if (line.startsWith('## ')) {
-        resultLines.push(`<h2 class="text-xs font-black uppercase tracking-wider text-slate-900 mt-4 mb-2">${line.substring(3)}</h2>`);
+        flushPara();
+        resultLines.push(`<h2 class="text-xs font-bold uppercase tracking-wider text-slate-900 mt-3 mb-1 border-b border-slate-200 pb-0.5">${line.substring(3)}</h2>`);
       } else if (line.startsWith('# ')) {
-        resultLines.push(`<h1 class="text-sm font-black text-slate-900 mt-4 mb-2">${line.substring(2)}</h1>`);
+        flushPara();
+        resultLines.push(`<h2 class="text-xs font-bold uppercase tracking-wider text-slate-900 mt-3 mb-1 border-b border-slate-200 pb-0.5">${line.substring(2)}</h2>`);
       } else if (line.startsWith('• ') || line.startsWith('- ') || /^\d+[\.\)]\s/.test(line)) {
+        flushPara();
         // Convert numbered or hypenated list items to bullet points
         const itemContent = line.replace(/^(?:•|-|\d+[\.\)])\s*/, '');
-        resultLines.push(`<li class="ml-4 list-disc text-slate-800 my-0.5 text-xs font-serif font-medium">${itemContent}</li>`);
+        resultLines.push(`<li class="ml-4 list-disc text-slate-800 my-0.5 text-xs font-serif font-medium text-justify" style="text-align: justify; text-justify: inter-word; hyphens: auto; word-break: normal; white-space: normal;">${itemContent}</li>`);
       } else if (line === '') {
-        resultLines.push('<div class="h-1.5"></div>');
+        flushPara();
       } else {
-        let formattedLine = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        resultLines.push(`<p class="my-1 text-slate-800 leading-relaxed text-xs font-serif">${formattedLine}</p>`);
+        paraBuffer.push(line);
       }
     }
 
+    flushPara();
     if (inTable) {
       flushTable();
     }
@@ -255,7 +298,10 @@ export default function PolicyFrameworksSetup({
   const formatCleanPolicyStatement = (content: string, policyName: string, companyName: string): string => {
     if (!content) return '<p>No specific policy clause content available.</p>';
 
-    const actualCompanyName = companyName || client?.company_name || 'Healthcare Facility Management';
+    const isClientSmartpro = /smartpro/i.test(companyName) || /smartpro/i.test(client?.company_name || '');
+    const actualCompanyName = (!isClientSmartpro && (companyName || client?.company_name))
+      ? (companyName || client?.company_name || 'Healthcare Facility Management')
+      : 'Healthcare Facility Management';
 
     // Check if it's Statement of Applicability policy & read saved SOA controls from Quick Master Setup if content is empty/short
     let effectiveContent = content;
@@ -299,8 +345,12 @@ export default function PolicyFrameworksSetup({
       cleaned = cleaned.replace(new RegExp(`^\\s*<h[1-6][^>]*>\\s*(?:<strong>|<b>)?\\s*${escapedTitle}\\s*(?:<\\/strong>|<\\/b>)?\\s*<\\/h[1-6]>`, 'gi'), '');
     }
 
-    // 6. Replace company placeholders
+    // 6. Replace company placeholders and strip bold wrappers around entity names
     cleaned = cleaned
+      .replace(/<strong>\s*\(\s*client\.company_name\s*\)\s*<\/strong>/gi, actualCompanyName)
+      .replace(/<b>\s*\(\s*client\.company_name\s*\)\s*<\/b>/gi, actualCompanyName)
+      .replace(/<strong>\s*\[\s*Entity\s+Name\s*\]\s*<\/strong>/gi, actualCompanyName)
+      .replace(/<b>\s*\[\s*Entity\s+Name\s*\]\s*<\/b>/gi, actualCompanyName)
       .replace(/SmartPro Public Relations Consultancy & Cyber Risk Management Services/gi, actualCompanyName)
       .replace(/SmartPro Consultancy & Facility Services/gi, actualCompanyName)
       .replace(/\(\s*client\.company_name\s*\)\s*/gi, `${actualCompanyName} `)
@@ -313,6 +363,427 @@ export default function PolicyFrameworksSetup({
     cleaned = convertMarkdownToHtml(cleaned);
 
     return cleaned.trim();
+  };
+
+  // Generate Complete, Standalone, Self-Contained HTML File for Policy Document
+  const generateStandardizedPolicyHtml = (policy: Policy, preservePlaceholders: boolean = false, orientation: 'portrait' | 'landscape' = printOrientation): string => {
+    const rawFacility = policy.company_name || client?.company_name || '(client.company_name)';
+    const facilityName = preservePlaceholders ? '(selectedPolicy.company_name / client.company_name)' : rawFacility;
+    const resolvedTitle = resolveDocTitle(policy.policy_name, facilityName);
+    const policyNo = policy.policy_no || 'POL-01';
+    const category = policy.category || 'Policy';
+    const classification = policy.classification || 'CONFIDENTIAL';
+    const effectiveDate = policy.effective_date || policy.approval_date || new Date().toISOString().split('T')[0];
+    const reviewDate = policy.review_date || '2027-08-06';
+    const nextDueDate = policy.next_due_date || '2027-08-01';
+    const version = policy.version || 'v1.0';
+
+    const preparedBy = policy.prepared_by || 'HR & Compliance Desk';
+    const reviewedBy = policy.reviewed_by || 'Compliance Officer';
+    const approvedBy = policy.approved_by || 'Medical Director / CEO';
+
+    let rawBody = policy.policy_statement || policy.full_content || '<p>No policy content provided.</p>';
+    let cleanBodyHtml = formatCleanPolicyStatement(rawBody, resolvedTitle, facilityName);
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${policyNo} - ${resolvedTitle}</title>
+  <style>
+    @page {
+      size: A4 ${orientation};
+      margin: 15mm;
+      @bottom-right {
+        content: "Page " counter(page) " of " counter(pages);
+        font-size: 8pt;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        color: #64748b;
+        font-weight: 600;
+      }
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #0f172a;
+      background-color: #f1f5f9;
+      margin: 0;
+      padding: 24px;
+      line-height: 1.6;
+      font-size: 11px;
+    }
+    .a4-document {
+      width: ${orientation === 'landscape' ? '297mm' : '210mm'};
+      min-height: ${orientation === 'landscape' ? '210mm' : '297mm'};
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 15mm;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    /* Header & Branding */
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 8px;
+      margin-bottom: 10px;
+    }
+    .facility-name {
+      font-size: 14px;
+      font-weight: 900;
+      color: #0f172a;
+      text-transform: uppercase;
+      letter-spacing: -0.2px;
+      margin: 0;
+    }
+    .facility-subtext {
+      font-size: 9.5px;
+      color: #64748b;
+      margin: 1px 0 0 0;
+    }
+    .ref-code-box {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 10.5px;
+      font-weight: 800;
+      color: #3730a3;
+      background: #eef2ff;
+      padding: 3px 8px;
+      border-radius: 4px;
+      border: 1px solid #c7d2fe;
+    }
+
+    /* Document Control Information Log */
+    .doc-control-grid {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 10px;
+      font-size: 6.5px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      overflow: hidden;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .doc-control-grid th {
+      background-color: #0f172a;
+      color: #ffffff;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 3px 6px;
+      text-align: center;
+      font-size: 6.5px;
+    }
+    .doc-control-grid td {
+      padding: 4px 6px;
+      border: 1px solid #e2e8f0;
+      text-align: justify;
+      text-justify: inter-word;
+      font-size: 6.5px;
+    }
+    .label-col {
+      font-weight: 700;
+      background-color: #f1f5f9;
+      color: #334155;
+      width: 22%;
+    }
+    .val-col {
+      font-weight: 600;
+      color: #0f172a;
+      width: 28%;
+    }
+    .due-row {
+      background-color: #fffbeb;
+      color: #78350f;
+    }
+
+    /* Document Title Banner & Prominent Client Display on Same Line */
+    .title-banner {
+      background-color: #0f172a;
+      color: #ffffff;
+      text-align: center;
+      padding: 6px 12px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .title-banner h1 {
+      font-size: 12.5px;
+      font-weight: 800;
+      margin: 0;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      line-height: 1.35;
+      display: inline;
+      font-family: inherit;
+    }
+    .title-banner .client-title-same-line {
+      font-size: 12.5px;
+      font-weight: 500;
+      color: #7dd3fc;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      display: inline;
+      font-family: inherit;
+    }
+
+    /* Document Body Typography with Standardized H2 Headings & Continuous Line Justification */
+    .policy-body {
+      color: #1e293b;
+      font-size: 10.5px;
+      line-height: 1.55;
+      margin-bottom: 12px;
+      flex-grow: 1;
+      text-align: justify;
+      text-justify: inter-word;
+      hyphens: auto;
+      word-break: normal;
+      white-space: normal;
+    }
+    .policy-body h1, .policy-body h2, .policy-body h3, .policy-body h4 {
+      color: #0f172a;
+      font-size: 11px;
+      font-weight: 700;
+      margin-top: 10px;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      border-bottom: 1px solid #cbd5e1;
+      padding-bottom: 2px;
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+    .policy-body p {
+      margin: 4px 0;
+      text-align: justify;
+      text-justify: inter-word;
+      hyphens: auto;
+      word-break: normal;
+      white-space: normal;
+    }
+    .policy-body ul {
+      margin: 4px 0;
+      padding-left: 18px;
+      list-style-type: disc;
+    }
+    .policy-body li {
+      margin-bottom: 2px;
+      text-align: justify;
+      text-justify: inter-word;
+      hyphens: auto;
+      word-break: normal;
+      white-space: normal;
+    }
+
+    /* Compact Tables */
+    .policy-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0;
+      font-size: 9.5px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .policy-body table th {
+      background-color: #0f172a;
+      color: #ffffff;
+      padding: 5px 7px;
+      font-weight: 700;
+      text-align: left;
+      border: 1px solid #1e293b;
+    }
+    .policy-body table td {
+      padding: 5px 7px;
+      border: 1px solid #cbd5e1;
+      vertical-align: top;
+      text-align: justify;
+      text-justify: inter-word;
+    }
+    .policy-body table tr:nth-child(even) {
+      background-color: #f8fafc;
+    }
+
+    /* Signatories Footer */
+    .signatory-container {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: auto;
+      padding-top: 10px;
+      border-top: 2px solid #0f172a;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .signatory-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      padding: 6px 8px;
+      text-align: center;
+    }
+    .signatory-role {
+      font-size: 8.5px;
+      font-weight: 800;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: block;
+    }
+    .signatory-name {
+      font-size: 10.5px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-top: 2px;
+      display: block;
+    }
+    .signatory-sig {
+      font-size: 8.5px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      color: #15803d;
+      margin-top: 4px;
+      font-style: italic;
+    }
+
+    /* Media Print Overrides */
+    @media print {
+      body {
+        background-color: #ffffff;
+        padding: 0;
+      }
+      .a4-document {
+        width: 210mm;
+        min-height: 297mm;
+        box-shadow: none;
+        border: none;
+        padding: 15mm;
+        margin: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="a4-document">
+    <div>
+      <!-- Facility Header -->
+      <div class="header-bar">
+        <div>
+          <h2 class="facility-name">${facilityName}</h2>
+          <p class="facility-subtext">${client?.address || 'Abu Dhabi'}, ${client?.city || 'United Arab Emirates'}</p>
+        </div>
+        <div class="ref-code-box">
+          Ref: ${policyNo}
+        </div>
+      </div>
+
+      <!-- Policy Title & Client Display on Same Line -->
+      <div class="title-banner">
+        <h1>${resolvedTitle}${facilityName && !/smartpro/i.test(facilityName) && facilityName !== 'Healthcare Facility Management' ? ` <span class="client-title-same-line">— ${facilityName}</span>` : ''}</h1>
+      </div>
+
+      <!-- Document Control Information Log -->
+      <table class="doc-control-grid">
+        <thead>
+          <tr>
+            <th colspan="4">Document Control Information Log</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="label-col">Reference Code</td>
+            <td class="val-col" style="font-family: monospace; font-weight: bold; color: #3730a3;">${policyNo}</td>
+            <td class="label-col">Category</td>
+            <td class="val-col">${category}</td>
+          </tr>
+          <tr>
+            <td class="label-col">Version</td>
+            <td class="val-col">${version}</td>
+            <td class="label-col">Classification</td>
+            <td class="val-col" style="color: #b91c1c; font-weight: 800;">${classification}</td>
+          </tr>
+          <tr>
+            <td class="label-col">Issue / Effective Date</td>
+            <td class="val-col">${effectiveDate}</td>
+            <td class="label-col">Revision Date</td>
+            <td class="val-col">${reviewDate}</td>
+          </tr>
+          <tr class="due-row">
+            <td class="label-col" colspan="2" style="color: #92400e;">Next Due Revision Date</td>
+            <td class="val-col" colspan="2" style="font-weight: 800; color: #92400e;">${nextDueDate}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Policy Content Body -->
+      <div class="policy-body">
+        ${cleanBodyHtml}
+      </div>
+    </div>
+
+    <!-- Signatories Footer -->
+    <div class="signatory-container">
+      <div class="signatory-box">
+        <span class="signatory-role">Prepared By</span>
+        <strong class="signatory-name">${preparedBy}</strong>
+        <div class="signatory-sig">✓ Digital Sign: ${preparedBy}</div>
+      </div>
+      <div class="signatory-box">
+        <span class="signatory-role">Reviewed By</span>
+        <strong class="signatory-name">${reviewedBy}</strong>
+        <div class="signatory-sig">✓ Digital Sign: ${reviewedBy}</div>
+      </div>
+      <div class="signatory-box">
+        <span class="signatory-role">Approved By</span>
+        <strong class="signatory-name">${approvedBy}</strong>
+        <div class="signatory-sig">✓ Digital Sign: Approved</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+  };
+
+  const handleDownloadSingleHtml = (policy: Policy) => {
+    try {
+      const htmlContent = generateStandardizedPolicyHtml(policy);
+      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const cleanNo = (policy.policy_no || 'POL-01').replace(/[^a-zA-Z0-9_-]/g, '');
+      const cleanTitle = (resolveDocTitle(policy.policy_name, policy.company_name || client?.company_name) || 'Policy').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40);
+      link.download = `${cleanNo}_${cleanTitle}.html`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToast(`✓ Downloaded standalone HTML document [${policy.policy_no}]`);
+    } catch (e) {
+      console.error('HTML Download error:', e);
+      showToast('⚠️ Failed downloading HTML document');
+    }
+  };
+
+  const handleCopyHtmlCode = (policy: Policy) => {
+    try {
+      const htmlContent = generateStandardizedPolicyHtml(policy);
+      navigator.clipboard.writeText(htmlContent);
+      showToast(`✓ Copied complete self-contained HTML code for [${policy.policy_no}] to clipboard!`);
+    } catch (e) {
+      showToast('⚠️ Failed to copy HTML code to clipboard');
+    }
   };
 
   // Generate Standard PNG Facility Legal Seal Data URI
@@ -641,6 +1112,7 @@ export default function PolicyFrameworksSetup({
 
       targetPolicies.forEach((p, idx) => {
         try {
+          // Add PDF Document
           const doc = generatePolicyPdfDocument(p);
           const pdfArrayBuffer = doc.output('arraybuffer');
           const cleanNo = (p.policy_no || `POL-${idx + 1}`).replace(/[^a-zA-Z0-9_-]/g, '');
@@ -648,6 +1120,11 @@ export default function PolicyFrameworksSetup({
           const cleanTitle = resolvedTitle.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40);
           const fileName = `${cleanNo}_${cleanTitle}.pdf`;
           folder?.file(fileName, pdfArrayBuffer);
+
+          // Add Standardized Standalone HTML Document
+          const htmlContent = generateStandardizedPolicyHtml(p);
+          const htmlFileName = `${cleanNo}_${cleanTitle}.html`;
+          folder?.file(htmlFileName, htmlContent);
         } catch (e) {
           console.error(`Error adding policy ${p.policy_no} to ZIP:`, e);
         }
@@ -1490,6 +1967,13 @@ export default function PolicyFrameworksSetup({
                               <Edit3 className="w-3.5 h-3.5" /> Edit
                             </button>
                             <button
+                              onClick={() => handleDownloadSingleHtml(p)}
+                              className="px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200/60 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1"
+                              title="Download Standalone Standardized HTML Document"
+                            >
+                              <FileCode className="w-3.5 h-3.5" /> HTML
+                            </button>
+                            <button
                               onClick={() => {
                                 setEmailPolicy(p);
                                 setEmailRecipient(client?.email || 'compliance@smartpro.ae');
@@ -2026,12 +2510,57 @@ export default function PolicyFrameworksSetup({
                   />
                 )}
 
+                {/* Print Orientation UI Toggle */}
+                <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-700 shadow-inner">
+                  <button
+                    type="button"
+                    onClick={() => setPrintOrientation('portrait')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                      printOrientation === 'portrait'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                    title="Switch to A4 Portrait Orientation Mode (210mm x 297mm)"
+                  >
+                    Portrait
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintOrientation('landscape')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                      printOrientation === 'landscape'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                    title="Switch to A4 Landscape Orientation Mode (297mm x 210mm)"
+                  >
+                    Landscape
+                  </button>
+                </div>
+
                 <button
                   onClick={() => handlePrintPolicyPdf(selectedPolicy)}
                   className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-md"
                 >
                   <Printer className="w-3.5 h-3.5" /> Print PDF
                 </button>
+
+                <button
+                  onClick={() => handleDownloadSingleHtml(selectedPolicy)}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-md"
+                  title="Download Standardized Self-Contained HTML File"
+                >
+                  <FileCode className="w-3.5 h-3.5" /> Download HTML (.html)
+                </button>
+
+                <button
+                  onClick={() => handleCopyHtmlCode(selectedPolicy)}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-md border border-slate-700"
+                  title="Copy Complete Self-Contained HTML Code"
+                >
+                  <Copy className="w-3.5 h-3.5" /> Copy HTML Code
+                </button>
+
                 <button
                   onClick={() => {
                     setEmailPolicy(selectedPolicy);
@@ -2207,7 +2736,9 @@ export default function PolicyFrameworksSetup({
               <div className="flex-1 w-full flex justify-center overflow-x-auto">
                 <div
                   id="printable-report-document"
-                  className="w-full max-w-[210mm] min-h-[297mm] bg-white text-slate-900 shadow-2xl rounded-sm border border-slate-300 p-6 sm:px-[15mm] md:px-[15mm] py-8 sm:py-12 relative flex flex-col justify-between font-sans text-xs leading-relaxed my-0 box-border"
+                  className={`w-full bg-white text-slate-900 shadow-2xl rounded-sm border border-slate-300 p-6 sm:px-[15mm] md:px-[15mm] py-8 sm:py-12 relative flex flex-col justify-between font-sans text-xs leading-relaxed my-0 box-border transition-all ${
+                    printOrientation === 'landscape' ? 'max-w-[297mm] min-h-[210mm]' : 'max-w-[210mm] min-h-[297mm]'
+                  }`}
                 >
                   <style>{`
                     @media print {
@@ -2221,8 +2752,8 @@ export default function PolicyFrameworksSetup({
                         position: absolute !important;
                         left: 0 !important;
                         top: 0 !important;
-                        width: 210mm !important;
-                        min-height: 297mm !important;
+                        width: ${printOrientation === 'landscape' ? '297mm' : '210mm'} !important;
+                        min-height: ${printOrientation === 'landscape' ? '210mm' : '297mm'} !important;
                         padding-left: 15mm !important;
                         padding-right: 15mm !important;
                         padding-top: 15mm !important;
@@ -2234,8 +2765,15 @@ export default function PolicyFrameworksSetup({
                         background: white !important;
                       }
                       @page {
-                        size: A4 portrait;
-                        margin: 0;
+                        size: A4 ${printOrientation};
+                        margin: 15mm;
+                        @bottom-right {
+                          content: "Page " counter(page) " of " counter(pages);
+                          font-size: 8pt;
+                          font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+                          color: #64748b;
+                          font-weight: 600;
+                        }
                       }
                     }
                   `}</style>
@@ -2273,10 +2811,10 @@ export default function PolicyFrameworksSetup({
                     {/* DOCUMENT CONTROL METADATA FULL-WIDTH TABLE WITH LEFT & RIGHT SPACING */}
                     <div className="w-full my-3 pr-2 sm:pr-4">
                       <div className="overflow-hidden border border-slate-300 rounded shadow-2xs">
-                        <table className="w-full table-fixed text-left border-collapse text-[10px] sm:text-[10.5px]">
+                        <table className="w-full table-fixed text-left border-collapse text-[6.5px] sm:text-[6.5px]">
                           <thead>
-                            <tr className="bg-slate-900 text-white font-bold text-[10px] tracking-wider uppercase">
-                              <th colSpan={4} className="py-1.5 px-3 text-center border-b border-slate-800">
+                            <tr className="bg-slate-900 text-white font-bold text-[6.5px] tracking-wider uppercase">
+                              <th colSpan={4} className="py-1 px-2 text-center border-b border-slate-800 text-[6.5px]">
                                 Document Control Information Log
                               </th>
                             </tr>
@@ -2310,12 +2848,15 @@ export default function PolicyFrameworksSetup({
                     </div>
 
                     {/* MAIN DOCUMENT STATEMENT BODY WITH POLICY TITLE BANNER & BALANCED SIDE PADDING */}
-                    <div className="py-3 px-1 sm:px-2 space-y-3 min-h-[350px] w-full flex-1">
-                      <div className="bg-slate-900 text-white font-bold px-3 py-1.5 text-[11px] tracking-wider uppercase rounded-xs text-center shadow-xs w-full">
+                    <div className="py-2 px-1 sm:px-2 space-y-2.5 min-h-[350px] w-full flex-1">
+                      <div className="bg-slate-900 text-white font-bold px-3 py-1.5 text-[12.5px] tracking-wider uppercase rounded-xs text-center shadow-xs w-full">
                         {resolveDocTitle(selectedPolicy.policy_name, selectedPolicy.company_name || client?.company_name)}
+                        {selectedPolicy.company_name && !/smartpro/i.test(selectedPolicy.company_name) && selectedPolicy.company_name !== 'Healthcare Facility Management' && (
+                          <span className="text-sky-300 font-medium uppercase"> — {selectedPolicy.company_name}</span>
+                        )}
                       </div>
                       <div
-                        className="prose text-xs text-slate-800 leading-relaxed max-w-none w-full [&_ol]:list-disc [&_ul]:list-disc [&_ol]:pl-5 [&_ul]:pl-5 [&_li]:my-0.5 [&_p]:font-serif [&_li]:font-serif [&_table]:w-full [&_table]:border-collapse [&_table]:my-3 [&_table]:border [&_table]:border-slate-300 [&_th]:bg-slate-900 [&_th]:text-white [&_th]:p-2 [&_th]:font-bold [&_th]:text-[10px] [&_th]:uppercase [&_td]:border [&_td]:border-slate-200 [&_td]:p-2 [&_td]:align-top"
+                        className="prose text-xs text-slate-800 leading-normal max-w-none w-full [&_ol]:list-disc [&_ul]:list-disc [&_ol]:pl-5 [&_ul]:pl-5 [&_li]:my-0.5 [&_p]:font-serif [&_p]:my-1.5 [&_p]:text-justify [&_p]:[text-justify:inter-word] [&_p]:[hyphens:auto] [&_li]:font-serif [&_li]:text-justify [&_li]:[text-justify:inter-word] [&_h1]:text-xs [&_h1]:font-bold [&_h1]:uppercase [&_h1]:border-b [&_h1]:border-slate-200 [&_h1]:pb-0.5 [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-xs [&_h2]:font-bold [&_h2]:uppercase [&_h2]:border-b [&_h2]:border-slate-200 [&_h2]:pb-0.5 [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-xs [&_h3]:font-bold [&_h3]:uppercase [&_h3]:border-b [&_h3]:border-slate-200 [&_h3]:pb-0.5 [&_h3]:mt-3 [&_h3]:mb-1 [&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_table]:border [&_table]:border-slate-300 [&_th]:bg-slate-900 [&_th]:text-white [&_th]:p-1.5 [&_th]:font-bold [&_th]:text-[10px] [&_th]:uppercase [&_td]:border [&_td]:border-slate-200 [&_td]:p-1.5 [&_td]:align-top [&_td]:text-justify [&_td]:[text-justify:inter-word]"
                         dangerouslySetInnerHTML={{
                           __html: formatCleanPolicyStatement(
                             selectedPolicy.policy_statement || selectedPolicy.full_content || '',
