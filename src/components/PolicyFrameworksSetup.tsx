@@ -35,7 +35,10 @@ import {
   Edit3,
   Mail,
   Send,
-  Pencil
+  Pencil,
+  Sliders,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import { Policy, User, Client, Employee } from '../types';
 import { DocRefLoopSelector, DocRefLoopData } from './DocRefLoopSelector';
@@ -111,6 +114,34 @@ export default function PolicyFrameworksSetup({
   const [previewShowReviewedBy, setPreviewShowReviewedBy] = useState(true);
   const [previewReviewedBy, setPreviewReviewedBy] = useState('Compliance Officer');
   const [printOrientation, setPrintOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const [pageBreakSections, setPageBreakSections] = useState<string[]>([]);
+
+  const togglePageBreakSection = (secTitle: string) => {
+    setPageBreakSections(prev =>
+      prev.includes(secTitle) ? prev.filter(s => s !== secTitle) : [...prev, secTitle]
+    );
+  };
+
+  const extractPolicySections = (content: string): string[] => {
+    if (!content) return [];
+    const lines = content.split('\n');
+    const sections: string[] = [];
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (
+        trimmed.startsWith('#') ||
+        /^\d+[\.\)]\s+[A-Z]/.test(trimmed) ||
+        /^(?:PURPOSE|RESPONSIBILITIES|REQUIREMENTS|GOVERNANCE|COMPLIANCE|CONTROL OBJECTIVES|AUDITING|APPENDIX|DEFINITIONS)/i.test(trimmed)
+      ) {
+        const clean = trimmed.replace(/^#+\s*/, '').replace(/<[^>]*>/g, '').trim();
+        if (clean && clean.length < 80 && !sections.includes(clean)) {
+          sections.push(clean);
+        }
+      }
+    });
+    return sections;
+  };
+
   const [docContent, setDocContent] = useState(
     `<p><strong>1. PURPOSE & SCOPE</strong></p>\n<p>This Policy Framework sets forth the mandatory operational requirements for information security, administrative safeguards, and patient privacy under ADHICS guidelines.</p>\n\n<p><strong>2. RESPONSIBILITIES & GOVERNANCE</strong></p>\n<p>All facility staff and clinical operators must strictly adhere to compliance procedures and document control protocols.</p>`
   );
@@ -126,18 +157,19 @@ export default function PolicyFrameworksSetup({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Resolve Document Title replacing placeholders and removing consultant name suffixes
-  const resolveDocTitle = (title: string, companyNameOverride?: string): string => {
+  // Helper function to strictly sanitize all policy titles by removing repetitive branding strings
+  const sanitizePolicyTitle = (title: string, companyNameOverride?: string): string => {
     if (!title) return '';
-    
-    // First strip out long consultancy company name or trailing suffixes from title
+
     let clean = title
-      .replace(/\s*[—\-]\s*SmartPro Public Relations Consultancy & Cyber Risk Management Services/gi, '')
-      .replace(/\s*[—\-]\s*SmartPro Consultancy & Facility Services/gi, '')
-      .replace(/\s*[—\-]\s*SmartPro Public Relations Consultancy/gi, '')
+      .replace(/\s*[—\-–]\s*SmartPro Public Relations Consultancy & Cyber Risk Management Services/gi, '')
+      .replace(/\s*[—\-–]\s*SmartPro Consultancy & Facility Services/gi, '')
+      .replace(/\s*[—\-–]\s*SmartPro Public Relations Consultancy/gi, '')
       .replace(/SmartPro Public Relations Consultancy & Cyber Risk Management Services/gi, '')
       .replace(/SmartPro Consultancy & Facility Services/gi, '')
-      .replace(/SmartPro Public Relations Consultancy/gi, '');
+      .replace(/SmartPro Public Relations Consultancy/gi, '')
+      .replace(/\s*[—\-–]\s*Healthcare Facility Management/gi, '')
+      .replace(/Healthcare Facility Management/gi, '');
 
     const overrideName = companyNameOverride && !/smartpro/i.test(companyNameOverride) ? companyNameOverride : '';
     const clientName = client?.company_name && !/smartpro/i.test(client.company_name) ? client.company_name : '';
@@ -148,16 +180,25 @@ export default function PolicyFrameworksSetup({
       .replace(/\(\s*client\.company_name\s*\)/gi, actualCompanyName)
       .replace(/client\.company_name/gi, actualCompanyName)
       .replace(/\[\s*Entity\s+Name\s*\]/gi, actualCompanyName)
-      .replace(/\[\s*Facility\s+Name\s*\]/gi, actualCompanyName)
-      .replace(/\s+/g, ' ')
-      .trim();
+      .replace(/\[\s*Facility\s+Name\s*\]/gi, actualCompanyName);
 
-    clean = clean.replace(/\s*[—\-]\s*$/g, '').trim();
+    if (actualCompanyName) {
+      const escapedClientName = actualCompanyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      clean = clean.replace(new RegExp(`\\s*[—\\-–]\\s*${escapedClientName}`, 'gi'), '');
+    }
+
+    clean = clean.replace(/\s+/g, ' ').trim();
+    clean = clean.replace(/\s*[—\-–,;:]\s*$/g, '').trim();
     return clean;
   };
 
+  // Resolve Document Title replacing placeholders and removing consultant name suffixes
+  const resolveDocTitle = (title: string, companyNameOverride?: string): string => {
+    return sanitizePolicyTitle(title, companyNameOverride);
+  };
+
   // Convert Markdown syntax (headers, lists, bolding, and tables) to compact HTML
-  const convertMarkdownToHtml = (markdown: string): string => {
+  const convertMarkdownToHtml = (markdown: string, breakSections: string[] = []): string => {
     if (!markdown) return '';
 
     const lines = markdown.split('\n');
@@ -166,36 +207,41 @@ export default function PolicyFrameworksSetup({
     let tableHeader: string[] = [];
     let tableRows: string[][] = [];
 
+    const checkPageBreak = (text: string) => {
+      const cleanH = text.replace(/<[^>]*>/g, '').trim().toLowerCase();
+      return breakSections.some(sec => cleanH.includes(sec.toLowerCase()) || sec.toLowerCase().includes(cleanH));
+    };
+
     const flushTable = () => {
       if (!inTable) return;
       if (tableHeader.length > 0 || tableRows.length > 0) {
-        let html = `<div class="my-3 overflow-x-auto border border-slate-300 rounded-lg bg-white shadow-2xs">`;
-        html += `<table class="w-full text-left border-collapse text-[10.5px] font-sans">`;
+        let html = `<div class="my-2 overflow-x-auto border border-slate-300 rounded-xs bg-white shadow-2xs">`;
+        html += `<table class="w-full text-left border-collapse text-[10px] font-sans">`;
         
         if (tableHeader.length > 0) {
-          html += `<thead class="bg-slate-900 text-white font-bold text-[10px] uppercase tracking-wider"><tr>`;
+          html += `<thead class="bg-[#0f172a] text-white font-bold text-[9.5px] uppercase tracking-wider"><tr>`;
           tableHeader.forEach((h, idx) => {
             const widthClass = idx === 0 ? 'w-3/12' : idx === 1 ? 'w-6/12' : 'w-3/12 text-center';
-            html += `<th class="p-2 border-r border-slate-800 ${widthClass}">${h.trim()}</th>`;
+            html += `<th class="py-1 px-2.5 border-r border-slate-700 ${widthClass}">${h.trim()}</th>`;
           });
           html += `</tr></thead>`;
         }
 
         html += `<tbody class="divide-y divide-slate-200 font-medium text-slate-800">`;
         tableRows.forEach(row => {
-          html += `<tr class="hover:bg-slate-50 transition-colors">`;
+          html += `<tr class="hover:bg-slate-50/80 transition-colors">`;
           row.forEach((cell, idx) => {
             const trimmed = cell.trim();
             if (idx === 2 || trimmed.toLowerCase() === 'applicable' || trimmed.toLowerCase() === 'not applicable') {
               const isApplicable = trimmed.toLowerCase() === 'applicable';
               const badge = isApplicable
-                ? `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">✓ Applicable</span>`
-                : `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">Not applicable</span>`;
-              html += `<td class="p-2 text-center align-top border-r border-slate-200">${badge}</td>`;
+                ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">✓ Applicable</span>`
+                : `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-700 border border-slate-300">Not applicable</span>`;
+              html += `<td class="py-1 px-2.5 text-center align-top border-r border-slate-200">${badge}</td>`;
             } else if (idx === 0) {
-              html += `<td class="p-2 font-bold text-indigo-950 align-top border-r border-slate-200">${trimmed}</td>`;
+              html += `<td class="py-1 px-2.5 font-bold text-[#0f172a] align-top border-r border-slate-200">${trimmed}</td>`;
             } else {
-              html += `<td class="p-2 text-slate-700 leading-snug align-top border-r border-slate-200">${trimmed}</td>`;
+              html += `<td class="py-1 px-2.5 text-slate-700 leading-snug align-top border-r border-slate-200 text-justify" style="text-align: justify; text-justify: inter-word; hyphens: auto; word-break: normal; white-space: normal;">${trimmed}</td>`;
             }
           });
           html += `</tr>`;
@@ -216,11 +262,18 @@ export default function PolicyFrameworksSetup({
         const fullPara = paraBuffer.join(' ').replace(/\s+/g, ' ').trim();
         if (fullPara) {
           let formattedLine = fullPara.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-          // Remove bold weight around client company name placeholders if bolded
           formattedLine = formattedLine
             .replace(/<strong>\s*\(\s*client\.company_name\s*\)\s*<\/strong>/gi, '(client.company_name)')
-            .replace(/<b>\s*\(\s*client\.company_name\s*\)\s*<\/b>/gi, '(client.company_name)');
-          resultLines.push(`<p class="my-1.5 text-slate-800 leading-normal text-xs font-serif text-justify" style="text-align: justify; text-justify: inter-word; hyphens: auto; word-break: normal; white-space: normal;">${formattedLine}</p>`);
+            .replace(/<b>\s*\(\s*client\.company_name\s*\)\s*<\/b>/gi, '(client.company_name)')
+            .replace(/<p>\s*,\s*<\/strong>\s*<\/p>/gi, '')
+            .replace(/<p>\s*,\s*<\/p>/gi, '')
+            .replace(/,\s*<\/strong>/gi, '</strong>');
+          
+          if (formattedLine.trim()) {
+            const isBreak = checkPageBreak(fullPara);
+            const breakClass = isBreak ? 'page-break-before ' : '';
+            resultLines.push(`<p class="${breakClass}my-1.5 text-slate-800 leading-normal text-xs font-sans text-justify" style="text-align: justify; text-justify: inter-word; hyphens: auto; word-break: normal; white-space: normal;">${formattedLine}</p>`);
+          }
         }
         paraBuffer = [];
       }
@@ -235,7 +288,6 @@ export default function PolicyFrameworksSetup({
         flushPara();
         const cells = line.slice(1, -1).split('|').map(c => c.trim());
         if (cells.every(c => /^[-:]+$/.test(c))) {
-          // Divider row
           continue;
         }
         if (!inTable) {
@@ -254,31 +306,32 @@ export default function PolicyFrameworksSetup({
       // Check if line is already HTML tag or block
       if (/<[a-z][\s\S]*>/i.test(line)) {
         flushPara();
-        // Convert any <ol> to <ul> for bullet list enforcement
         let cleanHtmlLine = rawLine
           .replace(/<ol([^>]*)>/gi, '<ul$1 class="list-disc pl-5 my-1">')
           .replace(/<\/ol>/gi, '</ul>')
+          .replace(/<p>\s*,\s*<\/strong>\s*<\/p>/gi, '')
+          .replace(/<p>\s*,\s*<\/p>/gi, '')
           .replace(/<strong>\s*\(\s*client\.company_name\s*\)\s*<\/strong>/gi, '(client.company_name)')
           .replace(/<b>\s*\(\s*client\.company_name\s*\)\s*<\/b>/gi, '(client.company_name)');
+
+        if (checkPageBreak(cleanHtmlLine)) {
+          cleanHtmlLine = cleanHtmlLine.replace(/<([a-z1-6]+)([^>]*)>/i, '<$1$2 class="page-break-before">');
+        }
         resultLines.push(cleanHtmlLine);
         continue;
       }
 
-      // Process Headings - standardize all headings to h2 size
-      if (line.startsWith('### ')) {
+      // Process Headings - standardize all headings to h2 size with Navy border
+      if (line.startsWith('### ') || line.startsWith('## ') || line.startsWith('# ')) {
         flushPara();
-        resultLines.push(`<h2 class="text-xs font-bold uppercase tracking-wider text-slate-900 mt-3 mb-1 border-b border-slate-200 pb-0.5">${line.substring(4)}</h2>`);
-      } else if (line.startsWith('## ')) {
-        flushPara();
-        resultLines.push(`<h2 class="text-xs font-bold uppercase tracking-wider text-slate-900 mt-3 mb-1 border-b border-slate-200 pb-0.5">${line.substring(3)}</h2>`);
-      } else if (line.startsWith('# ')) {
-        flushPara();
-        resultLines.push(`<h2 class="text-xs font-bold uppercase tracking-wider text-slate-900 mt-3 mb-1 border-b border-slate-200 pb-0.5">${line.substring(2)}</h2>`);
+        const headingText = line.replace(/^#+\s*/, '').trim();
+        const breakClass = checkPageBreak(headingText) ? 'page-break-before ' : '';
+        resultLines.push(`<h2 class="${breakClass}text-xs font-bold uppercase tracking-wider text-[#0f172a] mt-2.5 mb-1 border-b border-slate-300 pb-0.5">${headingText}</h2>`);
       } else if (line.startsWith('• ') || line.startsWith('- ') || /^\d+[\.\)]\s/.test(line)) {
         flushPara();
-        // Convert numbered or hypenated list items to bullet points
         const itemContent = line.replace(/^(?:•|-|\d+[\.\)])\s*/, '');
-        resultLines.push(`<li class="ml-4 list-disc text-slate-800 my-0.5 text-xs font-serif font-medium text-justify" style="text-align: justify; text-justify: inter-word; hyphens: auto; word-break: normal; white-space: normal;">${itemContent}</li>`);
+        const breakClass = checkPageBreak(itemContent) ? 'page-break-before ' : '';
+        resultLines.push(`<li class="${breakClass}ml-4 list-disc text-slate-800 my-0.5 text-xs font-sans font-normal text-justify" style="text-align: justify; text-justify: inter-word; hyphens: auto; word-break: normal; white-space: normal;">${itemContent}</li>`);
       } else if (line === '') {
         flushPara();
       } else {
@@ -295,15 +348,14 @@ export default function PolicyFrameworksSetup({
   };
 
   // Clean & Format Policy Statement Text
-  const formatCleanPolicyStatement = (content: string, policyName: string, companyName: string): string => {
-    if (!content) return '<p>No specific policy clause content available.</p>';
+  const formatCleanPolicyStatement = (content: string, policyName: string, companyName: string, breakSections: string[] = []): string => {
+    if (!content) return '<p class="text-justify" style="text-align: justify; text-justify: inter-word;">No specific policy clause content available.</p>';
 
     const isClientSmartpro = /smartpro/i.test(companyName) || /smartpro/i.test(client?.company_name || '');
     const actualCompanyName = (!isClientSmartpro && (companyName || client?.company_name))
-      ? (companyName || client?.company_name || 'Healthcare Facility Management')
-      : 'Healthcare Facility Management';
+      ? (companyName || client?.company_name || client?.company_name || 'client.company_name')
+      : (client?.company_name || 'client.company_name');
 
-    // Check if it's Statement of Applicability policy & read saved SOA controls from Quick Master Setup if content is empty/short
     let effectiveContent = content;
     const isSoa = (policyName && policyName.toLowerCase().includes('statement of applicability')) || content.includes('CONTROL OBJECTIVES AND APPLICABILITY');
     if (isSoa && (!content || content.trim().length < 50 || content.trim() === 'Statement of Applicability')) {
@@ -359,8 +411,18 @@ export default function PolicyFrameworksSetup({
       .replace(/\[\s*Entity\s+Name\s*\]/gi, actualCompanyName)
       .replace(/\[\s*Facility\s+Name\s*\]/gi, actualCompanyName);
 
-    // 7. Convert Markdown syntax and format text line breaks
-    cleaned = convertMarkdownToHtml(cleaned);
+    // 7. Sanitize tag gaps and punctuation artifacts
+    cleaned = cleaned
+      .replace(/<p>\s*,\s*<\/strong>\s*<\/p>/gi, '')
+      .replace(/<p>\s*,\s*<\/p>/gi, '')
+      .replace(/<strong>\s*,\s*<\/strong>/gi, '')
+      .replace(/,\s*<\/strong>\s*<\/p>/gi, '.</strong></p>')
+      .replace(/<p>\s*,\s*/gi, '<p>')
+      .replace(/<strong>\s*,\s*/gi, '<strong>')
+      .replace(/<p>\s*<\/p>/gi, '');
+
+    // 8. Convert Markdown syntax and format text line breaks
+    cleaned = convertMarkdownToHtml(cleaned, breakSections);
 
     return cleaned.trim();
   };
@@ -383,7 +445,7 @@ export default function PolicyFrameworksSetup({
     const approvedBy = policy.approved_by || 'Medical Director / CEO';
 
     let rawBody = policy.policy_statement || policy.full_content || '<p>No policy content provided.</p>';
-    let cleanBodyHtml = formatCleanPolicyStatement(rawBody, resolvedTitle, facilityName);
+    let cleanBodyHtml = formatCleanPolicyStatement(rawBody, resolvedTitle, facilityName, pageBreakSections);
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -407,6 +469,25 @@ export default function PolicyFrameworksSetup({
       box-sizing: border-box;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
+    }
+    .print-compact-gap, .print-compact-gap * {
+      margin-top: 2px !important;
+      margin-bottom: 2px !important;
+      padding-top: 1px !important;
+      padding-bottom: 1px !important;
+      line-height: 1.35 !important;
+    }
+    .print-compact-gap h1, .print-compact-gap h2, .print-compact-gap h3 {
+      margin-top: 6px !important;
+      margin-bottom: 3px !important;
+    }
+    .print-compact-gap p, .print-compact-gap li {
+      margin-top: 2px !important;
+      margin-bottom: 2px !important;
+    }
+    .page-break-before {
+      page-break-before: always !important;
+      break-before: page !important;
     }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -675,7 +756,7 @@ export default function PolicyFrameworksSetup({
   </style>
 </head>
 <body>
-  <div class="a4-document">
+  <div class="a4-document print-compact-gap">
     <div>
       <!-- Facility Header -->
       <div class="header-bar">
@@ -683,14 +764,11 @@ export default function PolicyFrameworksSetup({
           <h2 class="facility-name">${facilityName}</h2>
           <p class="facility-subtext">${client?.address || 'Abu Dhabi'}, ${client?.city || 'United Arab Emirates'}</p>
         </div>
-        <div class="ref-code-box">
-          Ref: ${policyNo}
-        </div>
       </div>
 
       <!-- Policy Title & Client Display on Same Line -->
       <div class="title-banner">
-        <h1>${resolvedTitle}${facilityName && !/smartpro/i.test(facilityName) && facilityName !== 'Healthcare Facility Management' ? ` <span class="client-title-same-line">— ${facilityName}</span>` : ''}</h1>
+        <h1>${resolvedTitle}${facilityName && !/smartpro/i.test(facilityName) && facilityName !== (client?.company_name || 'client.company_name') ? ` <span class="client-title-same-line">— ${facilityName}</span>` : ''}</h1>
       </div>
 
       <!-- Document Control Information Log -->
@@ -986,7 +1064,7 @@ export default function PolicyFrameworksSetup({
     doc.setFontSize(8);
     doc.setTextColor(30, 41, 59);
 
-    const entityName = policy.company_name || client?.company_name || 'Healthcare Facility Management';
+    const entityName = policy.company_name || client?.company_name || 'client.company_name';
     const cleanContentHtml = formatCleanPolicyStatement(
       policy.policy_statement || policy.full_content || '',
       policy.policy_name,
@@ -1106,7 +1184,7 @@ export default function PolicyFrameworksSetup({
 
     try {
       const zip = new JSZip();
-      const facilityName = client?.company_name || 'Healthcare Facility';
+      const facilityName = client?.company_name || 'client.company_name';
       const cleanFacility = facilityName.replace(/[^a-zA-Z0-9]/g, '_');
       const folder = zip.folder(`Policy_Frameworks_${cleanFacility}`);
 
@@ -1691,18 +1769,12 @@ export default function PolicyFrameworksSetup({
                     )}
                     <div>
                       <h1 className="font-extrabold text-sm text-slate-900 uppercase tracking-tight">
-                        {client?.company_name || 'Healthcare Facility'}
+                        {client?.company_name || 'client.company_name'}
                       </h1>
                       <p className="text-[11px] text-slate-600">
                         {client?.address || 'Abu Dhabi, UAE, Abu Dhabi'}
                       </p>
                     </div>
-                  </div>
-
-                  <div className="text-right border-l-2 border-slate-200 pl-3">
-                    <strong className="text-xs font-mono font-black text-indigo-900 block">
-                      Ref: {docCode || 'Pol-01'}
-                    </strong>
                   </div>
                 </div>
 
@@ -2071,16 +2143,6 @@ export default function PolicyFrameworksSetup({
       {/* SUB-TAB 3: EXPORT PACKAGES */}
       {activeTab === 'export' && (
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-          <div className="border-b border-slate-100 pb-4">
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <Download className="w-5 h-5 text-indigo-600" />
-              Data Transfer & Vault Export Packages
-            </h2>
-            <p className="text-xs text-slate-500">
-              Download complete JSON/XML governance data transfer packages for auditing, backup, or migrating policies across facility environments.
-            </p>
-          </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-5 bg-indigo-50/60 rounded-2xl border border-indigo-200 space-y-3">
               <div className="flex items-center gap-2 text-indigo-900 font-bold text-sm">
@@ -2733,10 +2795,46 @@ export default function PolicyFrameworksSetup({
               )}
 
               {/* A4 AUTOFIT SHEET CONTAINER WITH 15MM MARGINS & PRINT STYLES */}
-              <div className="flex-1 w-full flex justify-center overflow-x-auto">
+              <div className="flex-1 w-full flex flex-col items-center overflow-x-auto gap-3">
+                {/* MANUAL PAGE BREAK CONTROLS TOOLBAR */}
+                {selectedPolicy && (
+                  <div className="w-full max-w-[210mm] bg-slate-900 border border-slate-700/80 rounded-xl p-3 text-xs text-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 shadow-lg">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Sliders className="w-4 h-4 text-indigo-400" />
+                      <span className="font-bold text-slate-200">Manual Page Break Toggles:</span>
+                      <span className="text-[10px] text-slate-400 hidden md:inline">(Forces page break before section)</span>
+                    </div>
+                    
+                    <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
+                      {extractPolicySections(selectedPolicy.policy_statement || selectedPolicy.full_content || '').map((sectionTitle, idx) => {
+                        const isSelected = pageBreakSections.includes(sectionTitle);
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => togglePageBreakSection(sectionTitle)}
+                            className={`px-2.5 py-1 rounded-md text-[10.5px] font-bold cursor-pointer transition-all border flex items-center gap-1.5 ${
+                              isSelected
+                                ? 'bg-indigo-600 border-indigo-400 text-white shadow-xs'
+                                : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
+                            }`}
+                            title={`Toggle page break before "${sectionTitle}"`}
+                          >
+                            {isSelected ? <CheckSquare className="w-3.5 h-3.5 text-emerald-300" /> : <Square className="w-3.5 h-3.5 text-slate-400" />}
+                            <span>{sectionTitle.length > 28 ? sectionTitle.substring(0, 28) + '…' : sectionTitle}</span>
+                          </button>
+                        );
+                      })}
+                      {extractPolicySections(selectedPolicy.policy_statement || selectedPolicy.full_content || '').length === 0 && (
+                        <span className="text-[11px] text-slate-400 italic">No standard section headings detected in content</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div
                   id="printable-report-document"
-                  className={`w-full bg-white text-slate-900 shadow-2xl rounded-sm border border-slate-300 p-6 sm:px-[15mm] md:px-[15mm] py-8 sm:py-12 relative flex flex-col justify-between font-sans text-xs leading-relaxed my-0 box-border transition-all ${
+                  className={`w-full bg-white text-slate-900 shadow-2xl rounded-sm border border-slate-300 p-6 sm:px-[15mm] md:px-[15mm] py-8 sm:py-12 relative flex flex-col justify-between font-sans text-xs leading-relaxed my-0 box-border transition-all print-compact-gap ${
                     printOrientation === 'landscape' ? 'max-w-[297mm] min-h-[210mm]' : 'max-w-[210mm] min-h-[297mm]'
                   }`}
                 >
@@ -2795,16 +2893,12 @@ export default function PolicyFrameworksSetup({
                         )}
                         <div className="space-y-0.5">
                           <h1 className="text-base font-black tracking-tight text-slate-900 uppercase">
-                            {selectedPolicy.company_name || client?.company_name || 'Healthcare Facility Management'}
+                            {selectedPolicy.company_name || client?.company_name || 'client.company_name'}
                           </h1>
                           <p className="text-[10px] text-slate-500 font-medium">
                             {client?.address || 'Abu Dhabi'}, {client?.city || 'United Arab Emirates'}
                           </p>
                         </div>
-                      </div>
-
-                      <div className="text-right space-y-1">
-                        <p className="text-xs font-mono font-bold text-slate-800 block">Ref: {selectedPolicy.policy_no}</p>
                       </div>
                     </div>
 
@@ -2851,17 +2945,18 @@ export default function PolicyFrameworksSetup({
                     <div className="py-2 px-1 sm:px-2 space-y-2.5 min-h-[350px] w-full flex-1">
                       <div className="bg-slate-900 text-white font-bold px-3 py-1.5 text-[12.5px] tracking-wider uppercase rounded-xs text-center shadow-xs w-full">
                         {resolveDocTitle(selectedPolicy.policy_name, selectedPolicy.company_name || client?.company_name)}
-                        {selectedPolicy.company_name && !/smartpro/i.test(selectedPolicy.company_name) && selectedPolicy.company_name !== 'Healthcare Facility Management' && (
+                        {selectedPolicy.company_name && !/smartpro/i.test(selectedPolicy.company_name) && selectedPolicy.company_name !== (client?.company_name || 'client.company_name') && (
                           <span className="text-sky-300 font-medium uppercase"> — {selectedPolicy.company_name}</span>
                         )}
                       </div>
                       <div
-                        className="prose text-xs text-slate-800 leading-normal max-w-none w-full [&_ol]:list-disc [&_ul]:list-disc [&_ol]:pl-5 [&_ul]:pl-5 [&_li]:my-0.5 [&_p]:font-serif [&_p]:my-1.5 [&_p]:text-justify [&_p]:[text-justify:inter-word] [&_p]:[hyphens:auto] [&_li]:font-serif [&_li]:text-justify [&_li]:[text-justify:inter-word] [&_h1]:text-xs [&_h1]:font-bold [&_h1]:uppercase [&_h1]:border-b [&_h1]:border-slate-200 [&_h1]:pb-0.5 [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-xs [&_h2]:font-bold [&_h2]:uppercase [&_h2]:border-b [&_h2]:border-slate-200 [&_h2]:pb-0.5 [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-xs [&_h3]:font-bold [&_h3]:uppercase [&_h3]:border-b [&_h3]:border-slate-200 [&_h3]:pb-0.5 [&_h3]:mt-3 [&_h3]:mb-1 [&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_table]:border [&_table]:border-slate-300 [&_th]:bg-slate-900 [&_th]:text-white [&_th]:p-1.5 [&_th]:font-bold [&_th]:text-[10px] [&_th]:uppercase [&_td]:border [&_td]:border-slate-200 [&_td]:p-1.5 [&_td]:align-top [&_td]:text-justify [&_td]:[text-justify:inter-word]"
+                        className="prose text-xs text-slate-800 leading-normal max-w-none w-full [&_ol]:list-disc [&_ul]:list-disc [&_ol]:pl-5 [&_ul]:pl-5 [&_li]:my-0.5 [&_p]:font-sans [&_p]:my-1.5 [&_p]:text-justify [&_p]:[text-justify:inter-word] [&_p]:[hyphens:auto] [&_li]:font-sans [&_li]:text-justify [&_li]:[text-justify:inter-word] [&_h1]:text-xs [&_h1]:font-bold [&_h1]:uppercase [&_h1]:border-b [&_h1]:border-slate-200 [&_h1]:pb-0.5 [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-xs [&_h2]:font-bold [&_h2]:uppercase [&_h2]:border-b [&_h2]:border-slate-200 [&_h2]:pb-0.5 [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-xs [&_h3]:font-bold [&_h3]:uppercase [&_h3]:border-b [&_h3]:border-slate-200 [&_h3]:pb-0.5 [&_h3]:mt-3 [&_h3]:mb-1 [&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_table]:border [&_table]:border-slate-300 [&_th]:bg-slate-900 [&_th]:text-white [&_th]:p-1.5 [&_th]:font-bold [&_th]:text-[10px] [&_th]:uppercase [&_td]:border [&_td]:border-slate-200 [&_td]:p-1.5 [&_td]:align-top [&_td]:text-justify [&_td]:[text-justify:inter-word]"
                         dangerouslySetInnerHTML={{
                           __html: formatCleanPolicyStatement(
                             selectedPolicy.policy_statement || selectedPolicy.full_content || '',
                             selectedPolicy.policy_name,
-                            selectedPolicy.company_name || client?.company_name || ''
+                            selectedPolicy.company_name || client?.company_name || '',
+                            pageBreakSections
                           )
                         }}
                       />
@@ -2902,28 +2997,6 @@ export default function PolicyFrameworksSetup({
                         <div className="mt-2 text-[9px] text-emerald-700 font-mono italic">
                           ✓ Digital Sign: Approved
                         </div>
-                      </div>
-                    </div>
-
-                    {/* OFFICIAL REGULATORY STAMP & FOOTER METADATA */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 mt-4 pt-3 border-t border-slate-200 text-[10px] text-slate-500">
-                      <div className="flex items-center gap-2">
-                        {generateFacilitySealPng(selectedPolicy.company_name || client?.company_name || 'Healthcare Facility', selectedPolicy.policy_no) && (
-                          <img
-                            src={generateFacilitySealPng(selectedPolicy.company_name || client?.company_name || 'Healthcare Facility', selectedPolicy.policy_no)}
-                            alt="Facility Legal Seal"
-                            className="w-16 h-16 object-contain shrink-0 opacity-90"
-                          />
-                        )}
-                        <div>
-                          <strong className="text-slate-800 font-bold block text-[10px]">OFFICIAL REGULATORY & COMPLIANCE SEAL</strong>
-                          <span className="text-[9px] text-slate-600 block">Sealed & Verified by Healthcare Facility Management</span>
-                          <span className="font-mono text-[8.5px] text-emerald-800 font-bold block">Hash: {selectedPolicy.policy_no}-VERIFIED-A4</span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-mono text-[10px] font-bold text-slate-700 block">Standard A4 Document Format (210mm)</span>
-                        <span className="text-[9px] text-slate-500 block">Document Control Code: {selectedPolicy.policy_no}</span>
                       </div>
                     </div>
                   </div>
