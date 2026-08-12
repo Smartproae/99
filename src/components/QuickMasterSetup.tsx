@@ -49,7 +49,6 @@ import {
 } from 'lucide-react';
 import { Client } from '../types';
 import MetadataMappingModal, { MasterMetadataSource } from './MetadataMappingModal';
-import { DocRefLoopSelector } from './DocRefLoopSelector';
 import { exportToSinglePagePDF } from '../utils/pdfExport';
 import BTATierSelector from './BTATierSelector';
 import { saveCustomGroupAssignment, FrameworkGroupTier } from '../utils/frameworkGroupUtils';
@@ -213,10 +212,12 @@ export default function QuickMasterSetup({
     { area: 'Information Systems Continuity Management', objective: 'Ensure continuity planning for IT services', applicability: 'Not applicable' }
   ]);
 
-  // Load saved SoA controls if available
+  const clientKey = client?.id || 'c1';
+
+  // Load saved SoA controls if available per client
   useEffect(() => {
     try {
-      const savedSoa = localStorage.getItem('sh_quick_master_setup_soa');
+      const savedSoa = localStorage.getItem(`sh_quick_master_setup_soa_${clientKey}`) || (clientKey === 'c1' ? localStorage.getItem('sh_quick_master_setup_soa') : null);
       if (savedSoa) {
         const parsed = JSON.parse(savedSoa);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -226,12 +227,12 @@ export default function QuickMasterSetup({
     } catch (e) {
       console.warn('Could not read sh_quick_master_setup_soa:', e);
     }
-  }, []);
+  }, [clientKey]);
 
   // Whenever soaControls changes, sync to localStorage & update policies in sh_policies
   useEffect(() => {
     try {
-      localStorage.setItem('sh_quick_master_setup_soa', JSON.stringify(soaControls));
+      localStorage.setItem(`sh_quick_master_setup_soa_${clientKey}`, JSON.stringify(soaControls));
 
       // Auto-update Statement of Applicability policy statement in sh_policies
       const savedPoliciesRaw = localStorage.getItem('sh_policies');
@@ -242,10 +243,11 @@ export default function QuickMasterSetup({
 
         let updated = false;
         const newPolicies = savedPolicies.map(p => {
-          if (p.policy_no === 'M-Policy-002' || p.policy_no === 'POL-SEC-032' || (p.policy_name && p.policy_name.toLowerCase().includes('statement of applicability'))) {
+          if ((p.client_id === clientKey || !p.client_id) && (p.policy_no === 'M-Policy-002' || p.policy_no === 'POL-SEC-032' || (p.policy_name && p.policy_name.toLowerCase().includes('statement of applicability')))) {
             updated = true;
             return {
               ...p,
+              client_id: clientKey,
               policy_no: 'M-Policy-002',
               policy_name: 'Statement of Applicability',
               policy_statement: soaTableMarkdown,
@@ -689,10 +691,11 @@ export default function QuickMasterSetup({
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Load saved setup & custom doc options from localStorage
+  // Load saved setup & custom doc options from localStorage per client
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('sh_quick_master_setup');
+      const savedKey = `sh_quick_master_setup_${clientKey}`;
+      const saved = localStorage.getItem(savedKey) || (clientKey === 'c1' ? localStorage.getItem('sh_quick_master_setup') : null);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.facilityInfo) setFacilityInfo(parsed.facilityInfo);
@@ -702,15 +705,24 @@ export default function QuickMasterSetup({
         if (Array.isArray(parsed.securityZones)) setSecurityZones(parsed.securityZones);
         if (Array.isArray(parsed.networkIps)) setNetworkIps(parsed.networkIps);
         if (parsed.subnetConfig) setSubnetConfig(parsed.subnetConfig);
+      } else if (client) {
+        // Reset facility info for newly active client if no saved setup exists
+        setFacilityInfo(prev => ({
+          ...prev,
+          client_id: client.id,
+          facility_name: client.company_name || prev.facility_name,
+          company_name: client.company_name || prev.company_name,
+          health_authority_license_no: (client as any).health_authority_license_no || prev.health_authority_license_no
+        }));
       }
-      const savedCustomDocs = localStorage.getItem('sh_custom_doc_names');
+      const savedCustomDocs = localStorage.getItem(`sh_custom_doc_names_${clientKey}`) || (clientKey === 'c1' ? localStorage.getItem('sh_custom_doc_names') : null);
       if (savedCustomDocs) {
         setCustomDocNames(JSON.parse(savedCustomDocs));
       }
     } catch (e) {
       console.warn('Failed to parse sh_quick_master_setup', e);
     }
-  }, []);
+  }, [clientKey, client]);
 
   // Save changes helper
   const saveAllToLocalStorage = (
@@ -731,7 +743,7 @@ export default function QuickMasterSetup({
         networkIps: newIps,
         updated_at: new Date().toISOString()
       };
-      localStorage.setItem('sh_quick_master_setup', JSON.stringify(payload));
+      localStorage.setItem(`sh_quick_master_setup_${clientKey}`, JSON.stringify(payload));
     } catch (e) {
       console.warn('Failed to save to localStorage', e);
     }
@@ -870,9 +882,10 @@ export default function QuickMasterSetup({
     }
 
     let updatedDocs: DocumentReferenceItem[];
+    const targetModule = (docForm.module_name || 'Policy').trim();
+
     if (editingDocId) {
       updatedDocs = documents.map(d => d.id === editingDocId ? { id: editingDocId, ...docForm } : d);
-      setToastMsg(`✓ Updated document reference [${docForm.ref_code}]`);
       if (logAuditTrail) logAuditTrail('QUICK_MASTER_SETUP', 'UPDATE_DOC_REF', { id: editingDocId, ...docForm });
     } else {
       const newDoc: DocumentReferenceItem = {
@@ -880,8 +893,91 @@ export default function QuickMasterSetup({
         ...docForm
       };
       updatedDocs = [newDoc, ...documents];
-      setToastMsg(`✓ Created new document reference record [${docForm.ref_code}]`);
       if (logAuditTrail) logAuditTrail('QUICK_MASTER_SETUP', 'ADD_DOC_REF', newDoc);
+    }
+
+    // Ask user if they want to update Effective Date and Next Due Date for all documents in the same Module Name group
+    if (docForm.effective_date || docForm.next_due_date) {
+      const confirmGroup = window.confirm(
+        `Do you want to update the Effective Date (${docForm.effective_date}) and Next Due Date (${docForm.next_due_date}) for all documents in the "${targetModule}" Module group?`
+      );
+
+      if (confirmGroup) {
+        updatedDocs = updatedDocs.map(d => {
+          if ((d.module_name || '').trim().toLowerCase() === targetModule.toLowerCase()) {
+            return {
+              ...d,
+              effective_date: docForm.effective_date,
+              next_due_date: docForm.next_due_date
+            };
+          }
+          return d;
+        });
+
+        // Sync to sh_policies if targetModule is Policy or SOP
+        try {
+          if (targetModule.toLowerCase().includes('policy') || targetModule.toLowerCase().includes('sop')) {
+            const savedPoliciesRaw = localStorage.getItem('sh_policies');
+            if (savedPoliciesRaw) {
+              const savedPolicies: any[] = JSON.parse(savedPoliciesRaw);
+              const updatedPolicies = savedPolicies.map(p => ({
+                ...p,
+                effective_date: docForm.effective_date,
+                review_date: docForm.next_due_date,
+                next_due_date: docForm.next_due_date
+              }));
+              localStorage.setItem('sh_policies', JSON.stringify(updatedPolicies));
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to sync sh_policies', e);
+        }
+
+        // Sync to sh_forms if targetModule is Forms
+        try {
+          if (targetModule.toLowerCase().includes('form')) {
+            const savedFormsRaw = localStorage.getItem('sh_forms');
+            if (savedFormsRaw) {
+              const savedForms: any[] = JSON.parse(savedFormsRaw);
+              const updatedForms = savedForms.map(f => ({
+                ...f,
+                effective_date: docForm.effective_date,
+                next_due_date: docForm.next_due_date
+              }));
+              localStorage.setItem('sh_forms', JSON.stringify(updatedForms));
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to sync sh_forms', e);
+        }
+
+        // Sync to sh_documents for Register / Document / General Master Docs
+        try {
+          const savedDocsRaw = localStorage.getItem('sh_documents');
+          if (savedDocsRaw) {
+            const savedDocs: any[] = JSON.parse(savedDocsRaw);
+            const updatedMasterDocs = savedDocs.map(doc => {
+              if ((doc.doc_type_category || doc.module_name || '').toLowerCase().includes(targetModule.toLowerCase())) {
+                return {
+                  ...doc,
+                  effective_date: docForm.effective_date,
+                  next_due_date: docForm.next_due_date
+                };
+              }
+              return doc;
+            });
+            localStorage.setItem('sh_documents', JSON.stringify(updatedMasterDocs));
+          }
+        } catch (e) {
+          console.warn('Failed to sync sh_documents', e);
+        }
+
+        setToastMsg(`✓ Updated record [${docForm.ref_code}] and all documents in "${targetModule}" group.`);
+      } else {
+        setToastMsg(editingDocId ? `✓ Updated document reference [${docForm.ref_code}]` : `✓ Created new document reference record [${docForm.ref_code}]`);
+      }
+    } else {
+      setToastMsg(editingDocId ? `✓ Updated document reference [${docForm.ref_code}]` : `✓ Created new document reference record [${docForm.ref_code}]`);
     }
 
     setDocuments(updatedDocs);
@@ -1875,29 +1971,6 @@ export default function QuickMasterSetup({
           </div>
         </div>
 
-        {/* Quick Master Setup Loop Selector Connection */}
-        <DocRefLoopSelector
-          currentRefCode={docForm.ref_code || 'REF-HR-RST-B035'}
-          onApplyLoop={(data) => {
-            handleDocCodeOrNameChange(data.ref_code, data.doc_name);
-            setDocForm(prev => ({
-              ...prev,
-              ref_code: data.ref_code,
-              doc_name: data.doc_name,
-              module_name: data.module_name || prev.module_name,
-              classification: data.classification,
-              issue_date: data.issue_date,
-              approval_date: data.approval_date,
-              effective_date: data.issue_date,
-              next_due_date: data.review_date,
-              prepared_by: data.prepared_by,
-              reviewed_by: data.reviewed_by,
-              approved_by: data.approved_by,
-              version_control: data.version || 'v1.0'
-            }));
-          }}
-        />
-
         {/* Add / Edit Form Row */}
         <form onSubmit={handleAddOrUpdateDoc} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 pb-2 gap-2">
@@ -2111,7 +2184,17 @@ export default function QuickMasterSetup({
         </form>
 
         {/* Document Records Table */}
-        <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+        <div id="doc-index-report-printable" className="overflow-x-auto border border-slate-200 rounded-2xl bg-white p-4">
+          <div className="mb-4 pb-3 border-b border-slate-200 flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-black text-slate-900">{client?.company_name || 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L'}</h3>
+              <p className="text-xs font-bold text-sky-700">Master Governance Document Index & Reference Register</p>
+            </div>
+            <div className="text-right text-[10px] text-slate-500 font-mono">
+              <p>Generated: {new Date().toLocaleDateString()}</p>
+              <p>Total Documents: {documents.length}</p>
+            </div>
+          </div>
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-600 tracking-wider">

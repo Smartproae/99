@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { Client, User, DocumentStorageProvider } from '../types';
-import { Plus, Edit2, Search, Building2, CheckCircle2, XCircle, MapPin, Globe, Phone, Mail, Trash2, Upload, Shield, Award, Send, Key, RefreshCw, Zap, Activity, ShieldCheck, Database } from 'lucide-react';
+import { Plus, Edit2, Search, Building2, CheckCircle2, XCircle, MapPin, Globe, Phone, Mail, Trash2, Upload, Shield, Award, Send, Key, RefreshCw, Zap, Activity, ShieldCheck, Database, Copy } from 'lucide-react';
 import { syncClientProfileAuthRep } from '../utils/clientSyncUtils';
 import FrameworkGroupModal from './FrameworkGroupModal';
 import { FrameworkGroupTier } from '../utils/frameworkGroupUtils';
@@ -32,6 +32,8 @@ interface ClientManagementProps {
   activeClientId: string;
   onSelectClient: (id: string) => void;
   onAddEmailLog?: (recipient: string, subject: string, type: string, status?: 'SENT' | 'FAILED') => void;
+  currentUser?: User;
+  onOpenCopyModal?: () => void;
 }
 
 export default function ClientManagement({
@@ -42,7 +44,9 @@ export default function ClientManagement({
   onDeleteClient,
   activeClientId,
   onSelectClient,
-  onAddEmailLog
+  onAddEmailLog,
+  currentUser,
+  onOpenCopyModal
 }: ClientManagementProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -668,14 +672,27 @@ export default function ClientManagement({
           <p className="text-xs text-slate-500 mt-1">Manage multiple healthcare and corporate clients and select active database contexts.</p>
         </div>
         {!isAdding && !editingClient && (
-          <button
-            id="btn-add-client"
-            onClick={() => setIsAdding(true)}
-            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer animate-fade-in"
-          >
-            <Plus className="w-4 h-4" />
-            Add Facility
-          </button>
+          <div className="flex items-center gap-3">
+            {currentUser?.role === 'SUPER_ADMIN' && onOpenCopyModal && (
+              <button
+                type="button"
+                onClick={onOpenCopyModal}
+                title="Superadmin Privilege: Copy/Clone Data between Client Accounts"
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer shadow-sm"
+              >
+                <Copy className="w-4 h-4" />
+                Copy Client Data
+              </button>
+            )}
+            <button
+              id="btn-add-client"
+              onClick={() => setIsAdding(true)}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer animate-fade-in"
+            >
+              <Plus className="w-4 h-4" />
+              Add Facility
+            </button>
+          </div>
         )}
       </div>
 

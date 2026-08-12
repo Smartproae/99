@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { Client, Notification, User, UserRole } from '../types';
-import { Bell, Shield, LogOut, ChevronDown, Check, AlertTriangle, HelpCircle, Calendar, Clock, MessageSquare, Users } from 'lucide-react';
+import { Bell, Shield, LogOut, ChevronDown, Check, AlertTriangle, HelpCircle, Calendar, Clock, MessageSquare, Users, Copy } from 'lucide-react';
 import { formatDateDMY } from '../utils/dateUtils';
 
 interface HeaderProps {
@@ -21,6 +21,7 @@ interface HeaderProps {
   inactivityRemainingSeconds?: number;
   onOpenChat?: () => void;
   usersCount?: number;
+  onOpenCopyModal?: () => void;
 }
 
 export default function Header({
@@ -35,7 +36,8 @@ export default function Header({
   onLogout,
   inactivityRemainingSeconds = 600,
   onOpenChat,
-  usersCount = 5
+  usersCount = 5,
+  onOpenCopyModal
 }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -80,6 +82,17 @@ export default function Header({
           <span className="hidden lg:inline-flex px-2 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded font-mono uppercase">
             {activeClient.compliance_framework.split(' & ')[0]} Framework
           </span>
+        )}
+        {currentUser?.role === 'SUPER_ADMIN' && onOpenCopyModal && (
+          <button
+            type="button"
+            onClick={onOpenCopyModal}
+            title="Superadmin Privilege: Copy / Clone Data between Client Accounts"
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
+          >
+            <Copy className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Copy Client Data</span>
+          </button>
         )}
         <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200/80 rounded-lg text-[11px] font-bold text-slate-700 shadow-2xs" title="Current Device Local Date">
           <Calendar className="w-3.5 h-3.5 text-emerald-600" />

@@ -189,10 +189,10 @@ export const DEFAULT_LEGAL_METADATA: HRDocumentLegalMetadata = {
 };
 
 export const DEFAULT_ENTITY_CREDENTIALS: HRDocumentEntityCredentials = {
-  companyName: 'Zamzam Pharmacy LLC',
-  tradeLicenseNo: 'CN-1029481',
+  companyName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+  tradeLicenseNo: 'CN-1005168',
   emirateJurisdiction: 'Abu Dhabi',
-  registeredAddress: 'ADGM Square, Al Maryah Island, Abu Dhabi, UAE'
+  registeredAddress: 'Abu Dhabi, UAE'
 };
 
 export const DEFAULT_EMPLOYEE_DETAILS: HRDocumentEmployeeDetails = {
@@ -205,18 +205,18 @@ export const DEFAULT_EMPLOYEE_DETAILS: HRDocumentEmployeeDetails = {
 };
 
 export const DEFAULT_FACILITY_DETAILS: HRDocumentFacilityDetails = {
-  facilityName: 'Zamzam Pharmacy - ADGM Main Medical Facility',
-  facilityLicenseNo: 'MOHAP-FL-88201',
-  dohMohapRegNo: 'DOH-REG-2026-991A',
-  facilityLocation: 'Al Khatem Tower, ADGM Square, Abu Dhabi, UAE',
-  clinicalWing: 'Clinical & Operational Governance Wing'
+  facilityName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+  facilityLicenseNo: '',
+  dohMohapRegNo: '',
+  facilityLocation: 'Abu Dhabi, UAE',
+  clinicalWing: ''
 };
 
 export const DEFAULT_RISK_COMMITTEE_CONTACTS: HRDocumentRiskCommitteeContacts = {
-  committeeChair: 'Dr. Tariq Al-Mansoori (Risk Review Chair)',
-  complianceOfficer: 'Huda K. Al-Hashemi (Governance Lead)',
+  committeeChair: 'Risk Review Committee Chair',
+  complianceOfficer: 'Governance Lead',
   dutyOfficerPhone: '+971 2 600 8899',
-  escalationEmail: 'risk-committee@zamzampharmacy.ae'
+  escalationEmail: 'compliance@alnahda.ae'
 };
 
 const SEED_HR_DOCUMENTS: HRDocumentRecord[] = [
@@ -241,10 +241,10 @@ const SEED_HR_DOCUMENTS: HRDocumentRecord[] = [
       documentClassification: 'CONFIDENTIAL'
     },
     entityCredentials: {
-      companyName: 'Emirates Corporate Solutions LLC',
-      tradeLicenseNo: 'CN-1029384',
+      companyName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      tradeLicenseNo: 'CN-1005168',
       emirateJurisdiction: 'Abu Dhabi',
-      registeredAddress: 'P.O. Box 45000, Al Khatem Tower, ADGM Square, Abu Dhabi, UAE'
+      registeredAddress: 'Abu Dhabi, UAE'
     },
     employeeDetails: {
       fullLegalName: 'Zayed Al-Maktoum',
@@ -255,17 +255,17 @@ const SEED_HR_DOCUMENTS: HRDocumentRecord[] = [
       department: 'Legal & Regulatory Compliance'
     },
     facilityDetails: {
-      facilityName: 'Zamzam Pharmacy - ADGM Main Medical Facility',
-      facilityLicenseNo: 'MOHAP-FL-88201',
-      dohMohapRegNo: 'DOH-REG-2026-991A',
-      facilityLocation: 'P.O. Box 45000, Al Khatem Tower, ADGM Square, Abu Dhabi, UAE',
-      clinicalWing: 'Pharmacy & Clinical Quality Wing'
+      facilityName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      facilityLicenseNo: '',
+      dohMohapRegNo: '',
+      facilityLocation: 'Abu Dhabi, UAE',
+      clinicalWing: ''
     },
     riskCommitteeContacts: {
-      committeeChair: 'Dr. Tariq Al-Mansoori (Risk Review Committee Chair)',
-      complianceOfficer: 'Huda K. Al-Hashemi (Senior Governance Lead)',
+      committeeChair: 'Risk Review Committee Chair',
+      complianceOfficer: 'Senior Governance Lead',
       dutyOfficerPhone: '+971 2 600 8899',
-      escalationEmail: 'risk-committee@zamzampharmacy.ae'
+      escalationEmail: 'compliance@alnahda.ae'
     },
     htmlContent: `<p>This Employee Confidentiality Agreement is executed by and between <strong>(Company Name)</strong> (the "Employer") and the Employee. The Employee acknowledges that during the course of employment at <strong>(Company Name)</strong>, they will have access to protected patient health information (PHI), MALAFFI EMR databases, proprietary clinical protocols, and internal network infrastructure.</p><p>The Employee agrees to maintain strict confidentiality and shall not disclose or transmit any proprietary information of <strong>(Company Name)</strong> to unauthorized third parties without prior written consent, in strict compliance with UAE Federal Decree-Law No. 45 on Personal Data Protection and DOH ADHICS security frameworks.</p>`,
     employeeSignature: {
@@ -316,10 +316,10 @@ const SEED_HR_DOCUMENTS: HRDocumentRecord[] = [
       documentClassification: 'RESTRICTED'
     },
     entityCredentials: {
-      companyName: 'Emirates Corporate Solutions LLC',
-      tradeLicenseNo: 'CN-1029384',
+      companyName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      tradeLicenseNo: 'CN-1005168',
       emirateJurisdiction: 'Abu Dhabi',
-      registeredAddress: 'P.O. Box 45000, Al Khatem Tower, ADGM Square, Abu Dhabi, UAE'
+      registeredAddress: 'Abu Dhabi, UAE'
     },
     employeeDetails: {
       fullLegalName: 'Zayed Al-Maktoum',
@@ -330,17 +330,17 @@ const SEED_HR_DOCUMENTS: HRDocumentRecord[] = [
       department: 'Legal & Regulatory Compliance'
     },
     facilityDetails: {
-      facilityName: 'Zamzam Pharmacy - ADGM Main Medical Facility',
-      facilityLicenseNo: 'MOHAP-FL-88201',
-      dohMohapRegNo: 'DOH-REG-2026-991A',
-      facilityLocation: 'P.O. Box 45000, Al Khatem Tower, ADGM Square, Abu Dhabi, UAE',
-      clinicalWing: 'Pharmacy & Clinical Quality Wing'
+      facilityName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      facilityLicenseNo: '',
+      dohMohapRegNo: '',
+      facilityLocation: 'Abu Dhabi, UAE',
+      clinicalWing: ''
     },
     riskCommitteeContacts: {
-      committeeChair: 'Dr. Tariq Al-Mansoori (Risk Review Committee Chair)',
-      complianceOfficer: 'Huda K. Al-Hashemi (Senior Governance Lead)',
+      committeeChair: 'Risk Review Committee Chair',
+      complianceOfficer: 'Senior Governance Lead',
       dutyOfficerPhone: '+971 2 600 8899',
-      escalationEmail: 'risk-committee@zamzampharmacy.ae'
+      escalationEmail: 'compliance@alnahda.ae'
     },
     htmlContent: `<p>The Employee hereby acknowledges receipt of all corporate policies, data security guidelines, and confidential information protection frameworks established under UAE Federal Law.</p><p>By executing this instrument via UAE PASS, the employee attests full compliance with ADHCS cybersecurity benchmarks and corporate code of conduct.</p>`,
     employeeSignature: {
@@ -439,11 +439,13 @@ const SEED_HR_DOCUMENTS: HRDocumentRecord[] = [
 ];
 
 export default function HrDocumentsHub({ client, currentUser, employees, onAddEmailLog }: HrDocumentsHubProps) {
+  const currentClientKey = client?.id || 'c1';
+
   // Roster of registered employees from Employee & Operator Management
   const effectiveEmployees = React.useMemo(() => {
     if (employees && employees.length > 0) return employees;
     try {
-      const saved = localStorage.getItem('sh_employees');
+      const saved = localStorage.getItem(`sh_employees_${currentClientKey}`) || (currentClientKey === 'c1' ? localStorage.getItem('sh_employees') : null);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -452,15 +454,18 @@ export default function HrDocumentsHub({ client, currentUser, employees, onAddEm
       console.warn('Failed to load employee roster for HR Vault', e);
     }
     return INITIAL_EMPLOYEES;
-  }, [employees]);
+  }, [employees, currentClientKey]);
 
-  const [documents, setDocuments] = useState<HRDocumentRecord[]>(() => {
+  const [documents, setDocuments] = useState<HRDocumentRecord[]>([]);
+
+  useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const savedKey = `${STORAGE_KEY}_${currentClientKey}`;
+      const saved = localStorage.getItem(savedKey) || (currentClientKey === 'c1' ? localStorage.getItem(STORAGE_KEY) : null);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((doc: any) => {
+          const mapped = parsed.map((doc: any) => {
             const empDetails = {
               ...DEFAULT_EMPLOYEE_DETAILS,
               ...(doc.employeeDetails || {})
@@ -471,6 +476,7 @@ export default function HrDocumentsHub({ client, currentUser, employees, onAddEm
             };
             return {
               ...doc,
+              client_id: currentClientKey,
               legalMetadata: legMetadata,
               entityCredentials: {
                 ...DEFAULT_ENTITY_CREDENTIALS,
@@ -497,13 +503,29 @@ export default function HrDocumentsHub({ client, currentUser, employees, onAddEm
               }
             };
           });
+          setDocuments(mapped);
+          return;
         }
       }
     } catch (e) {
       console.warn('Failed to parse HR Documents Vault state', e);
     }
-    return SEED_HR_DOCUMENTS;
-  });
+    // Default seed documents scoped to active client
+    if (currentClientKey === 'c1') {
+      setDocuments(SEED_HR_DOCUMENTS.map(d => ({ ...d, client_id: 'c1' })));
+    } else {
+      setDocuments([]);
+    }
+  }, [currentClientKey]);
+
+  useEffect(() => {
+    if (!currentClientKey || documents.length === 0) return;
+    try {
+      localStorage.setItem(`${STORAGE_KEY}_${currentClientKey}`, JSON.stringify(documents));
+    } catch (e) {
+      console.warn('Failed to save HR Documents to localStorage', e);
+    }
+  }, [documents, currentClientKey]);
 
   const [activeTab, setActiveTab] = useState<'vault' | 'import' | 'export' | 'create'>('vault');
   const [searchQuery, setSearchQuery] = useState('');
@@ -650,15 +672,15 @@ export default function HrDocumentsHub({ client, currentUser, employees, onAddEm
   const [newEmiratesId, setNewEmiratesId] = useState('');
   const [newJobTitle, setNewJobTitle] = useState('');
   const [newDept, setNewDept] = useState('');
-  const [newFacilityName, setNewFacilityName] = useState('Zamzam Pharmacy - ADGM Main Medical Facility');
-  const [newFacilityLicenseNo, setNewFacilityLicenseNo] = useState('MOHAP-FL-88201');
-  const [newDohMohapRegNo, setNewDohMohapRegNo] = useState('DOH-REG-2026-991A');
-  const [newFacilityLocation, setNewFacilityLocation] = useState('Al Khatem Tower, ADGM Square, Abu Dhabi, UAE');
-  const [newClinicalWing, setNewClinicalWing] = useState('Clinical & Operational Governance Wing');
-  const [newCommitteeChair, setNewCommitteeChair] = useState('Dr. Tariq Al-Mansoori (Risk Review Chair)');
-  const [newComplianceOfficer, setNewComplianceOfficer] = useState('Huda K. Al-Hashemi (Governance Lead)');
+  const [newFacilityName, setNewFacilityName] = useState('AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L');
+  const [newFacilityLicenseNo, setNewFacilityLicenseNo] = useState('');
+  const [newDohMohapRegNo, setNewDohMohapRegNo] = useState('');
+  const [newFacilityLocation, setNewFacilityLocation] = useState('Abu Dhabi, UAE');
+  const [newClinicalWing, setNewClinicalWing] = useState('');
+  const [newCommitteeChair, setNewCommitteeChair] = useState('Risk Review Chair');
+  const [newComplianceOfficer, setNewComplianceOfficer] = useState('Governance Lead');
   const [newDutyOfficerPhone, setNewDutyOfficerPhone] = useState('+971 2 600 8899');
-  const [newEscalationEmail, setNewEscalationEmail] = useState('risk-committee@zamzampharmacy.ae');
+  const [newEscalationEmail, setNewEscalationEmail] = useState('compliance@alnahda.ae');
   const [newHtmlContent, setNewHtmlContent] = useState('');
 
   // Loop & Revision Metadata for New Form
@@ -673,17 +695,34 @@ export default function HrDocumentsHub({ client, currentUser, employees, onAddEm
   const [newDocClassification, setNewDocClassification] = useState('OFFICIAL / RESTRICTED');
   const [newModuleName, setNewModuleName] = useState('General HR Governance');
 
-  // Filtered employees for Create Form based on selected facility / active tenant ("Facility Management" employees only)
+  // Filtered employees for Create Form based on current client and selected facility
   const filteredEmployeesForCreate = React.useMemo(() => {
-    const selectedFac = newFacilityName || client?.company_name;
-    if (!selectedFac || selectedFac === 'ALL') return effectiveEmployees;
-    const target = selectedFac.trim().toLowerCase();
-    const matches = effectiveEmployees.filter(emp => {
+    let baseList = effectiveEmployees;
+    if (client?.id) {
+      const byClientId = effectiveEmployees.filter(emp => emp.client_id === client.id);
+      if (byClientId.length > 0) {
+        baseList = byClientId;
+      } else if (client.company_name) {
+        const cName = client.company_name.trim().toLowerCase();
+        const byName = effectiveEmployees.filter(emp => {
+          const b = (emp.branch_name || emp.facility_name || '').trim().toLowerCase();
+          return b === cName || cName.includes(b) || b.includes(cName);
+        });
+        if (byName.length > 0) baseList = byName;
+      }
+    }
+
+    if (!newFacilityName || newFacilityName === 'ALL' || newFacilityName === client?.company_name) {
+      return baseList;
+    }
+
+    const target = newFacilityName.trim().toLowerCase();
+    const matches = baseList.filter(emp => {
       const b = (emp.branch_name || emp.facility_name || '').trim().toLowerCase();
       if (!b) return true;
       return b === target || target.includes(b) || b.includes(target);
     });
-    return matches;
+    return matches.length > 0 ? matches : baseList;
   }, [effectiveEmployees, newFacilityName, client]);
 
   // Document Form Formatting & Interactive Toolbar State
@@ -737,17 +776,34 @@ export default function HrDocumentsHub({ client, currentUser, employees, onAddEm
   const [editDocClassification, setEditDocClassification] = useState('CONFIDENTIAL');
   const [editModuleName, setEditModuleName] = useState('');
 
-  // Filtered employees for Edit Form based on selected facility / active tenant ("Facility Management" employees only)
+  // Filtered employees for Edit Form based on current client and selected facility
   const filteredEmployeesForEdit = React.useMemo(() => {
-    const selectedFac = editFacilityName || client?.company_name;
-    if (!selectedFac || selectedFac === 'ALL') return effectiveEmployees;
-    const target = selectedFac.trim().toLowerCase();
-    const matches = effectiveEmployees.filter(emp => {
+    let baseList = effectiveEmployees;
+    if (client?.id) {
+      const byClientId = effectiveEmployees.filter(emp => emp.client_id === client.id);
+      if (byClientId.length > 0) {
+        baseList = byClientId;
+      } else if (client.company_name) {
+        const cName = client.company_name.trim().toLowerCase();
+        const byName = effectiveEmployees.filter(emp => {
+          const b = (emp.branch_name || emp.facility_name || '').trim().toLowerCase();
+          return b === cName || cName.includes(b) || b.includes(cName);
+        });
+        if (byName.length > 0) baseList = byName;
+      }
+    }
+
+    if (!editFacilityName || editFacilityName === 'ALL' || editFacilityName === client?.company_name) {
+      return baseList;
+    }
+
+    const target = editFacilityName.trim().toLowerCase();
+    const matches = baseList.filter(emp => {
       const b = (emp.branch_name || emp.facility_name || '').trim().toLowerCase();
       if (!b) return true;
       return b === target || target.includes(b) || b.includes(target);
     });
-    return matches;
+    return matches.length > 0 ? matches : baseList;
   }, [effectiveEmployees, editFacilityName, client]);
 
   // Apply Document Reference Details from Loop Selector
@@ -1184,8 +1240,8 @@ HR & Governance Division`);
     }
   }, [documents]);
 
-  const companyName = client?.company_name || 'Emirates Corporate Solutions LLC';
-  const tradeLicense = client?.trade_license_no || 'CN-1029384';
+  const companyName = client?.company_name || 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L';
+  const tradeLicense = client?.trade_license_no || 'CN-1005168';
 
   // Helper to Download Files
   const downloadFile = (content: string, filename: string, mimeType: string) => {
@@ -3121,26 +3177,33 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                           const facLic = selectedDoc.facilityDetails?.facilityLicenseNo;
                           const regNo = selectedDoc.facilityDetails?.dohMohapRegNo;
                           const wing = selectedDoc.facilityDetails?.clinicalWing;
+                          const comp = selectedDoc.entityCredentials?.companyName || companyName;
+                          const facName = selectedDoc.facilityDetails?.facilityName;
+                          const isSameCompAndFac = !facName || facName === comp || facName.toLowerCase().includes('facility');
 
                           return (
                             <div className="text-right space-y-0.5">
                               <h1 className="font-black text-slate-900 text-sm tracking-tight uppercase leading-snug">
-                                {selectedDoc.facilityDetails?.facilityName || companyName || DEFAULT_FACILITY_DETAILS.facilityName}
+                                {comp}
                               </h1>
-                              {!isSmartProDoc && (facLic || DEFAULT_FACILITY_DETAILS.facilityLicenseNo) ? (
+                              {!isSmartProDoc && (facLic || regNo) ? (
                                 <p className="text-[9.5px] text-emerald-900 font-extrabold">
-                                  Facility Lic: <span className="font-mono text-slate-800">{facLic || DEFAULT_FACILITY_DETAILS.facilityLicenseNo}</span> &bull; DOH/MOHAP Reg: <span className="font-mono text-slate-800">{regNo || DEFAULT_FACILITY_DETAILS.dohMohapRegNo}</span>
+                                  {facLic ? <>Facility Lic: <span className="font-mono text-slate-800">{facLic}</span></> : null}
+                                  {facLic && regNo ? ' • ' : ''}
+                                  {regNo ? <>DOH/MOHAP Reg: <span className="font-mono text-slate-800">{regNo}</span></> : null}
                                 </p>
                               ) : null}
                               {!isSmartProDoc && (
                                 <p className="text-[9px] text-slate-600 font-semibold">
-                                  Entity: <span className="font-bold text-slate-800">{selectedDoc.entityCredentials?.companyName || companyName}</span> (Trade Lic: <span className="font-mono">{selectedDoc.entityCredentials?.tradeLicenseNo || tradeLicense}</span>) &bull; Abu Dhabi, UAE
+                                  {isSameCompAndFac ? null : <>Entity: <span className="font-bold text-slate-800">{comp}</span> </>}
+                                  (Trade Lic: <span className="font-mono">{selectedDoc.entityCredentials?.tradeLicenseNo || tradeLicense}</span>) &bull; Abu Dhabi, UAE
                                 </p>
                               )}
-                              <p className="text-[8.5px] text-slate-500 font-medium italic">
-                                {selectedDoc.facilityDetails?.facilityLocation || DEFAULT_FACILITY_DETAILS.facilityLocation}
-                                {!isSmartProDoc && (wing || DEFAULT_FACILITY_DETAILS.clinicalWing) ? ` \u2022 ${wing || DEFAULT_FACILITY_DETAILS.clinicalWing}` : ''}
-                              </p>
+                              {wing ? (
+                                <p className="text-[8.5px] text-slate-500 font-medium italic">
+                                  {wing}
+                                </p>
+                              ) : null}
                             </div>
                           );
                         })()}

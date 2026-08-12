@@ -186,7 +186,8 @@ export interface Policy {
   policy_name: string;
   version: string;
   review_date: string;
-  status: 'DRAFT' | 'UNDER_REVIEW' | 'APPROVED' | 'EXPIRED';
+  status: 'DRAFT' | 'UNDER_REVIEW' | 'APPROVED' | 'EXPIRED' | 'FROZEN' | string;
+  is_frozen?: boolean;
   document_path?: string;
   category: string;
   created_at: string;
@@ -310,6 +311,12 @@ export interface Asset {
   c_val?: number;
   i_val?: number;
   a_val?: number;
+
+  // Verification fields
+  is_verified?: boolean;
+  verified_at?: string;
+  verified_by?: string;
+  verification_notes?: string;
 }
 
 export interface Incident {

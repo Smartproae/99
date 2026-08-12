@@ -159,9 +159,13 @@ export function getUnifiedDocuments(
   for (const p of clientPolicies) {
     const key = p.policy_no || p.id;
     if (seenKeys.has(key)) continue;
+    if (customAssignments[key] === ('EXCLUDED' as any) || customAssignments[p.id] === ('EXCLUDED' as any)) {
+      continue;
+    }
     seenKeys.add(key);
 
-    const group = customAssignments[key] || p.framework_group as FrameworkGroupTier || determineDefaultFrameworkGroup(p.policy_no, p.policy_name, p.document_type);
+    const group = customAssignments[key] || customAssignments[p.id] || p.framework_group as FrameworkGroupTier || determineDefaultFrameworkGroup(p.policy_no, p.policy_name, p.document_type);
+    if ((group as string) === 'EXCLUDED') continue;
 
     let status: UnifiedGroupDocument['status'] = 'APPROVED';
     if (p.status === 'EXPIRED') status = 'EXPIRED';
@@ -190,7 +194,7 @@ export function getUnifiedDocuments(
       nextReviewDate: reviewDate,
       owner: p.owner || p.author || 'Compliance Officer',
       department: p.department || 'Quality & Risk',
-      isCustomAssigned: !!customAssignments[key]
+      isCustomAssigned: !!customAssignments[key] || !!customAssignments[p.id]
     });
   }
 
@@ -199,9 +203,13 @@ export function getUnifiedDocuments(
   for (const m of clientMasterDocs) {
     const key = m.document_number || m.id;
     if (seenKeys.has(key)) continue;
+    if (customAssignments[key] === ('EXCLUDED' as any) || customAssignments[m.id] === ('EXCLUDED' as any)) {
+      continue;
+    }
     seenKeys.add(key);
 
-    const group = customAssignments[key] || m.framework_group as FrameworkGroupTier || determineDefaultFrameworkGroup(m.document_number, m.document_name, m.category);
+    const group = customAssignments[key] || customAssignments[m.id] || m.framework_group as FrameworkGroupTier || determineDefaultFrameworkGroup(m.document_number, m.document_name, m.category);
+    if ((group as string) === 'EXCLUDED') continue;
 
     let status: UnifiedGroupDocument['status'] = 'APPROVED';
     const mStatus = (m.status as string) || '';
@@ -230,7 +238,7 @@ export function getUnifiedDocuments(
       nextReviewDate: reviewDate,
       owner: m.owner || m.prepared_by,
       department: m.department || 'Quality',
-      isCustomAssigned: !!customAssignments[key]
+      isCustomAssigned: !!customAssignments[key] || !!customAssignments[m.id]
     });
   }
 
@@ -239,9 +247,13 @@ export function getUnifiedDocuments(
   for (const d of clientDocItems) {
     const key = d.code || d.document_code || d.id;
     if (seenKeys.has(key)) continue;
+    if (customAssignments[key] === ('EXCLUDED' as any) || customAssignments[d.id] === ('EXCLUDED' as any)) {
+      continue;
+    }
     seenKeys.add(key);
 
-    const group = customAssignments[key] || d.framework_group as FrameworkGroupTier || determineDefaultFrameworkGroup(key, d.title || d.document_name, d.doc_type_category);
+    const group = customAssignments[key] || customAssignments[d.id] || d.framework_group as FrameworkGroupTier || determineDefaultFrameworkGroup(key, d.title || d.document_name, d.doc_type_category);
+    if ((group as string) === 'EXCLUDED') continue;
 
     result.push({
       id: d.id,
@@ -255,27 +267,16 @@ export function getUnifiedDocuments(
       nextReviewDate: d.expiry_date || d.next_due_date,
       owner: d.owner || d.uploaded_by_name || 'Compliance Team',
       department: d.department || 'Quality',
-      isCustomAssigned: !!customAssignments[key]
+      isCustomAssigned: !!customAssignments[key] || !!customAssignments[d.id]
     });
   }
 
   return result;
 }
 
-// Check tier applicability based on inheritance hierarchy rule:
-// Chosen Basic -> includes Basic, Transmission, Advance
-// Chosen Transmission -> includes Transmission, Advance (excludes Basic)
-// Chosen Advance -> includes Advance (excludes Basic and Transmission)
+// Check tier applicability for specific group tab:
 export function isGroupApplicable(itemGroup: FrameworkGroupTier, chosenGroup: FrameworkGroupTier): boolean {
-  if (chosenGroup === 'Basic') {
-    return itemGroup === 'Basic' || itemGroup === 'Transmission' || itemGroup === 'Advance';
-  }
-  if (chosenGroup === 'Transmission') {
-    return itemGroup === 'Transmission' || itemGroup === 'Advance';
-  }
-  if (chosenGroup === 'Advance') {
-    return itemGroup === 'Advance';
-  }
+  if ((itemGroup as string) === 'EXCLUDED') return false;
   return itemGroup === chosenGroup;
 }
 

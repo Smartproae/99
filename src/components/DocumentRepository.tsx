@@ -143,13 +143,15 @@ export default function DocumentRepository({
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
   const [isExportingZip, setIsExportingZip] = useState(false);
 
-  // Combine parent documents with default initial repository
+  // Combine parent documents with default initial repository scoped strictly to active client
   const docList = useMemo(() => {
     if (documents && documents.length > 0) {
-      return documents;
+      const clientDocs = documents.filter(doc => doc.client_id === activeClientId);
+      if (clientDocs.length > 0) return clientDocs;
     }
-    return INITIAL_REPOSITORY_DOCS;
-  }, [documents]);
+    // Scope initial repository docs to active client
+    return INITIAL_REPOSITORY_DOCS.map(d => ({ ...d, client_id: activeClientId }));
+  }, [documents, activeClientId]);
 
   // Real-time filtering
   const filteredDocs = useMemo(() => {

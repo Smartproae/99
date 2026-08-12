@@ -20,6 +20,7 @@ import {
   Users,
   ShieldAlert,
   Signature,
+  Printer,
   Lock,
   Scale,
   ChevronDown,
@@ -56,7 +57,8 @@ export default function Sidebar({ currentTab, onTabChange, appName = "SMARTHUB",
   // Top level standalone items
   const standaloneTopItems: MenuItem[] = [
     { id: 'dashboard', label: 'Risk Dashboard', icon: LayoutDashboard, color: 'text-emerald-500' },
-    { id: 'clients', label: 'Client Management', icon: Building2, color: 'text-indigo-500' }
+    { id: 'clients', label: 'Client Management', icon: Building2, color: 'text-indigo-500' },
+    { id: 'central-print-hub', label: 'Option Print Box', icon: Printer, color: 'text-blue-500 font-bold' }
   ];
 
   // Grouped parent menu sections requested

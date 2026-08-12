@@ -1162,6 +1162,7 @@ Verify Hash: CMP-${agreement.id.toUpperCase().split('-')[1] || 'SEAL'}`;
   };
 
   const filteredAgreements = agreements.filter(agr => {
+    if (activeClientId && agr.client_id && agr.client_id !== activeClientId) return false;
     const clientName = clients.find(c => c.id === agr.client_id)?.company_name || '';
     return agr.contract_number.toLowerCase().includes(searchText.toLowerCase()) ||
            clientName.toLowerCase().includes(searchText.toLowerCase());

@@ -4,6 +4,7 @@ export const ALL_TABS = [
   'dashboard',
   'clients',
   'agreements',
+  'central-print-hub',
   'employees',
   'secure-area',
   'legal-compliance',
@@ -27,6 +28,7 @@ export const TAB_LABELS: Record<string, string> = {
   dashboard: 'Risk Dashboard',
   clients: 'Client Management',
   agreements: 'Agreements & Contracts',
+  'central-print-hub': 'Option Print Box (Central Print Hub)',
   employees: 'Employee HR Roster',
   'secure-area': 'Designated Secure Areas',
   'legal-compliance': 'Legal & Compliance Register',
@@ -54,6 +56,7 @@ export function getDefaultTabsForRole(role: UserRole): string[] {
       return [
         'dashboard',
         'agreements',
+        'central-print-hub',
         'employees',
         'secure-area',
         'legal-compliance',
@@ -75,6 +78,7 @@ export function getDefaultTabsForRole(role: UserRole): string[] {
       return [
         'dashboard',
         'agreements',
+        'central-print-hub',
         'employees',
         'secure-area',
         'legal-compliance',
@@ -94,6 +98,7 @@ export function getDefaultTabsForRole(role: UserRole): string[] {
       return [
         'dashboard',
         'agreements',
+        'central-print-hub',
         'secure-area',
         'legal-compliance',
         'policy-procedure-view',
@@ -110,6 +115,7 @@ export function getDefaultTabsForRole(role: UserRole): string[] {
       return [
         'dashboard',
         'agreements',
+        'central-print-hub',
         'secure-area',
         'legal-compliance',
         'policy-procedure-view',

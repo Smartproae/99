@@ -452,7 +452,7 @@ Access to all restricted and high-security zones must be actively managed and mo
     defaults.compliance_checks = `The Administration and IT team perform quarterly physical inspections, badge audits, and keyholder verification scans.`;
     defaults.compliance_exceptions = `Exceptions to zone restrictions require written, temporary authorization from both the IT Manager and the Managing Director.`;
 
-  } else if (policyNo === 'POL-SEC-024') {
+  } else if (normNo === 'POL-SEC-024' || normNo === 'M-POLICY-004' || normTitle.includes('risk management')) {
     defaults.objective = `The purpose of this Risk Management Policy is to establish a structured and consistent approach to identifying, analyzing, evaluating, treating, and monitoring risks that may impact business operations, patient safety, regulatory compliance, and the Confidentiality, Integrity, and Availability (CIA) of information assets. This policy supports business continuity, regulatory compliance, and continual improvement, and is aligned with:
 •	ISO 27001:2022 – Information Security Risk Management
 •	ISO 31000 – Risk Management Principles and Framework
@@ -621,6 +621,11 @@ Inherent Risk Score = Asset Value × Impact (I) × Likelihood
 | 76–125 | Critical | Unacceptable under any circumstance; urgent mitigation is required.<br/>- Must be addressed through immediate corrective actions, risk transfer or cessation of vulnerable services.<br/>- Involve executive leadership, legal, and compliance teams.<br/>- Document actions in the Risk Register and perform root cause analysis.<br/>- Example: Breach of patient medical records, system outages affecting emergency or surgery departments, ransomware attacks, or non-compliance with health regulations (e.g., ADHICS, DOH, FANR). |
 
 Risk acceptance must align with the organization’s Risk Appetite and be formally approved and documented.
+
+<div class="my-4 flex flex-col items-center justify-center w-full text-center">
+  <img src="/risk_matrix_chart.jpg" alt="Healthcare Cybersecurity Risk Assessment Framework" class="max-w-full h-auto rounded-lg border border-slate-300 shadow-md object-contain max-h-[420px] mx-auto" />
+  <p class="text-[10px] text-slate-500 font-bold italic mt-1.5 text-center">Figure 1: Healthcare Cybersecurity Risk Assessment Framework &amp; Criteria</p>
+</div>
 
 ### RISK TREATMENT
 Risk treatment options include:
@@ -1222,4 +1227,42 @@ export function parsePolicyFullFallback(text: string): FullParsedPolicy {
     classification
   };
 }
+
+export const MASTER_34_POLICY_TEMPLATES = [
+  { policy_no: "POL-SEC-001", policy_name: "Information Security High Level Policy", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-002", policy_name: "Human Resource Security Policy", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-003", policy_name: "Information Asset Management and Classification Policy", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-004", policy_name: "Communications and Operations Security Policy", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-005", policy_name: "Clear Desk and Clear Screen Policy", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-006", policy_name: "Access Control Policy", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-007", policy_name: "Information Systems Acquisition Development and Maintenance", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-008", policy_name: "Health Information and Security Policy", category: "EHR Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-009", policy_name: "Antivirus Policy", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-010", policy_name: "Acceptable Usage Policy", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-011", policy_name: "Password Security Policy", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-012", policy_name: "Third Party Security Policy", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-013", policy_name: "Physical & Environmental Security Policy", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-014", policy_name: "Data Retention and Disposal Policy", category: "Patient Data Privacy", doc_type: "Policy" },
+  { policy_no: "POL-SEC-015", policy_name: "Information Assets Disposal Policy & Procedure", category: "Asset Management", doc_type: "Procedure" },
+  { policy_no: "POL-SEC-016", policy_name: "Information Systems Continuity Policy", category: "Business Continuity", doc_type: "Policy" },
+  { policy_no: "POL-SEC-017", policy_name: "Security Baseline Policy", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-018", policy_name: "Vulnerability Management Policy Process", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-019", policy_name: "Change Management Plan and Procedure", category: "Clinical Quality Operations", doc_type: "Procedure" },
+  { policy_no: "POL-SEC-020", policy_name: "Patch Management Policy and Procedure", category: "Information Security", doc_type: "Procedure" },
+  { policy_no: "POL-SEC-021", policy_name: "Information Data Backup Restoration Policy", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-022", policy_name: "Removable Media Management Policy and Procedures", category: "Information Security", doc_type: "Procedure" },
+  { policy_no: "POL-SEC-023", policy_name: "Information Exchange Policies and Procedures", category: "Information Security", doc_type: "Procedure" },
+  { policy_no: "POL-SEC-024", policy_name: "Risk Management Policy and Procedures", category: "Information Security", doc_type: "Procedure" },
+  { policy_no: "POL-SEC-025", policy_name: "Information Security Incidents Management Policy", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-026", policy_name: "Information Security Incident Management Procedure", category: "Information Security", doc_type: "Procedure" },
+  { policy_no: "POL-SEC-027", policy_name: "BYOD (Bring Your Own Device) Policy", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-028", policy_name: "Disciplinary Policy and Procedure", category: "Information Security", doc_type: "Procedure" },
+  { policy_no: "POL-SEC-029", policy_name: "Cloud Security Policy", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "POL-SEC-030", policy_name: "Data Privacy Policy", category: "Patient Data Privacy", doc_type: "Policy" },
+  { policy_no: "POL-SEC-031", policy_name: "Procedure for Control of Documentation", category: "Clinical Quality Operations", doc_type: "Procedure" },
+  { policy_no: "M-Policy-002", policy_name: "Statement of Applicability", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "M-Policy-008", policy_name: "Acceptable Usage Policy", category: "Information Security", doc_type: "Policy" },
+  { policy_no: "M-Policy-019", policy_name: "Clear Desk & Clear Screen Policy", category: "Information Security", doc_type: "Policy" }
+];
+
 

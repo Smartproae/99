@@ -286,13 +286,21 @@ export async function exportToSinglePagePDF(
     }
 
     try {
-      const element =
-        typeof elementOrId === 'string'
-          ? document.getElementById(elementOrId)
-          : elementOrId;
+      let element: HTMLElement | null = null;
+
+      if (typeof elementOrId === 'string') {
+        const rawId = elementOrId.startsWith('#') ? elementOrId.slice(1) : elementOrId;
+        element =
+          document.getElementById(rawId) ||
+          document.querySelector<HTMLElement>(elementOrId) ||
+          document.querySelector<HTMLElement>(`[id="${rawId}"]`) ||
+          document.querySelector<HTMLElement>(`[data-pdf-id="${rawId}"]`);
+      } else {
+        element = elementOrId;
+      }
 
       if (!element) {
-        console.error('Target element not found for PDF generation');
+        console.error(`Target element "${elementOrId}" not found for PDF generation`);
         return false;
       }
 

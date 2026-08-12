@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Client, Policy, MasterDocument, DocumentItem } from '../types';
 import { 
   FrameworkGroupTier, 
@@ -14,7 +14,7 @@ import {
   generateFrameworkGroupPDFReport,
   UnifiedGroupDocument
 } from '../utils/frameworkGroupUtils';
-import { X, ShieldCheck, Activity, Zap, FileText, Plus, Search, Download, CheckCircle, AlertTriangle, Filter, Check, Edit2 } from 'lucide-react';
+import { X, ShieldCheck, Activity, Zap, FileText, Plus, Search, Download, CheckCircle, AlertTriangle, Filter, Check, Edit2, Copy, Trash2 } from 'lucide-react';
 import { formatDateDMY } from '../utils/dateUtils';
 import BTATierSelector from './BTATierSelector';
 
@@ -44,6 +44,8 @@ export default function FrameworkGroupModal({
   const [activeGroup, setActiveGroup] = useState<FrameworkGroupTier>(initialGroup);
   const [searchTerm, setSearchTerm] = useState('');
   const [docTypeFilter, setDocTypeFilter] = useState<string>('ALL');
+  const [copyToast, setCopyToast] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Form state for adding custom document to active group
   const [isAddingDoc, setIsAddingDoc] = useState(false);
@@ -52,9 +54,22 @@ export default function FrameworkGroupModal({
   const [newDocCategory, setNewDocCategory] = useState('Information Security');
   const [newDocType, setNewDocType] = useState<'Policy' | 'Procedure' | 'Form' | 'Register' | 'SOP' | 'Review'>('Policy');
 
-  // Get documents for active group
-  const groupDocs = getDocumentsByGroup(client.id, activeGroup, policies, masterDocs, docItems);
-  const groupStats = getGroupComplianceStats(client.id, activeGroup, policies, masterDocs, docItems);
+  // Get documents and stats for active group (memoized with refreshKey)
+  const groupDocs = useMemo(() => {
+    return getDocumentsByGroup(client.id, activeGroup, policies, masterDocs, docItems);
+  }, [client.id, activeGroup, policies, masterDocs, docItems, refreshKey]);
+
+  const groupStats = useMemo(() => {
+    return getGroupComplianceStats(client.id, activeGroup, policies, masterDocs, docItems);
+  }, [client.id, activeGroup, policies, masterDocs, docItems, refreshKey]);
+
+  const allGroupStats = useMemo(() => {
+    return FRAMEWORK_GROUPS.reduce((acc, g) => {
+      acc[g.id] = getGroupComplianceStats(client.id, g.id, policies, masterDocs, docItems);
+      return acc;
+    }, {} as Record<FrameworkGroupTier, ReturnType<typeof getGroupComplianceStats>>);
+  }, [client.id, policies, masterDocs, docItems, refreshKey]);
+
   const activeGroupInfo = FRAMEWORK_GROUPS.find(g => g.id === activeGroup) || FRAMEWORK_GROUPS[0];
 
   // Filtered documents by search & type
@@ -71,6 +86,7 @@ export default function FrameworkGroupModal({
 
   const handleGroupChange = (docCode: string, newGroup: FrameworkGroupTier) => {
     saveCustomGroupAssignment(docCode, newGroup);
+    setRefreshKey(v => v + 1);
     if (onRefreshData) onRefreshData();
   };
 
@@ -109,11 +125,40 @@ export default function FrameworkGroupModal({
     setNewDocCode('');
     setNewDocTitle('');
     setIsAddingDoc(false);
+    setRefreshKey(v => v + 1);
     if (onRefreshData) onRefreshData();
   };
 
   const handleExportReport = () => {
     generateFrameworkGroupPDFReport(client, activeGroup, groupDocs);
+  };
+
+  const handleCopyAllTitles = () => {
+    if (filteredDocs.length === 0) return;
+    const text = filteredDocs.map(d => `${d.code}: ${d.title}`).join('\n');
+    navigator.clipboard.writeText(text);
+    setCopyToast(`✓ Copied ${filteredDocs.length} document title(s) to clipboard!`);
+    setTimeout(() => setCopyToast(null), 3000);
+  };
+
+  const handleDeleteDoc = (doc: UnifiedGroupDocument) => {
+    if (window.confirm(`Are you sure you want to remove "${doc.title}" [${doc.code}] from ${activeGroup} Group?`)) {
+      saveCustomGroupAssignment(doc.code, 'EXCLUDED' as any);
+      try {
+        const savedDocsRaw = localStorage.getItem('sh_quick_master_setup_docs');
+        if (savedDocsRaw) {
+          const savedDocs = JSON.parse(savedDocsRaw);
+          const updated = savedDocs.filter((d: any) => d.ref_code !== doc.code && d.id !== doc.id);
+          localStorage.setItem('sh_quick_master_setup_docs', JSON.stringify(updated));
+        }
+      } catch (err) {
+        console.warn('Error removing document from local storage:', err);
+      }
+      setCopyToast(`✓ Removed "${doc.title}" from ${activeGroup} Group`);
+      setRefreshKey(v => v + 1);
+      setTimeout(() => setCopyToast(null), 3000);
+      if (onRefreshData) onRefreshData();
+    }
   };
 
   return (
@@ -151,7 +196,7 @@ export default function FrameworkGroupModal({
         <div className="bg-slate-100/80 p-3 border-b border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-3 shrink-0">
           {FRAMEWORK_GROUPS.map(group => {
             const isActive = activeGroup === group.id;
-            const stats = getGroupComplianceStats(client.id, group.id, policies, masterDocs, docItems);
+            const stats = allGroupStats[group.id] || { total: 0, score: 100 };
 
             return (
               <button
@@ -206,6 +251,15 @@ export default function FrameworkGroupModal({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              onClick={handleCopyAllTitles}
+              className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+              title="Copy list of all document titles in this group to clipboard"
+            >
+              <Copy className="w-4 h-4" />
+              Copy Document Titles ({filteredDocs.length})
+            </button>
+
             <button
               onClick={() => setIsAddingDoc(!isAddingDoc)}
               className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
@@ -324,7 +378,14 @@ export default function FrameworkGroupModal({
         </div>
 
         {/* Documents Table View */}
-        <div className="p-4 overflow-y-auto flex-1 custom-scrollbar">
+        <div className="p-4 overflow-y-auto flex-1 custom-scrollbar relative">
+          {copyToast && (
+            <div className="mb-3 p-3 bg-emerald-600 text-white rounded-xl font-bold text-xs shadow-md animate-fadeIn flex items-center justify-between">
+              <span>{copyToast}</span>
+              <button onClick={() => setCopyToast(null)} className="text-emerald-100 hover:text-white font-bold ml-2">✕</button>
+            </div>
+          )}
+
           {filteredDocs.length === 0 ? (
             <div className="p-12 text-center text-slate-500 space-y-3 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
               <FileText className="w-10 h-10 text-slate-300 mx-auto" />
@@ -344,6 +405,7 @@ export default function FrameworkGroupModal({
                     <th className="p-3">Next Review / Due</th>
                     <th className="p-3 text-center">Assigned Group</th>
                     <th className="p-3 text-right">Compliance Status</th>
+                    <th className="p-3 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-150 font-medium text-slate-800">
@@ -354,7 +416,21 @@ export default function FrameworkGroupModal({
                           {doc.code}
                         </td>
                         <td className="p-3">
-                          <div className="font-bold text-slate-900">{doc.title}</div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-slate-900">{doc.title}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(`${doc.code} - ${doc.title}`);
+                                setCopyToast(`✓ Copied "${doc.title}" to clipboard!`);
+                                setTimeout(() => setCopyToast(null), 3000);
+                              }}
+                              className="p-1 text-slate-400 hover:text-indigo-600 rounded hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+                              title="Copy Document Title"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                           <div className="text-[10px] text-slate-500">Owner: {doc.owner}</div>
                         </td>
                         <td className="p-3">
@@ -384,6 +460,16 @@ export default function FrameworkGroupModal({
                               Need Action
                             </span>
                           )}
+                        </td>
+                        <td className="p-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDoc(doc)}
+                            className="px-2 py-1 text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-rose-200 rounded-lg transition-all cursor-pointer inline-flex items-center gap-1 text-[11px] font-bold"
+                            title={`Delete / Remove "${doc.title}" from ${activeGroup} Group`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Delete
+                          </button>
                         </td>
                       </tr>
                     );

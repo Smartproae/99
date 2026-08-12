@@ -22,7 +22,17 @@ import {
   INITIAL_NOTIFICATIONS,
   INITIAL_EMPLOYEES
 } from './initialData';
-import { getPolicyTemplateDefaults } from './utils/policyDefaults';
+import { getPolicyTemplateDefaults, MASTER_34_POLICY_TEMPLATES } from './utils/policyDefaults';
+import {
+  getMasterSmartProPolicies,
+  getMasterSmartProRisks,
+  getMasterSmartProAssets,
+  getMasterSmartProForms,
+  getMasterSmartProDocuments,
+  replaceCompanyNames,
+  SMARTPRO_CLIENT_ID,
+  SMARTPRO_COMPANY_NAME
+} from './utils/masterRepository';
 
 import {
   Client,
@@ -65,12 +75,40 @@ import Settings from './components/Settings';
 import ArchitectureDocs from './components/ArchitectureDocs';
 import GrcQuickSetupModal from './components/GrcQuickSetupModal';
 import AgreementsContracts from './components/AgreementsContracts';
+import { CentralPrintHub } from './components/CentralPrintHub';
 import SecureArea from './components/SecureArea';
 import LegalComplianceRegister from './components/LegalComplianceRegister';
 import WindowsEndpointAuditor from './components/WindowsEndpointAuditor';
 import LiveChatCommunicator from './components/LiveChatCommunicator';
+import CopyClientDataModal from './components/CopyClientDataModal';
 
 import { ShieldCheck, Lock, LogIn, KeyRound, Check, AlertCircle, Clock, Shield, AlertTriangle, FileText, MessageSquare, Users, UserCheck, Database, Github, GitBranch, RefreshCw } from 'lucide-react';
+
+export function deduplicatePolicies(list: Policy[]): Policy[] {
+  if (!Array.isArray(list)) return [];
+  const seenKeys = new Set<string>();
+  const result: Policy[] = [];
+
+  for (const p of list) {
+    if (!p) continue;
+    const code = (p.policy_no || (p as any).code || p.id || '').toUpperCase().trim();
+    const title = (p.policy_name || (p as any).title || '').toUpperCase().trim();
+    const clientId = (p.client_id || '').trim();
+    
+    // Distinguish between client-specific copied policies vs master policies
+    const isClientCopied = p.id.startsWith('POL-CLT-') || (clientId && clientId !== 'c1');
+    const key = isClientCopied 
+      ? `CLT_${clientId}_${code}_${title}`
+      : `MST_${code || title}`;
+
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      result.push(p);
+    }
+  }
+
+  return result;
+}
 
 function sanitizeAndDeduplicate<T extends { id: string }>(list: T[], prefix: string): T[] {
   const seenIds = new Set<string>();
@@ -185,8 +223,8 @@ export default function App() {
     const saved = localStorage.getItem('sh_policies');
     let loaded = safeParseJSON(saved, INITIAL_POLICIES);
     
-    // Self-heal POL-SEC-019 to ensure it always includes the new Change Classification table
     if (Array.isArray(loaded)) {
+      // Self-heal POL-SEC-019 & POL-SEC-032
       loaded = loaded.map((p: any) => {
         if (p && p.policy_no === 'POL-SEC-019') {
           const stmt = p.policy_statement || '';
@@ -196,7 +234,7 @@ export default function App() {
             return {
               ...p,
               policy_statement: defaults.policy_statement,
-              full_content: '' // clear cached full content to trigger regeneration with table
+              full_content: '' // clear cached full content
             };
           }
         }
@@ -209,9 +247,32 @@ export default function App() {
         }
         return p;
       });
+
+      // Ensure all 34 master policies exist in repository
+      const existingCodes = new Set(loaded.map((p: any) => (p.policy_no || p.code || '').toUpperCase().trim()));
+      MASTER_34_POLICY_TEMPLATES.forEach((tpl, idx) => {
+        if (!existingCodes.has(tpl.policy_no.toUpperCase().trim())) {
+          const defaults = getPolicyTemplateDefaults(tpl.policy_no, 'SmartPro Consultancy', tpl.policy_name);
+          loaded.push({
+            id: `p_m34_${tpl.policy_no}_${idx}`,
+            client_id: 'c1',
+            policy_no: tpl.policy_no,
+            policy_name: tpl.policy_name,
+            version: '1.0',
+            review_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            status: 'APPROVED',
+            category: tpl.category,
+            doc_type: tpl.doc_type || 'Policy',
+            created_at: new Date().toISOString(),
+            policy_statement: defaults.policy_statement || `Official Policy Framework for ${tpl.policy_name}.`,
+            full_content: defaults.policy_statement
+          } as Policy);
+          existingCodes.add(tpl.policy_no.toUpperCase().trim());
+        }
+      });
     }
 
-    return sanitizeAndDeduplicate(loaded, 'p');
+    return deduplicatePolicies(sanitizeAndDeduplicate(loaded, 'p'));
   });
 
   const [risks, setRisks] = useState<RiskItem[]>(() => {
@@ -988,13 +1049,46 @@ export default function App() {
   };
 
   const handleAddPolicy = (policy: Policy) => {
-    setPolicies(prev => [...prev, policy]);
+    setPolicies(prev => deduplicatePolicies([...prev, policy]));
     logAuditTrail('POLICY_FRAMEWORK', 'CREATED COMPLIANCE POLICY', policy);
   };
 
-  const handleDeletePolicy = (id: string) => {
-    setPolicies(prev => prev.filter(p => p.id !== id));
-    logAuditTrail('POLICY_FRAMEWORK', 'DELETED COMPLIANCE POLICY', { id });
+  const handleDeletePolicy = (id: string | string[]) => {
+    const rawIds = Array.isArray(id) ? id : [id];
+    const idsToDelete = new Set(rawIds);
+    setPolicies(prev => {
+      const targetCodes = new Set<string>();
+      const targetTitles = new Set<string>();
+
+      // Collect codes if passed directly
+      rawIds.forEach(item => {
+        if (typeof item === 'string' && (item.startsWith('M-Policy') || item.startsWith('POL-'))) {
+          targetCodes.add(item.toUpperCase().trim());
+        }
+      });
+
+      prev.forEach(p => {
+        if (idsToDelete.has(p.id)) {
+          const code = p.policy_no || (p as any).code || (p as any).policy_code;
+          if (code) targetCodes.add(code.toUpperCase().trim());
+          const title = p.policy_name || (p as any).title;
+          if (title) targetTitles.add(title.toUpperCase().trim());
+        }
+      });
+
+      const updated = prev.filter(p => {
+        if (idsToDelete.has(p.id)) return false;
+        const pCode = (p.policy_no || (p as any).code || (p as any).policy_code || '').toUpperCase().trim();
+        if (pCode && targetCodes.has(pCode)) return false;
+        const pTitle = (p.policy_name || (p as any).title || '').toUpperCase().trim();
+        if (pTitle && targetTitles.has(pTitle) && pCode && targetCodes.has(pCode)) return false;
+        return true;
+      });
+
+      safeSetItem('sh_policies', JSON.stringify(updated));
+      return updated;
+    });
+    logAuditTrail('POLICY_FRAMEWORK', 'DELETED COMPLIANCE POLICY', { ids: Array.from(idsToDelete) });
   };
 
   const handleUpdatePolicy = (updatedPolicy: Policy) => {
@@ -1150,6 +1244,232 @@ export default function App() {
 
   const handleSimulateRole = (role: UserRole) => {
     setCurrentUser(prev => ({ ...prev, role }));
+  };
+
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
+
+  const handleCopyClientData = (sourceClientId: string, targetClientId: string, selectedCategories: string[]) => {
+    const sourceClient = clients.find(c => c.id === sourceClientId);
+    const targetClient = clients.find(c => c.id === targetClientId);
+    if (!sourceClient || !targetClient) return;
+
+    const makeNewId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+    // 1. Documents
+    if (selectedCategories.includes('documents')) {
+      const sourceDocs = documents.filter(d => d.client_id === sourceClientId);
+      if (sourceDocs.length > 0) {
+        const copiedDocs = sourceDocs.map(d => ({
+          ...d,
+          id: makeNewId('doc'),
+          client_id: targetClientId,
+          created_at: new Date().toISOString()
+        }));
+        const newDocs = [...documents, ...copiedDocs];
+        setDocuments(newDocs);
+        safeSetItem('sh_documents', JSON.stringify(newDocs));
+      }
+    }
+
+    // 2. Policies
+    if (selectedCategories.includes('policies')) {
+      const sourcePolicies = policies.filter(p => p.client_id === sourceClientId);
+      if (sourcePolicies.length > 0) {
+        const copiedPolicies = sourcePolicies.map(p => ({
+          ...p,
+          id: makeNewId('pol'),
+          client_id: targetClientId,
+          created_at: new Date().toISOString()
+        }));
+        const newPolicies = [...policies, ...copiedPolicies];
+        setPolicies(newPolicies);
+        safeSetItem('sh_policies', JSON.stringify(newPolicies));
+      }
+    }
+
+    // 3. Risks
+    if (selectedCategories.includes('risks')) {
+      const sourceRisks = risks.filter(r => r.client_id === sourceClientId);
+      if (sourceRisks.length > 0) {
+        const copiedRisks = sourceRisks.map(r => ({
+          ...r,
+          id: makeNewId('risk'),
+          client_id: targetClientId,
+          created_at: new Date().toISOString()
+        }));
+        const newRisks = [...risks, ...copiedRisks];
+        setRisks(newRisks);
+        safeSetItem('sh_risks', JSON.stringify(newRisks));
+      }
+    }
+
+    // 4. Assets
+    if (selectedCategories.includes('assets')) {
+      const sourceAssets = assets.filter(a => a.client_id === sourceClientId);
+      if (sourceAssets.length > 0) {
+        const copiedAssets = sourceAssets.map(a => ({
+          ...a,
+          id: makeNewId('asset'),
+          client_id: targetClientId,
+          created_at: new Date().toISOString()
+        }));
+        const newAssets = [...assets, ...copiedAssets];
+        setAssets(newAssets);
+        safeSetItem('sh_assets', JSON.stringify(newAssets));
+      }
+    }
+
+    // 5. Forms
+    if (selectedCategories.includes('forms')) {
+      const sourceForms = forms.filter(f => f.client_id === sourceClientId);
+      if (sourceForms.length > 0) {
+        const copiedForms = sourceForms.map(f => ({
+          ...f,
+          id: makeNewId('form'),
+          client_id: targetClientId,
+          facility_name: targetClient.company_name,
+          created_at: new Date().toISOString()
+        }));
+        const newForms = [...forms, ...copiedForms];
+        setForms(newForms);
+        safeSetItem('sh_forms', JSON.stringify(newForms));
+      }
+    }
+
+    // 6. Agreements
+    if (selectedCategories.includes('agreements')) {
+      const rawAgreements = localStorage.getItem('sh_agreements');
+      if (rawAgreements) {
+        try {
+          const parsedAgreements: any[] = JSON.parse(rawAgreements);
+          const sourceAgreements = parsedAgreements.filter(a => a.client_id === sourceClientId);
+          if (sourceAgreements.length > 0) {
+            const copiedAgreements = sourceAgreements.map(a => ({
+              ...a,
+              id: makeNewId('agr'),
+              client_id: targetClientId,
+              contract_number: `${a.contract_number}-COPY`,
+              created_at: new Date().toISOString()
+            }));
+            const updatedAgreements = [...parsedAgreements, ...copiedAgreements];
+            safeSetItem('sh_agreements', JSON.stringify(updatedAgreements));
+          }
+        } catch (e) {
+          console.warn('Could not copy agreements:', e);
+        }
+      }
+    }
+
+    // 7. HR Documents
+    if (selectedCategories.includes('hr_documents')) {
+      const sourceKey = `smarthub_hr_documents_vault_v2_${sourceClientId}`;
+      const rawHrDocs = localStorage.getItem(sourceKey) || localStorage.getItem('smarthub_hr_documents_vault_v2');
+      if (rawHrDocs) {
+        try {
+          const parsedHrDocs: any[] = JSON.parse(rawHrDocs);
+          const copiedHrDocs = parsedHrDocs.map(d => ({
+            ...d,
+            id: makeNewId('hrdoc'),
+            client_id: targetClientId,
+            facilityDetails: {
+              ...(d.facilityDetails || {}),
+              facilityName: targetClient.company_name
+            },
+            entityCredentials: {
+              ...(d.entityCredentials || {}),
+              companyName: targetClient.company_name
+            }
+          }));
+          const targetKey = `smarthub_hr_documents_vault_v2_${targetClientId}`;
+          safeSetItem(targetKey, JSON.stringify(copiedHrDocs));
+        } catch (e) {
+          console.warn('Could not copy HR documents:', e);
+        }
+      }
+    }
+
+    // 8. Legal Register
+    if (selectedCategories.includes('legal_register')) {
+      const sourceKey = `sh_legal_compliance_items_${sourceClientId}`;
+      const rawLegal = localStorage.getItem(sourceKey) || localStorage.getItem('sh_legal_compliance_items');
+      if (rawLegal) {
+        try {
+          const parsedLegal: any[] = JSON.parse(rawLegal);
+          const copiedLegal = parsedLegal.map(item => ({
+            ...item,
+            id: makeNewId('leg'),
+            client_id: targetClientId
+          }));
+          safeSetItem(`sh_legal_compliance_items_${targetClientId}`, JSON.stringify(copiedLegal));
+        } catch (e) {
+          console.warn('Could not copy Legal register:', e);
+        }
+      }
+    }
+
+    // 9. Secure Area Credentials
+    if (selectedCategories.includes('secure_area')) {
+      const sourceKey = `sh_secure_vault_items_${sourceClientId}`;
+      const rawVault = localStorage.getItem(sourceKey) || localStorage.getItem('sh_secure_vault_items');
+      if (rawVault) {
+        try {
+          const parsedVault: any[] = JSON.parse(rawVault);
+          const copiedVault = parsedVault.map(v => ({
+            ...v,
+            id: makeNewId('sec'),
+            client_id: targetClientId
+          }));
+          safeSetItem(`sh_secure_vault_items_${targetClientId}`, JSON.stringify(copiedVault));
+        } catch (e) {
+          console.warn('Could not copy Secure Vault:', e);
+        }
+      }
+    }
+
+    // 10. Quick Master Setup & SoA
+    if (selectedCategories.includes('quick_setup')) {
+      const sourceKey = `sh_quick_master_setup_${sourceClientId}`;
+      const rawSetup = localStorage.getItem(sourceKey) || localStorage.getItem('sh_quick_master_setup');
+      if (rawSetup) {
+        try {
+          const parsedSetup = JSON.parse(rawSetup);
+          if (parsedSetup.facilityInfo) {
+            parsedSetup.facilityInfo.client_id = targetClientId;
+            parsedSetup.facilityInfo.facility_name = targetClient.company_name;
+            parsedSetup.facilityInfo.company_name = targetClient.company_name;
+          }
+          safeSetItem(`sh_quick_master_setup_${targetClientId}`, JSON.stringify(parsedSetup));
+        } catch (e) {
+          console.warn('Could not copy Quick setup:', e);
+        }
+      }
+
+      const sourceSoaKey = `sh_quick_master_setup_soa_${sourceClientId}`;
+      const rawSoa = localStorage.getItem(sourceSoaKey) || localStorage.getItem('sh_quick_master_setup_soa');
+      if (rawSoa) {
+        safeSetItem(`sh_quick_master_setup_soa_${targetClientId}`, rawSoa);
+      }
+    }
+
+    // 11. Master Document Mappings
+    if (selectedCategories.includes('master_mappings')) {
+      const sourceKey = `sh_master_doc_mappings_${sourceClientId}`;
+      const rawMappings = localStorage.getItem(sourceKey) || localStorage.getItem('sh_master_doc_mappings');
+      if (rawMappings) {
+        safeSetItem(`sh_master_doc_mappings_${targetClientId}`, rawMappings);
+      }
+    }
+
+    logAuditTrail(
+      'SUPERADMIN_CLIENT_COPY',
+      `COPIED CLIENT TENANT DATA FROM [${sourceClient.company_name}] TO [${targetClient.company_name}]`,
+      {
+        sourceClientId,
+        targetClientId,
+        copiedCategories: selectedCategories,
+        copiedBy: currentUser.email
+      }
+    );
   };
 
   // Auth Protection Gate wrapper
@@ -1614,6 +1934,7 @@ export default function App() {
           inactivityRemainingSeconds={Math.max(0, 600 - inactiveSeconds)}
           onOpenChat={() => setIsChatOpen(true)}
           usersCount={users.length}
+          onOpenCopyModal={() => setIsCopyModalOpen(true)}
         />
 
         {/* Dynamic page content container */}
@@ -1647,6 +1968,8 @@ export default function App() {
                 activeClientId={activeClientId}
                 onSelectClient={setActiveClientId}
                 onAddEmailLog={handleAddEmailLog}
+                currentUser={currentUser}
+                onOpenCopyModal={() => setIsCopyModalOpen(true)}
               />
             )}
 
@@ -1657,6 +1980,19 @@ export default function App() {
                 onAddEmailLog={handleAddEmailLog}
                 onLogAudit={logAuditTrail}
                 smtp={smtp}
+              />
+            )}
+
+            {currentTab === 'central-print-hub' && (
+              <CentralPrintHub
+                policies={policies}
+                masterDocs={safeParseJSON(localStorage.getItem('sh_master_index_docs'), [])}
+                docItems={documents}
+                agreements={safeParseJSON(localStorage.getItem('sh_agreements'), [])}
+                clients={clients}
+                activeClientId={activeClientId}
+                onSelectClient={setActiveClientId}
+                employees={employees}
               />
             )}
 
@@ -1672,6 +2008,7 @@ export default function App() {
                 activeClientId={activeClientId}
                 client={currentClient}
                 clients={clients}
+                onSelectClient={setActiveClientId}
               />
             )}
 
@@ -2038,6 +2375,16 @@ export default function App() {
         onClose={() => setIsChatOpen(false)}
         users={users}
         currentUser={currentUser}
+      />
+
+      {/* SUPERADMIN COPY CLIENT DATA MODAL */}
+      <CopyClientDataModal
+        isOpen={isCopyModalOpen}
+        onClose={() => setIsCopyModalOpen(false)}
+        clients={clients}
+        activeClientId={activeClientId}
+        currentUser={currentUser}
+        onCopyClientData={handleCopyClientData}
       />
     </div>
   );

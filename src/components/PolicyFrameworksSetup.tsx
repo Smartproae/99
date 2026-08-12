@@ -49,12 +49,13 @@ interface PolicyFrameworksSetupProps {
   users: User[];
   employees?: Employee[];
   onAddPolicy: (policy: Policy) => void;
-  onDeletePolicy?: (id: string) => void;
+  onDeletePolicy?: (id: string | string[]) => void;
   onUpdatePolicy?: (updatedPolicy: Policy) => void;
   onBulkFeedPolicies?: (policies: Policy[]) => void;
   activeClientId: string;
   client?: Client | null;
   clients?: Client[];
+  onSelectClient?: (id: string) => void;
 }
 
 export default function PolicyFrameworksSetup({
@@ -67,7 +68,8 @@ export default function PolicyFrameworksSetup({
   onBulkFeedPolicies,
   activeClientId,
   client,
-  clients = []
+  clients = [],
+  onSelectClient
 }: PolicyFrameworksSetupProps) {
   // Navigation Tabs: 'vault' | 'upload' | 'export' | 'create'
   const [activeTab, setActiveTab] = useState<'vault' | 'upload' | 'export' | 'create'>('vault');
@@ -96,6 +98,169 @@ export default function PolicyFrameworksSetup({
   const [emailRecipient, setEmailRecipient] = useState('');
   const [emailCoverNote, setEmailCoverNote] = useState('');
   const [isEmailing, setIsEmailing] = useState(false);
+
+  // Copy to Client Modal State
+  const [copyClientModalOpen, setCopyClientModalOpen] = useState(false);
+  const [policiesToCopy, setPoliciesToCopy] = useState<Policy[]>([]);
+  const [targetClientIdToCopy, setTargetClientIdToCopy] = useState<string>('');
+  const [customClientNameInput, setCustomClientNameInput] = useState<string>('');
+
+  const handleOpenCopyModalForSingle = (p: Policy) => {
+    setPoliciesToCopy([p]);
+    const initialTargetId = clients[0]?.id || activeClientId || '';
+    setTargetClientIdToCopy(initialTargetId);
+    const initialTargetObj = clients.find(c => c.id === initialTargetId);
+    setCustomClientNameInput(initialTargetObj?.company_name || client?.company_name || '');
+    setCopyClientModalOpen(true);
+  };
+
+  const handleOpenCopyModalForSelected = () => {
+    let selectedDocs = selectedPolicyIds.length > 0
+      ? filteredPolicies.filter(p => selectedPolicyIds.includes(p.id))
+      : filteredPolicies;
+
+    // Deduplicate selectedDocs by unique policy_no / code
+    const seen = new Set<string>();
+    const uniqueDocs: Policy[] = [];
+    for (const p of selectedDocs) {
+      const codeKey = (p.policy_no || (p as any).code || p.id || '').toUpperCase().trim();
+      if (!seen.has(codeKey)) {
+        seen.add(codeKey);
+        uniqueDocs.push(p);
+      }
+    }
+
+    if (uniqueDocs.length === 0) {
+      showToast('⚠️ Please select at least one policy record to copy to a client.');
+      return;
+    }
+    setPoliciesToCopy(uniqueDocs);
+    const initialTargetId = clients[0]?.id || activeClientId || '';
+    setTargetClientIdToCopy(initialTargetId);
+    const initialTargetObj = clients.find(c => c.id === initialTargetId);
+    setCustomClientNameInput(initialTargetObj?.company_name || client?.company_name || '');
+    setCopyClientModalOpen(true);
+  };
+
+  const handleConfirmCopyToClient = () => {
+    if (policiesToCopy.length === 0) return;
+    const targetClientObj = clients.find(c => c.id === targetClientIdToCopy);
+    const targetName = targetClientObj?.company_name || customClientNameInput.trim() || 'Client Entity';
+    const targetClientId = targetClientObj?.id || activeClientId || (clients[0]?.id || 'c1');
+
+    const newPolicies: Policy[] = policiesToCopy.map((p, idx) => {
+      const cleanTitle = resolveDocTitle(p.policy_name, targetName);
+      const updatedStatement = formatCleanPolicyStatement(
+        p.policy_statement || p.full_content || '',
+        cleanTitle,
+        targetName,
+        pageBreakSections
+      );
+
+      return {
+        ...p,
+        id: `POL-CLT-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+        company_name: targetName,
+        facility_name: targetName,
+        client_id: targetClientId,
+        policy_name: cleanTitle,
+        policy_statement: updatedStatement,
+        full_content: updatedStatement,
+        status: 'APPROVED',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+    });
+
+    // Always add each copied policy directly to ensure it isn't filtered out as duplicate
+    newPolicies.forEach(np => onAddPolicy(np));
+
+    if (onSelectClient && targetClientId) {
+      onSelectClient(targetClientId);
+    }
+
+    showToast(`✓ Successfully copied ${newPolicies.length} policy record(s) to [${targetName}]!`);
+    setCopyClientModalOpen(false);
+    setPoliciesToCopy([]);
+  };
+
+  // Toggle Freeze state for a single policy
+  const handleToggleFreezePolicy = (policy: Policy) => {
+    const isCurrentlyFrozen = policy.is_frozen || policy.status === 'FROZEN';
+    const newFrozenState = !isCurrentlyFrozen;
+    const updated: Policy = {
+      ...policy,
+      is_frozen: newFrozenState,
+      status: newFrozenState ? 'FROZEN' : 'APPROVED'
+    };
+
+    if (onUpdatePolicy) {
+      onUpdatePolicy(updated);
+    }
+
+    if (selectedPolicy && selectedPolicy.id === policy.id) {
+      setSelectedPolicy(updated);
+    }
+
+    showToast(
+      newFrozenState
+        ? `🔒 Policy Record [${policy.policy_no}] is now FROZEN & locked against changes!`
+        : `🔓 Policy Record [${policy.policy_no}] is UNFROZEN and open for editing.`
+    );
+  };
+
+  // Freeze Selected Policies (or all filtered if none selected)
+  const handleFreezeSelectedPolicies = () => {
+    const targets = selectedPolicyIds.length > 0
+      ? filteredPolicies.filter(p => selectedPolicyIds.includes(p.id))
+      : filteredPolicies;
+
+    if (targets.length === 0) {
+      showToast('⚠️ No policy records available to freeze.');
+      return;
+    }
+
+    let count = 0;
+    targets.forEach(p => {
+      if (onUpdatePolicy) {
+        onUpdatePolicy({
+          ...p,
+          is_frozen: true,
+          status: 'FROZEN'
+        });
+        count++;
+      }
+    });
+
+    showToast(`🔒 Successfully FROZE ${count} policy record(s) against modifications!`);
+  };
+
+  // Group Delete Selected Policies
+  const handleGroupDeleteSelected = () => {
+    const targets = selectedPolicyIds.length > 0
+      ? filteredPolicies.filter(p => selectedPolicyIds.includes(p.id))
+      : [];
+
+    if (targets.length === 0) {
+      showToast('⚠️ Please select at least one policy record using the checkboxes to delete.');
+      return;
+    }
+
+    const frozenCount = targets.filter(p => p.is_frozen || p.status === 'FROZEN').length;
+    let confirmMsg = `Are you sure you want to delete ${targets.length} selected policy document(s)?`;
+    if (frozenCount > 0) {
+      confirmMsg += `\n\nNotice: ${frozenCount} of the selected records are currently FROZEN. Deleting will permanently remove them.`;
+    }
+
+    if (window.confirm(confirmMsg)) {
+      if (onDeletePolicy) {
+        const targetIds = targets.map(p => p.id);
+        onDeletePolicy(targetIds);
+        setSelectedPolicyIds([]);
+        showToast(`✓ Successfully deleted ${targets.length} policy record(s)!`);
+      }
+    }
+  };
 
   // Quick Master Setup Loop state
   const [activeLoop, setActiveLoop] = useState<DocRefLoopData | null>(null);
@@ -420,6 +585,28 @@ export default function PolicyFrameworksSetup({
       .replace(/<p>\s*,\s*/gi, '<p>')
       .replace(/<strong>\s*,\s*/gi, '<strong>')
       .replace(/<p>\s*<\/p>/gi, '');
+
+    // 7.5 Automatically insert Risk Assessment Framework Chart before "RISK TREATMENT Risk treatment options include:" for Risk Management Policies
+    const isRiskPolicy = (policyName && /risk management/i.test(policyName)) || (policyName && /m-policy-004/i.test(policyName)) || /RISK TREATMENT/i.test(cleaned);
+    if (isRiskPolicy) {
+      // First strip any existing risk_matrix_chart block to avoid duplicate/misplaced images
+      cleaned = cleaned.replace(/<div class="my-4 flex flex-col items-center justify-center w-full text-center">[\s\S]*?<\/div>/gi, '');
+      const imgHtml = `\n\n<div class="my-4 flex flex-col items-center justify-center w-full text-center"><img src="/risk_matrix_chart.jpg" alt="Healthcare Cybersecurity Risk Assessment Framework" class="max-w-full h-auto rounded-lg border border-slate-300 shadow-md object-contain max-h-[420px] mx-auto" /><p class="text-[10px] text-slate-500 font-bold italic mt-1.5 text-center">Figure 1: Healthcare Cybersecurity Risk Assessment Framework &amp; Criteria</p></div>\n\n`;
+      
+      if (/<h[23][^>]*>\s*RISK TREATMENT\s*<\/h[23]>/i.test(cleaned)) {
+        cleaned = cleaned.replace(/(<h[23][^>]*>\s*RISK TREATMENT\s*<\/h[23]>)/i, `${imgHtml}$1`);
+      } else if (/###\s*RISK TREATMENT/i.test(cleaned)) {
+        cleaned = cleaned.replace(/(###\s*RISK TREATMENT)/i, `${imgHtml}$1`);
+      } else if (/##\s*RISK TREATMENT/i.test(cleaned)) {
+        cleaned = cleaned.replace(/(##\s*RISK TREATMENT)/i, `${imgHtml}$1`);
+      } else if (/RISK TREATMENT/i.test(cleaned)) {
+        cleaned = cleaned.replace(/(RISK TREATMENT)/i, `${imgHtml}$1`);
+      } else if (/Risk treatment options include:/i.test(cleaned)) {
+        cleaned = cleaned.replace(/(Risk treatment options include:)/i, `${imgHtml}### RISK TREATMENT\n\n$1`);
+      } else {
+        cleaned = cleaned + imgHtml + `\n\n### RISK TREATMENT\n\n`;
+      }
+    }
 
     // 8. Convert Markdown syntax and format text line breaks
     cleaned = convertMarkdownToHtml(cleaned, breakSections);
@@ -1323,16 +1510,50 @@ export default function PolicyFrameworksSetup({
 
   // Facility-filtered policies
   const facilityPolicies = React.useMemo(() => {
-    if (!client?.company_name && !activeClientId) return policies;
-    return policies.filter(p => {
-      if (p.client_id && activeClientId && p.client_id === activeClientId) return true;
+    if (!policies || policies.length === 0) return [];
+    const matched = policies.filter(p => {
+      // 1. Client specific copied policies (POL-CLT-)
+      if (p.id.startsWith('POL-CLT-')) {
+        if (activeClientId && p.client_id) {
+          return p.client_id === activeClientId;
+        }
+        if (client?.company_name) {
+          const cName = client.company_name.toLowerCase();
+          const pFac = (p.facility_name || p.company_name || '').toLowerCase();
+          if (pFac && (pFac.includes(cName) || cName.includes(pFac))) return true;
+        }
+        return true;
+      }
+
+      // 2. Client linked policies
+      if (p.client_id && activeClientId && p.client_id === activeClientId) {
+        return true;
+      }
+
+      // 3. Facility Name Match
       if (client?.company_name) {
         const cName = client.company_name.toLowerCase();
         const pFac = (p.facility_name || p.company_name || '').toLowerCase();
         if (pFac && (pFac.includes(cName) || cName.includes(pFac))) return true;
       }
-      return !p.client_id || p.client_id === 'c1';
+
+      // 4. Standard master framework policies (no client_id or client_id === 'c1' or master) -> ALWAYS INCLUDE
+      return true;
     });
+
+    // Remove duplicates, keeping only unique original records
+    const seen = new Set<string>();
+    const deduplicated: Policy[] = [];
+    for (const p of matched) {
+      const codeKey = (p.policy_no || (p as any).code || p.id || '').toUpperCase().trim();
+      const titleKey = (p.policy_name || (p as any).title || '').toUpperCase().trim();
+      const uniqueKey = p.id.startsWith('POL-CLT-') ? `CLT_${p.client_id}_${codeKey}_${titleKey}` : `MST_${codeKey || titleKey}`;
+      if (!seen.has(uniqueKey)) {
+        seen.add(uniqueKey);
+        deduplicated.push(p);
+      }
+    }
+    return deduplicated;
   }, [policies, activeClientId, client]);
 
   // Filtered Vault list
@@ -1931,7 +2152,19 @@ export default function PolicyFrameworksSetup({
                   Policy Frameworks Repository ({filteredPolicies.length} Active Records)
                 </h3>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleOpenCopyModalForSelected}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-sm"
+                  title="Copy selected policies to a client facility"
+                >
+                  <Copy className="w-3.5 h-3.5" /> Copy to Client
+                  {selectedPolicyIds.length > 0 && (
+                    <span className="ml-1 px-1.5 py-0.2 bg-emerald-800 text-white text-[10px] rounded-full">
+                      {selectedPolicyIds.length}
+                    </span>
+                  )}
+                </button>
                 <button
                   onClick={handleGroupDownloadZip}
                   className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-sm"
@@ -1944,6 +2177,34 @@ export default function PolicyFrameworksSetup({
                     </span>
                   )}
                 </button>
+                <button
+                  type="button"
+                  onClick={handleFreezeSelectedPolicies}
+                  className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-sm"
+                  title="Freeze / Lock selected policy documents against modifications"
+                >
+                  <Lock className="w-3.5 h-3.5" /> Freeze Selected
+                  {selectedPolicyIds.length > 0 && (
+                    <span className="ml-1 px-1.5 py-0.2 bg-cyan-900 text-white text-[10px] rounded-full">
+                      {selectedPolicyIds.length}
+                    </span>
+                  )}
+                </button>
+                {onDeletePolicy && (
+                  <button
+                    type="button"
+                    onClick={handleGroupDeleteSelected}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-sm"
+                    title="Delete selected policy records from vault"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete Selected
+                    {selectedPolicyIds.length > 0 && (
+                      <span className="ml-1 px-1.5 py-0.2 bg-rose-900 text-white text-[10px] rounded-full">
+                        {selectedPolicyIds.length}
+                      </span>
+                    )}
+                  </button>
+                )}
                 <span className="text-[11px] text-slate-500 font-medium">
                   Active Facility: <strong className="text-indigo-900">{client?.company_name || 'All Facilities'}</strong>
                 </span>
@@ -2008,13 +2269,20 @@ export default function PolicyFrameworksSetup({
                           </span>
                         </td>
                         <td className="p-3.5">
-                          <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">
-                            {p.status}
-                          </span>
+                          {(p.is_frozen || p.status === 'FROZEN') ? (
+                            <span className="px-2 py-0.5 rounded bg-cyan-100 text-cyan-900 font-extrabold text-[10px] inline-flex items-center gap-1 border border-cyan-300">
+                              <Lock className="w-3 h-3 text-cyan-700" /> FROZEN
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                              {p.status || 'APPROVED'}
+                            </span>
+                          )}
                         </td>
                         <td className="p-3.5 text-right">
                           <div className="flex flex-wrap items-center justify-end gap-1.5">
                             <button
+                              type="button"
                               onClick={() => {
                                 setSelectedPolicy({ ...p });
                                 setIsEditingPolicy(false);
@@ -2027,6 +2295,7 @@ export default function PolicyFrameworksSetup({
                               <Eye className="w-3.5 h-3.5" /> Inspect
                             </button>
                             <button
+                              type="button"
                               onClick={() => {
                                 setSelectedPolicy({ ...p });
                                 setIsEditingPolicy(true);
@@ -2034,11 +2303,33 @@ export default function PolicyFrameworksSetup({
                                 setPreviewReviewedBy(p.reviewed_by || 'Compliance Officer');
                               }}
                               className="px-2.5 py-1 bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200/60 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1"
-                              title="Edit Policy Record"
+                              title={p.is_frozen || p.status === 'FROZEN' ? "Document is Frozen (Locked)" : "Edit Policy Record"}
                             >
                               <Edit3 className="w-3.5 h-3.5" /> Edit
                             </button>
                             <button
+                              type="button"
+                              onClick={() => handleToggleFreezePolicy(p)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1 border ${
+                                (p.is_frozen || p.status === 'FROZEN')
+                                  ? 'bg-cyan-100 text-cyan-900 border-cyan-300 font-extrabold hover:bg-cyan-200'
+                                  : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                              }`}
+                              title={(p.is_frozen || p.status === 'FROZEN') ? 'Unfreeze Document to Allow Edits' : 'Freeze / Lock Document Record'}
+                            >
+                              <Lock className="w-3.5 h-3.5" />
+                              {(p.is_frozen || p.status === 'FROZEN') ? 'Unfreeze' : 'Freeze'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenCopyModalForSingle(p)}
+                              className="px-2.5 py-1 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200/60 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1"
+                              title="Copy policy master document to client"
+                            >
+                              <Copy className="w-3.5 h-3.5" /> Copy to Client
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleDownloadSingleHtml(p)}
                               className="px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200/60 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1"
                               title="Download Standalone Standardized HTML Document"
@@ -2046,6 +2337,7 @@ export default function PolicyFrameworksSetup({
                               <FileCode className="w-3.5 h-3.5" /> HTML
                             </button>
                             <button
+                              type="button"
                               onClick={() => {
                                 setEmailPolicy(p);
                                 setEmailRecipient(client?.email || 'compliance@smartpro.ae');
@@ -2060,9 +2352,14 @@ export default function PolicyFrameworksSetup({
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (window.confirm(`Are you sure you want to delete policy record [${p.policy_no}] "${p.policy_name}"?`)) {
+                                  const isFrozen = p.is_frozen || p.status === 'FROZEN';
+                                  let confirmMsg = `Are you sure you want to delete policy record [${p.policy_no}] "${p.policy_name}"?`;
+                                  if (isFrozen) {
+                                    confirmMsg = `🔒 Policy [${p.policy_no}] is currently FROZEN / LOCKED.\nAre you sure you want to override the lock and delete this record?`;
+                                  }
+                                  if (window.confirm(confirmMsg)) {
                                     onDeletePolicy(p.id);
-                                    showToast(`Deleted policy record [${p.policy_no}]`);
+                                    showToast(`✓ Deleted policy record [${p.policy_no}]`);
                                   }
                                 }}
                                 className="px-2.5 py-1 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/60 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1"
@@ -2190,27 +2487,6 @@ export default function PolicyFrameworksSetup({
             <p className="text-xs text-slate-500">
               Construct a new compliant policy and procedure document with legal metadata, governance matrix loops, and facility roster auto-fill options.
             </p>
-          </div>
-
-          {/* Quick Master Setup Loop Connection */}
-          <div className="bg-indigo-950 text-white p-4 rounded-2xl border border-indigo-500/40 space-y-3 shadow-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Link className="w-4 h-4 text-indigo-400" />
-                <h3 className="font-extrabold text-xs uppercase tracking-wider text-indigo-200">
-                  Quick Master Setup Loop Connection
-                </h3>
-              </div>
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-black uppercase tracking-wider border border-emerald-500/30">
-                Auto-Fill Active
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-300">
-              Directly synced with Quick Master Setup & Facility Governance Matrix
-            </p>
-
-            <DocRefLoopSelector onApplyLoop={handleApplyLoop} />
           </div>
 
           <form onSubmit={handleCreateDocument} className="space-y-6">
@@ -2624,6 +2900,43 @@ export default function PolicyFrameworksSetup({
                 </button>
 
                 <button
+                  type="button"
+                  onClick={() => handleToggleFreezePolicy(selectedPolicy)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 border ${
+                    (selectedPolicy.is_frozen || selectedPolicy.status === 'FROZEN')
+                      ? 'bg-cyan-500 hover:bg-cyan-600 text-slate-950 border-cyan-400 shadow-md font-black'
+                      : 'bg-slate-800 hover:bg-slate-700 text-cyan-300 border-slate-700'
+                  }`}
+                  title={(selectedPolicy.is_frozen || selectedPolicy.status === 'FROZEN') ? "Unfreeze Document to Allow Editing" : "Freeze / Lock Document against Changes"}
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  {(selectedPolicy.is_frozen || selectedPolicy.status === 'FROZEN') ? 'Unfreeze Document' : 'Freeze Document'}
+                </button>
+
+                {onDeletePolicy && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const isFrozen = selectedPolicy.is_frozen || selectedPolicy.status === 'FROZEN';
+                      let confirmMsg = `Are you sure you want to delete policy record [${selectedPolicy.policy_no}] "${selectedPolicy.policy_name}"?`;
+                      if (isFrozen) {
+                        confirmMsg = `🔒 Policy [${selectedPolicy.policy_no}] is currently FROZEN / LOCKED.\nAre you sure you want to override the lock and delete this record?`;
+                      }
+                      if (window.confirm(confirmMsg)) {
+                        onDeletePolicy(selectedPolicy.id);
+                        setSelectedPolicy(null);
+                        setIsEditingPolicy(false);
+                        showToast(`✓ Deleted policy record [${selectedPolicy.policy_no}]`);
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-rose-600/80 hover:bg-rose-600 text-white rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 border border-rose-500 shadow-md"
+                    title="Delete Policy Record"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete Record
+                  </button>
+                )}
+
+                <button
                   onClick={() => {
                     setEmailPolicy(selectedPolicy);
                     setEmailRecipient(client?.email || 'compliance@smartpro.ae');
@@ -2657,6 +2970,22 @@ export default function PolicyFrameworksSetup({
                     </h3>
                     <span className="text-[10px] text-slate-400">Edits render live in A4</span>
                   </div>
+
+                  {(selectedPolicy.is_frozen || selectedPolicy.status === 'FROZEN') && (
+                    <div className="p-3 bg-cyan-950/80 border border-cyan-500/50 rounded-xl text-cyan-200 text-xs font-bold flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Lock className="w-4 h-4 text-cyan-400 shrink-0" />
+                        <span>🔒 Document is FROZEN & LOCKED. Click 'Unfreeze Document' to allow edits.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleFreezePolicy(selectedPolicy)}
+                        className="px-2.5 py-1 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black rounded-lg text-xs cursor-pointer shrink-0"
+                      >
+                        Unfreeze
+                      </button>
+                    </div>
+                  )}
 
                   <div className="space-y-3">
                     <div>
@@ -3138,6 +3467,101 @@ export default function PolicyFrameworksSetup({
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
               >
                 <Trash2 className="w-3.5 h-3.5" /> Yes, Delete Record
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* COPY TO CLIENT MODAL */}
+      {copyClientModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 overflow-y-auto animate-fadeIn font-sans">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 overflow-hidden text-left">
+            <div className="p-5 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30">
+                  <Copy className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">Copy Master Policy to Client</h3>
+                  <p className="text-[11px] text-slate-400">Assign &amp; adapt policy document title for target client</p>
+                </div>
+              </div>
+              <button onClick={() => setCopyClientModalOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-full cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs text-slate-700">
+              <div className="space-y-2">
+                <label className="block font-bold text-slate-800 mb-1">Target Client / Facility Name *</label>
+                {clients.length > 0 && (
+                  <select
+                    value={targetClientIdToCopy}
+                    onChange={e => {
+                      setTargetClientIdToCopy(e.target.value);
+                      const found = clients.find(c => c.id === e.target.value);
+                      if (found) {
+                        setCustomClientNameInput(found.company_name);
+                      }
+                    }}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-bold text-slate-900 text-xs focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">-- Or Select Existing Client Entity --</option>
+                    {clients.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.company_name} ({(c as any).type || (c as any).tier_group || 'Facility'})
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <input
+                  type="text"
+                  value={customClientNameInput}
+                  onChange={e => setCustomClientNameInput(e.target.value)}
+                  placeholder="Enter Target Client Facility Name (e.g. Al Mafraq Dental Center)"
+                  className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-bold text-slate-900 text-xs focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2">
+                <div className="font-bold text-slate-900 flex items-center justify-between">
+                  <span>Selected Policies ({policiesToCopy.length}):</span>
+                  <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-extrabold">
+                    Auto-Branding Active
+                  </span>
+                </div>
+                <div className="max-h-40 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-200/60 custom-scrollbar">
+                  {policiesToCopy.map((p, idx) => {
+                    const targetName = (clients.find(c => c.id === targetClientIdToCopy)?.company_name || customClientNameInput) || 'Target Facility';
+                    const adaptedTitle = resolveDocTitle(p.policy_name, targetName);
+                    return (
+                      <div key={idx} className="pt-2 first:pt-0">
+                        <div className="font-mono text-[10.5px] text-indigo-700 font-bold">{p.policy_no}</div>
+                        <div className="font-bold text-slate-900 text-[11px]">{adaptedTitle}</div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">Assigned Facility Name: <strong className="text-slate-800">{targetName}</strong></div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <p className="text-[11px] text-slate-600 leading-relaxed italic bg-amber-50/70 border border-amber-200/80 p-2.5 rounded-xl">
+                💡 When copied, the policy and procedure documents will automatically incorporate <strong>{(clients.find(c => c.id === targetClientIdToCopy)?.company_name || customClientNameInput) || 'the client'}</strong> into headers, control logs, and clause content.
+              </p>
+            </div>
+
+            <div className="p-4 bg-slate-100 border-t border-slate-200 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setCopyClientModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-white border border-slate-300 font-bold text-xs text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmCopyToClient}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-xs text-white cursor-pointer shadow-xs inline-flex items-center gap-1.5"
+              >
+                <Copy className="w-4 h-4" /> Confirm &amp; Copy Policy
               </button>
             </div>
           </div>

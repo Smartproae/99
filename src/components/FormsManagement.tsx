@@ -259,11 +259,13 @@ export default function FormsManagement({
 
   // Filter client forms based on active facility/client tenant
   const clientForms = React.useMemo(() => {
-    if (!activeClientId && !client?.company_name) return forms;
+    if (!activeClientId) return forms;
 
     return forms.filter(f => {
       // Direct match on activeClientId
-      if (activeClientId && f.client_id === activeClientId) return true;
+      if (f.client_id) {
+        return f.client_id === activeClientId;
+      }
 
       // Direct match on active facility name
       if (client?.company_name) {
@@ -274,13 +276,8 @@ export default function FormsManagement({
         }
       }
 
-      // Default/global template forms without explicit client_id or 'c1'
-      if (!f.client_id || f.client_id === 'c1') {
-        const fFac = ((f as any).facility_name || (f as any).branch_name || (f as any).company_name || '').trim();
-        // If the form specifies a different facility name, don't show it for another active facility
-        if (fFac && client?.company_name && !fFac.toLowerCase().includes(client.company_name.toLowerCase()) && !client.company_name.toLowerCase().includes(fFac.toLowerCase())) {
-          return false;
-        }
+      // Allow global templates without client_id for default client c1 only
+      if (!f.client_id && activeClientId === 'c1') {
         return true;
       }
 

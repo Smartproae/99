@@ -66,7 +66,11 @@ const PHYSICAL_CATEGORIES = [
   'Firewall',
   'IOT devices',
   'CCTV',
-  'Screen'
+  'Screen',
+  'NAS',
+  'SSD',
+  'HDD',
+  'USB'
 ] as const;
 
 const NESTED_OPTIONS: Record<string, string[]> = {
@@ -74,7 +78,11 @@ const NESTED_OPTIONS: Record<string, string[]> = {
   'Server': ['Rack Server', 'Tower Server', 'Cloud Server'],
   'Printer': ['Multi function', 'Standalone'],
   'CCTV': ['NVR', 'Camera', 'CCTV Switch'],
-  'Screen': ['TV', 'Monitor']
+  'Screen': ['TV', 'Monitor'],
+  'NAS': ['Synology', 'QNAP', 'SAN / Enterprise Storage', 'Custom Storage Server', 'Other NAS'],
+  'SSD': ['NVMe M.2 SSD', 'SATA 2.5" SSD', 'External Portable SSD', 'Enterprise PCIe SSD', 'mSATA SSD'],
+  'HDD': ['Internal SATA 3.5" HDD', 'Internal SATA 2.5" HDD', 'External USB HDD', 'Enterprise SAS HDD', 'RAID Array Disk'],
+  'USB': ['USB Flash Drive', 'Encrypted Hardware USB', 'Security Dongle Key', 'External Hard Drive / Dock']
 };
 
 const BIOMEDICAL_CATEGORIES = [
@@ -164,6 +172,21 @@ const getIsoStandardCIA = (type: string) => {
       c: 3, i: 3, a: 3,
       remarks: 'Endpoint/Periphery node: Printer or multifunction scan device requiring secure print releasing.'
     };
+  } else if (lower.includes('nas')) {
+    return {
+      c: 5, i: 5, a: 5,
+      remarks: 'ISO 27001 Data Storage Control: Network Attached Storage (NAS) hosting critical central backups and patient media files.'
+    };
+  } else if (lower.includes('ssd') || lower.includes('hdd')) {
+    return {
+      c: 4, i: 4, a: 4,
+      remarks: 'Storage Media Drive: Houses operating system partitions, confidential databases, or local backup archives.'
+    };
+  } else if (lower.includes('usb')) {
+    return {
+      c: 4, i: 3, a: 3,
+      remarks: 'Removable USB Storage: High risk endpoint media requiring hardware encryption and strict Endpoint DLP policy enforcement.'
+    };
   } else if (lower.includes('ups')) {
     return {
       c: 1, i: 3, a: 5,
@@ -232,6 +255,10 @@ const generateNextAssetCode = (type: string, category: string, subCategory: stri
   else if (combined.includes('emr') || type.includes('Software')) prefix = 'AST-SFT';
   else if (combined.includes('cctv') || combined.includes('camera')) prefix = 'AST-CCT';
   else if (combined.includes('printer')) prefix = 'AST-PRN';
+  else if (combined.includes('nas')) prefix = 'AST-NAS';
+  else if (combined.includes('ssd')) prefix = 'AST-SSD';
+  else if (combined.includes('hdd')) prefix = 'AST-HDD';
+  else if (combined.includes('usb')) prefix = 'AST-USB';
   else if (combined.includes('ups')) prefix = 'AST-UPS';
   else prefix = 'AST-GEN';
 
@@ -302,6 +329,12 @@ export default function AssetRegister({
   const [iVal, setIVal] = useState<number>(3);
   const [aVal, setAVal] = useState<number>(3);
   const [ciaTip, setCiaTip] = useState<string>('');
+
+  // Verified status filter and modal states
+  const [verifiedFilter, setVerifiedFilter] = useState<'ALL' | 'VERIFIED' | 'UNVERIFIED'>('ALL');
+  const [isVerified, setIsVerified] = useState<boolean>(false);
+  const [verifiedBy, setVerifiedBy] = useState<string>('');
+  const [verificationNotes, setVerificationNotes] = useState<string>('');
 
   // Risk integration trigger
   const [addToRiskRegister, setAddToRiskRegister] = useState<boolean>(true);
@@ -1880,6 +1913,10 @@ Lead Auditor / Reviewer`);
     setVersion('');
     setDepartment('');
     
+    setIsVerified(false);
+    setVerifiedBy('');
+    setVerificationNotes('');
+
     setAddToRiskRegister(true);
     setEditingAsset(null);
     setIsAdding(true);
@@ -1918,6 +1955,10 @@ Lead Auditor / Reviewer`);
     setPpmDueDate(asset.ppm_due_date || '');
     setVersion(asset.version || '');
     setDepartment(asset.department || '');
+
+    setIsVerified(!!asset.is_verified);
+    setVerifiedBy(asset.verified_by || '');
+    setVerificationNotes(asset.verification_notes || '');
 
     setCVal(asset.c_val || 3);
     setIVal(asset.i_val || 3);
@@ -1980,6 +2021,10 @@ Lead Auditor / Reviewer`);
       c_val: cVal,
       i_val: iVal,
       a_val: aVal,
+      is_verified: isVerified,
+      verified_at: isVerified ? (editingAsset?.verified_at || new Date().toISOString()) : undefined,
+      verified_by: isVerified ? (verifiedBy || owner || 'Asset Auditor') : undefined,
+      verification_notes: isVerified ? verificationNotes : undefined,
       created_at: editingAsset?.created_at || new Date().toISOString()
     };
 
@@ -2034,6 +2079,36 @@ Lead Auditor / Reviewer`);
 
     setIsAdding(false);
     setEditingAsset(null);
+  };
+
+  const handleToggleVerify = (asset: Asset) => {
+    const updated: Asset = {
+      ...asset,
+      is_verified: !asset.is_verified,
+      verified_at: !asset.is_verified ? new Date().toISOString() : undefined,
+      verified_by: !asset.is_verified ? (owner || 'System Auditor') : undefined
+    };
+    if (onUpdateAsset) {
+      onUpdateAsset(updated);
+    }
+  };
+
+  const handleBulkVerify = () => {
+    if (selectedAssetIds.length === 0) return;
+    const activeAssets = assets.filter(a => a.client_id === activeClientId);
+    selectedAssetIds.forEach(id => {
+      const target = activeAssets.find(a => a.id === id);
+      if (target && !target.is_verified && onUpdateAsset) {
+        onUpdateAsset({
+          ...target,
+          is_verified: true,
+          verified_at: new Date().toISOString(),
+          verified_by: 'System Auditor'
+        });
+      }
+    });
+    alert(`Successfully marked ${selectedAssetIds.length} assets as Verified!`);
+    setSelectedAssetIds([]);
   };
 
   const handleDelete = (id: string) => {
@@ -2109,7 +2184,12 @@ Lead Auditor / Reviewer`);
       (selectedTab === 'BIOMEDICAL' && a.asset_type === 'Biomedical Asset') ||
       (selectedTab === 'SOFTWARE' && a.asset_type === 'Software Asset');
 
-    return matchesSearch && matchesTab;
+    const matchesVerified = 
+      verifiedFilter === 'ALL' ||
+      (verifiedFilter === 'VERIFIED' && a.is_verified) ||
+      (verifiedFilter === 'UNVERIFIED' && !a.is_verified);
+
+    return matchesSearch && matchesTab && matchesVerified;
   });
 
   // De-duplicate software names if active tab is SOFTWARE
@@ -2937,7 +3017,7 @@ Apex Cloud EMR Database\tEMR main software suite\tNot Applicable\tSoftware Asset
       </div>
 
       {/* Overview Stat Widgets */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3.5">
         
         {/* Total Assets card */}
         <div 
@@ -2949,12 +3029,12 @@ Apex Cloud EMR Database\tEMR main software suite\tNot Applicable\tSoftware Asset
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className={`text-[10px] font-extrabold uppercase tracking-wider font-mono ${selectedTab === 'ALL' ? 'text-slate-300' : 'text-slate-400'}`}>All Assets Registry</span>
+            <span className={`text-[10px] font-extrabold uppercase tracking-wider font-mono ${selectedTab === 'ALL' ? 'text-slate-300' : 'text-slate-400'}`}>All Registry</span>
             <Layers className={`w-4 h-4 ${selectedTab === 'ALL' ? 'text-emerald-400' : 'text-slate-500'}`} />
           </div>
           <div className="flex items-baseline gap-2 mt-3">
             <span className="text-2xl font-black tracking-tight">{clientAssets.length}</span>
-            <span className={`text-[10px] font-bold ${selectedTab === 'ALL' ? 'text-slate-300' : 'text-slate-400'}`}>Nodes Active</span>
+            <span className={`text-[10px] font-bold ${selectedTab === 'ALL' ? 'text-slate-300' : 'text-slate-400'}`}>Nodes</span>
           </div>
         </div>
 
@@ -2968,14 +3048,14 @@ Apex Cloud EMR Database\tEMR main software suite\tNot Applicable\tSoftware Asset
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className={`text-[10px] font-extrabold uppercase tracking-wider font-mono ${selectedTab === 'PHYSICAL' ? 'text-emerald-100' : 'text-slate-400'}`}>Physical IT Assets</span>
+            <span className={`text-[10px] font-extrabold uppercase tracking-wider font-mono ${selectedTab === 'PHYSICAL' ? 'text-emerald-100' : 'text-slate-400'}`}>Physical IT</span>
             <HardDrive className={`w-4 h-4 ${selectedTab === 'PHYSICAL' ? 'text-white' : 'text-slate-500'}`} />
           </div>
           <div className="flex items-baseline gap-2 mt-3">
             <span className="text-2xl font-black tracking-tight">
               {clientAssets.filter(a => a.asset_type === 'Physical Asset' || a.asset_type === 'IT Asset' || (!a.asset_type)).length}
             </span>
-            <span className={`text-[10px] font-bold ${selectedTab === 'PHYSICAL' ? 'text-emerald-100' : 'text-slate-400'}`}>Physical Units</span>
+            <span className={`text-[10px] font-bold ${selectedTab === 'PHYSICAL' ? 'text-emerald-100' : 'text-slate-400'}`}>Units</span>
           </div>
         </div>
 
@@ -2989,14 +3069,14 @@ Apex Cloud EMR Database\tEMR main software suite\tNot Applicable\tSoftware Asset
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className={`text-[10px] font-extrabold uppercase tracking-wider font-mono ${selectedTab === 'BIOMEDICAL' ? 'text-blue-100' : 'text-slate-400'}`}>Biomedical Assets</span>
+            <span className={`text-[10px] font-extrabold uppercase tracking-wider font-mono ${selectedTab === 'BIOMEDICAL' ? 'text-blue-100' : 'text-slate-400'}`}>Biomedical</span>
             <Activity className={`w-4 h-4 ${selectedTab === 'BIOMEDICAL' ? 'text-white' : 'text-slate-500'}`} />
           </div>
           <div className="flex items-baseline gap-2 mt-3">
             <span className="text-2xl font-black tracking-tight">
               {clientAssets.filter(a => a.asset_type === 'Biomedical Asset').length}
             </span>
-            <span className={`text-[10px] font-bold ${selectedTab === 'BIOMEDICAL' ? 'text-blue-100' : 'text-slate-400'}`}>Medical Machines</span>
+            <span className={`text-[10px] font-bold ${selectedTab === 'BIOMEDICAL' ? 'text-blue-100' : 'text-slate-400'}`}>Machines</span>
           </div>
         </div>
 
@@ -3010,14 +3090,35 @@ Apex Cloud EMR Database\tEMR main software suite\tNot Applicable\tSoftware Asset
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className={`text-[10px] font-extrabold uppercase tracking-wider font-mono ${selectedTab === 'SOFTWARE' ? 'text-indigo-100' : 'text-slate-400'}`}>Software Assets</span>
-            <ShieldCheck className={`w-4 h-4 ${selectedTab === 'SOFTWARE' ? 'text-white' : 'text-slate-500'}`} />
+            <span className={`text-[10px] font-extrabold uppercase tracking-wider font-mono ${selectedTab === 'SOFTWARE' ? 'text-indigo-100' : 'text-slate-400'}`}>Software</span>
+            <FileText className={`w-4 h-4 ${selectedTab === 'SOFTWARE' ? 'text-white' : 'text-slate-500'}`} />
           </div>
           <div className="flex items-baseline gap-2 mt-3">
             <span className="text-2xl font-black tracking-tight">
               {clientAssets.filter(a => a.asset_type === 'Software Asset').length}
             </span>
-            <span className={`text-[10px] font-bold ${selectedTab === 'SOFTWARE' ? 'text-indigo-100' : 'text-slate-400'}`}>Applications</span>
+            <span className={`text-[10px] font-bold ${selectedTab === 'SOFTWARE' ? 'text-indigo-100' : 'text-slate-400'}`}>Apps</span>
+          </div>
+        </div>
+
+        {/* Verified Assets card */}
+        <div 
+          onClick={() => setVerifiedFilter(prev => prev === 'VERIFIED' ? 'ALL' : 'VERIFIED')}
+          className={`p-4 rounded-2xl border text-left cursor-pointer transition-all ${
+            verifiedFilter === 'VERIFIED'
+              ? 'bg-teal-700 border-teal-700 text-white shadow-md'
+              : 'bg-white border-slate-100 hover:border-slate-200 text-slate-800'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className={`text-[10px] font-extrabold uppercase tracking-wider font-mono ${verifiedFilter === 'VERIFIED' ? 'text-teal-100' : 'text-slate-400'}`}>Verified Status</span>
+            <ShieldCheck className={`w-4 h-4 ${verifiedFilter === 'VERIFIED' ? 'text-teal-200' : 'text-emerald-500'}`} />
+          </div>
+          <div className="flex items-baseline gap-2 mt-3">
+            <span className="text-2xl font-black tracking-tight">
+              {clientAssets.filter(a => a.is_verified).length}
+            </span>
+            <span className={`text-[10px] font-bold ${verifiedFilter === 'VERIFIED' ? 'text-teal-100' : 'text-slate-400'}`}>/ {clientAssets.length} Verified</span>
           </div>
         </div>
 
@@ -3025,15 +3126,31 @@ Apex Cloud EMR Database\tEMR main software suite\tNot Applicable\tSoftware Asset
 
       {/* Control Actions / Search bar & Bulk Actions Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="flex items-center gap-3 w-full max-w-md bg-white px-4 py-2.5 rounded-xl border border-slate-100 shadow-xs">
-          <Search className="w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            placeholder="Search by name, code, category, OS, operator, owner..."
-            className="w-full text-xs text-slate-800 placeholder-slate-400 focus:outline-none"
-          />
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-3 w-full sm:w-72 bg-white px-4 py-2.5 rounded-xl border border-slate-100 shadow-xs">
+            <Search className="w-4 h-4 text-slate-400 shrink-0" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Search by name, code, OS, serial..."
+              className="w-full text-xs text-slate-800 placeholder-slate-400 focus:outline-none"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-100 shadow-xs">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="text-xs font-bold text-slate-600">Verification:</span>
+            <select
+              value={verifiedFilter}
+              onChange={e => setVerifiedFilter(e.target.value as any)}
+              className="text-xs font-bold text-slate-800 bg-transparent outline-none cursor-pointer"
+            >
+              <option value="ALL">All Assets</option>
+              <option value="VERIFIED">Verified Only</option>
+              <option value="UNVERIFIED">Unverified Only</option>
+            </select>
+          </div>
         </div>
 
         {selectedAssetIds.length > 0 && (
@@ -3042,6 +3159,15 @@ Apex Cloud EMR Database\tEMR main software suite\tNot Applicable\tSoftware Asset
               {selectedAssetIds.length} SELECTED
             </span>
             <div className="h-4 w-px bg-rose-200" />
+            <button
+              type="button"
+              onClick={handleBulkVerify}
+              className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-xs hover:scale-[1.02]"
+              title="Mark all selected assets as Verified"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              Mark Verified
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -3143,6 +3269,7 @@ Apex Cloud EMR Database\tEMR main software suite\tNot Applicable\tSoftware Asset
                   <th className="p-4 w-48">Vendor Name *</th>
                   <th className="p-4 w-32">Version *</th>
                   <th className="p-4 w-36 text-center">Classification *</th>
+                  <th className="p-4 w-28 text-center">Verified *</th>
                   <th className="p-4">Remarks & Special Details</th>
                   <th className="p-4 text-center w-20">Actions</th>
                 </tr>
@@ -3178,6 +3305,7 @@ Apex Cloud EMR Database\tEMR main software suite\tNot Applicable\tSoftware Asset
                   </th>
                   <th className="p-4 w-24 text-center">Status *</th>
                   <th className="p-4 w-28 text-center">Classification *</th>
+                  <th className="p-4 w-28 text-center">Verified *</th>
                   <th className="p-4 w-40">Remarks & Special Details</th>
                   <th className="p-4 text-center w-20">Actions</th>
                 </tr>
@@ -3241,6 +3369,32 @@ Apex Cloud EMR Database\tEMR main software suite\tNot Applicable\tSoftware Asset
                           }`}>
                             {asset.classification || 'CONFIDENTIAL'}
                           </span>
+                        </td>
+
+                        {/* Verified Status */}
+                        <td className="p-4 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleVerify(asset)}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold transition-all cursor-pointer ${
+                              asset.is_verified
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200 shadow-2xs'
+                                : 'bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200'
+                            }`}
+                            title={asset.is_verified ? `Verified on ${asset.verified_at ? asset.verified_at.split('T')[0] : 'recent audit'} by ${asset.verified_by || 'Auditor'}. Click to toggle.` : 'Click to mark software as Verified'}
+                          >
+                            {asset.is_verified ? (
+                              <>
+                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <span>Verified</span>
+                              </>
+                            ) : (
+                              <>
+                                <ShieldAlert className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <span>Unverified</span>
+                              </>
+                            )}
+                          </button>
                         </td>
 
                         {/* Remarks & Special Details */}
@@ -3425,6 +3579,32 @@ Apex Cloud EMR Database\tEMR main software suite\tNot Applicable\tSoftware Asset
                         }`}>
                           {asset.classification}
                         </span>
+                      </td>
+
+                      {/* Verified Status */}
+                      <td className="p-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleVerify(asset)}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold transition-all cursor-pointer ${
+                            asset.is_verified
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200 shadow-2xs'
+                              : 'bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200'
+                          }`}
+                          title={asset.is_verified ? `Verified on ${asset.verified_at ? asset.verified_at.split('T')[0] : 'recent audit'} by ${asset.verified_by || 'Auditor'}. Click to toggle.` : 'Click to mark asset as Verified'}
+                        >
+                          {asset.is_verified ? (
+                            <>
+                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span>Verified</span>
+                            </>
+                          ) : (
+                            <>
+                              <ShieldAlert className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span>Unverified</span>
+                            </>
+                          )}
+                        </button>
                       </td>
 
                       {/* Remarks & Custom details (PPM schedule / Software version / Manufacturer details) */}
@@ -3886,6 +4066,54 @@ Apex Cloud EMR Database\tEMR main software suite\tNot Applicable\tSoftware Asset
                   rows={3}
                   className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-50/50 outline-none transition-all font-medium text-slate-800"
                 />
+              </div>
+
+              {/* Verification Audit Section */}
+              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isVerified}
+                      onChange={e => setIsVerified(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      Mark Asset as Verified
+                    </span>
+                  </label>
+                  {isVerified && (
+                    <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full uppercase">
+                      Audit Compliant
+                    </span>
+                  )}
+                </div>
+
+                {isVerified && (
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200/60 animate-fade-in">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Verified By</label>
+                      <input
+                        type="text"
+                        value={verifiedBy}
+                        onChange={e => setVerifiedBy(e.target.value)}
+                        placeholder="Auditor or Manager Name"
+                        className="w-full text-xs p-2 rounded-xl border border-slate-200 bg-white focus:border-emerald-500 outline-none font-medium text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Verification Notes</label>
+                      <input
+                        type="text"
+                        value={verificationNotes}
+                        onChange={e => setVerificationNotes(e.target.value)}
+                        placeholder="Physical tag verified, serial match, etc."
+                        className="w-full text-xs p-2 rounded-xl border border-slate-200 bg-white focus:border-emerald-500 outline-none font-medium text-slate-800"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* CIA Values Header (ISO 27001 Standards alignment) */}

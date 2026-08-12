@@ -976,7 +976,9 @@ export default function MasterIndexModule({
   };
 
 
-  // Cross-Connect / Risk Register Document Mappings saved in Local Storage
+  const currentClientKey = activeClientId || client?.id || 'c1';
+
+  // Cross-Connect / Risk Register Document Mappings saved in Local Storage per client
   const [docMappings, setDocMappings] = useState<Record<string, {
     risk_ids: string[];
     asset_ids?: string[];
@@ -986,62 +988,74 @@ export default function MasterIndexModule({
     employee_ids?: string[];
     security_zone_ids?: string[];
     contract_ids?: string[];
-  }>>(() => {
+  }>>({});
+
+  useEffect(() => {
     try {
-      const saved = localStorage.getItem('sh_master_doc_mappings');
-      if (saved) return JSON.parse(saved);
+      const savedKey = `sh_master_doc_mappings_${currentClientKey}`;
+      const saved = localStorage.getItem(savedKey) || (currentClientKey === 'c1' ? localStorage.getItem('sh_master_doc_mappings') : null);
+      if (saved) setDocMappings(JSON.parse(saved));
+      else setDocMappings({});
     } catch (e) {
       console.warn('Failed to load sh_master_doc_mappings from localStorage', e);
     }
-    return {};
-  });
+  }, [currentClientKey]);
 
   useEffect(() => {
+    if (!currentClientKey) return;
     try {
-      localStorage.setItem('sh_master_doc_mappings', JSON.stringify(docMappings));
+      localStorage.setItem(`sh_master_doc_mappings_${currentClientKey}`, JSON.stringify(docMappings));
     } catch (e) {
       console.warn('Failed to save sh_master_doc_mappings to localStorage', e);
     }
-  }, [docMappings]);
+  }, [docMappings, currentClientKey]);
 
-  // Deleted Master Document IDs set for persistent permanent removal
-  const [deletedDocIds, setDeletedDocIds] = useState<string[]>(() => {
+  // Deleted Master Document IDs set for persistent permanent removal per client
+  const [deletedDocIds, setDeletedDocIds] = useState<string[]>([]);
+
+  useEffect(() => {
     try {
-      const saved = localStorage.getItem('sh_deleted_master_doc_ids');
-      if (saved) return JSON.parse(saved);
+      const savedKey = `sh_deleted_master_doc_ids_${currentClientKey}`;
+      const saved = localStorage.getItem(savedKey) || (currentClientKey === 'c1' ? localStorage.getItem('sh_deleted_master_doc_ids') : null);
+      if (saved) setDeletedDocIds(JSON.parse(saved));
+      else setDeletedDocIds([]);
     } catch (e) {
       console.warn('Failed to load sh_deleted_master_doc_ids from localStorage', e);
     }
-    return [];
-  });
+  }, [currentClientKey]);
 
   useEffect(() => {
+    if (!currentClientKey) return;
     try {
-      localStorage.setItem('sh_deleted_master_doc_ids', JSON.stringify(deletedDocIds));
+      localStorage.setItem(`sh_deleted_master_doc_ids_${currentClientKey}`, JSON.stringify(deletedDocIds));
     } catch (e) {
       console.warn('Failed to save sh_deleted_master_doc_ids to localStorage', e);
     }
-  }, [deletedDocIds]);
+  }, [deletedDocIds, currentClientKey]);
 
-  // Direct Master Documents saved in Local Storage
-  const [directDocs, setDirectDocs] = useState<MasterDocument[]>(() => {
+  // Direct Master Documents saved in Local Storage per client
+  const [directDocs, setDirectDocs] = useState<MasterDocument[]>([]);
+
+  useEffect(() => {
     try {
-      const saved = localStorage.getItem('sh_master_index_docs');
-      if (saved) return JSON.parse(saved);
+      const savedKey = `sh_master_index_docs_${currentClientKey}`;
+      const saved = localStorage.getItem(savedKey) || (currentClientKey === 'c1' ? localStorage.getItem('sh_master_index_docs') : null);
+      if (saved) setDirectDocs(JSON.parse(saved));
+      else setDirectDocs([]);
     } catch (e) {
       console.warn('Failed to load sh_master_index_docs from localStorage', e);
     }
-    return [];
-  });
+  }, [currentClientKey]);
 
   // Save direct Master Documents to local storage
   useEffect(() => {
+    if (!currentClientKey) return;
     try {
-      localStorage.setItem('sh_master_index_docs', JSON.stringify(directDocs));
+      localStorage.setItem(`sh_master_index_docs_${currentClientKey}`, JSON.stringify(directDocs));
     } catch (e) {
       console.warn('Failed to save sh_master_index_docs', e);
     }
-  }, [directDocs]);
+  }, [directDocs, currentClientKey]);
 
   // Combined Master Index - Dynamically synthesized across all platform modules
   const allMasterDocuments = useMemo<MasterDocument[]>(() => {
