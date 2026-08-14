@@ -15,6 +15,7 @@ import {
   Shield,
   ShieldCheck,
   Lock,
+  Unlock,
   Eye,
   Edit3,
   Clipboard,
@@ -43,13 +44,50 @@ import {
   ChevronRight,
   Info,
   Mail,
-  Send
+  Send,
+  Layers,
+  Save,
+  Database
 } from 'lucide-react';
 import { Client, User, Employee } from '../types';
-import { INITIAL_EMPLOYEES } from '../initialData';
+import { INITIAL_EMPLOYEES, INITIAL_CLIENTS } from '../initialData';
 import { exportToSinglePagePDF } from '../utils/pdfExport';
 import { printCurrentView, printDocument } from '../utils/printUtils';
 import { DocRefLoopSelector, DocRefLoopData, DEFAULT_LOOP_DOC_RECORDS } from './DocRefLoopSelector';
+
+// Robust ISO YYYY-MM-DD Date Conversion Helper for <input type="date"> Compatibility
+export const toISODate = (val: string | undefined | null): string => {
+  if (!val) return new Date().toISOString().slice(0, 10);
+  const str = String(val).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  // Parse formats such as "03 Aug 2026", "03/08/2026", "2026/08/03", etc.
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  return new Date().toISOString().slice(0, 10);
+};
+
+// Formatted Display Date Helper (e.g. 03 Aug 2026)
+export const formatDateDisplay = (val: string | undefined | null): string => {
+  if (!val) return '';
+  const iso = toISODate(val);
+  try {
+    const parts = iso.split('-');
+    if (parts.length === 3) {
+      const [y, m, d] = parts;
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const mIndex = parseInt(m, 10) - 1;
+      if (mIndex >= 0 && mIndex < 12) {
+        return `${d} ${monthNames[mIndex]} ${y}`;
+      }
+    }
+  } catch (e) {}
+  return val;
+};
 
 export interface HRDocumentLegalMetadata {
   documentName: string;
@@ -83,6 +121,7 @@ export interface HRDocumentEmployeeDetails {
   passportNumber: string;
   jobTitle: string;
   department: string;
+  joiningDate?: string;
 }
 
 export interface HRDocumentFacilityDetails {
@@ -136,6 +175,7 @@ interface HrDocumentsHubProps {
   client?: Client;
   currentUser?: User;
   employees?: Employee[];
+  allClients?: Client[];
   onAddEmailLog?: (recipient: string, subject: string, type: string, status?: 'SENT' | 'FAILED', body?: string) => void;
 }
 
@@ -158,23 +198,58 @@ export const getDocumentClassification = (doc?: Partial<HRDocumentRecord>): stri
   return customCls || 'CONFIDENTIAL';
 };
 
-export const getProcessedHtmlContent = (htmlContent: string | undefined, doc?: Partial<HRDocumentRecord>, fallbackCompanyName?: string): string => {
+export const getProcessedHtmlContent = (htmlContent: string | undefined, doc?: Partial<HRDocumentRecord>, fallbackCompanyName?: string, client?: Client): string => {
   if (!htmlContent) return '';
-  const compName = doc?.entityCredentials?.companyName || fallbackCompanyName || DEFAULT_ENTITY_CREDENTIALS.companyName;
-  const facName = doc?.facilityDetails?.facilityName || compName;
+  const compName = fallbackCompanyName || client?.company_name || doc?.entityCredentials?.companyName || DEFAULT_ENTITY_CREDENTIALS.companyName;
+  const facName = doc?.facilityDetails?.facilityName && doc.facilityDetails.facilityName !== DEFAULT_FACILITY_DETAILS.facilityName ? doc.facilityDetails.facilityName : compName;
   const empName = doc?.employeeDetails?.fullLegalName || DEFAULT_EMPLOYEE_DETAILS.fullLegalName;
 
-  return htmlContent
+  const authRepName = client?.auth_representative?.name || doc?.riskCommitteeContacts?.committeeChair || 'Aseef Sulaiman';
+  const clinicMgrName = client?.clinic_manager?.name || 'Clinic Manager';
+  const medDirName = client?.medical_director?.name || doc?.riskCommitteeContacts?.complianceOfficer || 'Raziya Aseef';
+  const itMgrName = client?.it_manager?.name || 'IT Manager / Admin';
+  const hrMgrName = client?.hr_manager?.name || 'HR Manager';
+
+  let processed = htmlContent
     .replace(/\(Company Name\)/gi, compName)
     .replace(/\[Company Name\]/gi, compName)
     .replace(/\[COMPANY_NAME\]/gi, compName)
+    .replace(/\{client\.company_name\}/gi, compName)
+    .replace(/\(client\.company_name\)/gi, compName)
+    .replace(/\[client\.company_name\]/gi, compName)
+    .replace(/client\.company_name/gi, compName)
     .replace(/\(Company\)/gi, compName)
     .replace(/\[Company\]/gi, compName)
     .replace(/\(Facility Name\)/gi, facName)
     .replace(/\[Facility Name\]/gi, facName)
     .replace(/\[FACILITY_NAME\]/gi, facName)
     .replace(/\(Employee Name\)/gi, empName)
-    .replace(/\[Employee Name\]/gi, empName);
+    .replace(/\[Employee Name\]/gi, empName)
+    .replace(/\(Authorized Representative\)/gi, authRepName)
+    .replace(/\[Authorized Representative\]/gi, authRepName)
+    .replace(/\(Auth Rep\)/gi, authRepName)
+    .replace(/\[AUTH_REP_NAME\]/gi, authRepName)
+    .replace(/\{auth_representative\.name\}/gi, authRepName)
+    .replace(/\(Clinic Manager\)/gi, clinicMgrName)
+    .replace(/\[Clinic Manager\]/gi, clinicMgrName)
+    .replace(/\[CLINIC_MGR_NAME\]/gi, clinicMgrName)
+    .replace(/\{clinic_manager\.name\}/gi, clinicMgrName)
+    .replace(/\(Medical Director\)/gi, medDirName)
+    .replace(/\[Medical Director\]/gi, medDirName)
+    .replace(/\[MED_DIR_NAME\]/gi, medDirName)
+    .replace(/\{medical_director\.name\}/gi, medDirName)
+    .replace(/\(IT Manager\)/gi, itMgrName)
+    .replace(/\[IT Manager\]/gi, itMgrName)
+    .replace(/\{it_manager\.name\}/gi, itMgrName)
+    .replace(/\(HR Manager\)/gi, hrMgrName)
+    .replace(/\[HR Manager\]/gi, hrMgrName)
+    .replace(/\{hr_manager\.name\}/gi, hrMgrName);
+
+  if (fallbackCompanyName && fallbackCompanyName !== 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L') {
+    processed = processed.replace(/AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W\.L\.L/gi, fallbackCompanyName);
+  }
+
+  return processed;
 };
 
 export const DEFAULT_LEGAL_METADATA: HRDocumentLegalMetadata = {
@@ -196,12 +271,13 @@ export const DEFAULT_ENTITY_CREDENTIALS: HRDocumentEntityCredentials = {
 };
 
 export const DEFAULT_EMPLOYEE_DETAILS: HRDocumentEmployeeDetails = {
-  fullLegalName: 'Staff Member',
-  employeeId: 'EMP-101',
+  fullLegalName: 'Raziya Aseef',
+  employeeId: 'SPRC-01',
   emiratesId: '784-1990-1234567-1',
   passportNumber: 'N1029384',
-  jobTitle: 'Healthcare Specialist',
-  department: 'Operations'
+  jobTitle: 'Manager',
+  department: 'Admin',
+  joiningDate: '2024-01-01'
 };
 
 export const DEFAULT_FACILITY_DETAILS: HRDocumentFacilityDetails = {
@@ -267,7 +343,7 @@ const SEED_HR_DOCUMENTS: HRDocumentRecord[] = [
       dutyOfficerPhone: '+971 2 600 8899',
       escalationEmail: 'compliance@alnahda.ae'
     },
-    htmlContent: `<p>This Employee Confidentiality Agreement is executed by and between <strong>(Company Name)</strong> (the "Employer") and the Employee. The Employee acknowledges that during the course of employment at <strong>(Company Name)</strong>, they will have access to protected patient health information (PHI), MALAFFI EMR databases, proprietary clinical protocols, and internal network infrastructure.</p><p>The Employee agrees to maintain strict confidentiality and shall not disclose or transmit any proprietary information of <strong>(Company Name)</strong> to unauthorized third parties without prior written consent, in strict compliance with UAE Federal Decree-Law No. 45 on Personal Data Protection and DOH ADHICS security frameworks.</p>`,
+    htmlContent: `<p>This Employee Confidentiality Agreement is executed by and between <strong>(Company Name)</strong> (the "Employer") and the Employee. The Employee acknowledges that during the course of employment at <strong>(Company Name)</strong>, they will have access to protected patient health information (PHI), MALAFFI EMR databases, proprietary clinical protocols, and internal network infrastructure.</p><p>The Employee agrees to maintain strict confidentiality and shall not disclose or transmit any proprietary information of <strong>(Company Name)</strong> to unauthorized third parties without prior written consent, in strict compliance with UAE Federal Decree-Law No. 45 on Personal Data Protection and DOH ADHICS security frameworks.</p><div style="margin-top: 14px; padding: 10px; background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px;"><h4 style="margin: 0 0 6px 0; font-size: 11px; font-weight: 800; text-transform: uppercase; color: #0f172a; letter-spacing: 0.05em;">Facility Committee Signatory Controls</h4><p style="margin: 0 0 6px 0; font-size: 10px; color: #475569;">This agreement is maintained and governed under the authority of the active Facility Management Committee Contacts:</p><table style="width: 100%; text-align: left; font-size: 10px; border-collapse: collapse; background-color: #ffffff; border: 1px solid #cbd5e1;"><thead><tr style="background-color: #f1f5f9; border-bottom: 1px solid #cbd5e1; color: #0f172a;"><th style="padding: 5px 8px; font-weight: 700;">Committee Role</th><th style="padding: 5px 8px; font-weight: 700;">Designated Contact Person</th></tr></thead><tbody><tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 5px 8px; font-weight: 600; color: #334155;">Authorized Representative</td><td style="padding: 5px 8px; font-weight: 700; color: #0f172a;">(Authorized Representative)</td></tr><tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 5px 8px; font-weight: 600; color: #334155;">Clinic Manager</td><td style="padding: 5px 8px; font-weight: 700; color: #0f172a;">(Clinic Manager)</td></tr><tr><td style="padding: 5px 8px; font-weight: 600; color: #334155;">Medical Director</td><td style="padding: 5px 8px; font-weight: 700; color: #0f172a;">(Medical Director)</td></tr></tbody></table></div>`,
     employeeSignature: {
       signedBy: 'Zayed Al-Maktoum',
       signerRole: 'Employee',
@@ -390,10 +466,10 @@ const SEED_HR_DOCUMENTS: HRDocumentRecord[] = [
       nextReviewDate: '15 Jan 2027'
     },
     entityCredentials: {
-      companyName: 'Emirates Corporate Solutions LLC',
-      tradeLicenseNo: 'CN-1029384',
+      companyName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      tradeLicenseNo: 'CN-1005168',
       emirateJurisdiction: 'Abu Dhabi',
-      registeredAddress: 'P.O. Box 45000, Al Khatem Tower, ADGM Square, Abu Dhabi, UAE'
+      registeredAddress: 'Abu Dhabi, UAE'
     },
     employeeDetails: {
       fullLegalName: 'Mariam Al-Hassani',
@@ -404,17 +480,17 @@ const SEED_HR_DOCUMENTS: HRDocumentRecord[] = [
       department: 'Cybersecurity Operations'
     },
     facilityDetails: {
-      facilityName: 'Emirates Corporate Operations Center',
-      facilityLicenseNo: 'MOHAP-FL-70211',
-      dohMohapRegNo: 'DOH-REG-2026-440B',
-      facilityLocation: 'Al Khatem Tower, ADGM Square, Abu Dhabi, UAE',
-      clinicalWing: 'Cybersecurity & Internal Audit Wing'
+      facilityName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      facilityLicenseNo: '',
+      dohMohapRegNo: '',
+      facilityLocation: 'Abu Dhabi, UAE',
+      clinicalWing: ''
     },
     riskCommitteeContacts: {
       committeeChair: 'Dr. Tariq Al-Mansoori (Risk Review Chair)',
       complianceOfficer: 'Fatima Al-Suwaidi (Risk Officer)',
       dutyOfficerPhone: '+971 2 600 7700',
-      escalationEmail: 'audit-risk@emiratescorp.ae'
+      escalationEmail: 'compliance@alnahda.ae'
     },
     htmlContent: `<p>This Employment Agreement defines the terms of service, intellectual property ownership, and strict non-disclosure obligations for the Employee during and after employment.</p>`,
     employeeSignature: {
@@ -435,11 +511,644 @@ const SEED_HR_DOCUMENTS: HRDocumentRecord[] = [
     },
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'doc-empl-8801',
+    title: 'Information Security & ADHICS Acceptable Use Policy Acknowledgement',
+    category: 'POLICY_ACK',
+    status: 'APPROVED_FROZEN',
+    currentVersion: '1.2',
+    isFrozen: true,
+    prePrintedLetterheadMode: false,
+    includeHrManagerSignatory: true,
+    isUaePassSealed: true,
+    legalMetadata: {
+      documentName: 'Information Security & ADHICS Acceptable Use Policy Acknowledgement',
+      referenceCode: 'REF-HR-SEC-8801',
+      legalStandards: 'ADHICS Standards v2.0 & ISO 27001 Controls A.7.2',
+      lawReference: 'DOH ADHICS Security Standard A.7',
+      issueDate: '10 Feb 2026',
+      effectiveDate: '10 Feb 2026',
+      nextReviewDate: '10 Feb 2027',
+      documentClassification: 'RESTRICTED'
+    },
+    entityCredentials: {
+      companyName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      tradeLicenseNo: 'CN-1005168',
+      emirateJurisdiction: 'Abu Dhabi',
+      registeredAddress: 'Abu Dhabi, UAE'
+    },
+    employeeDetails: {
+      fullLegalName: 'Ahmed Al-Mansoori',
+      employeeId: 'EMP-10442',
+      emiratesId: '784-1988-9876543-1',
+      passportNumber: 'N4488331',
+      jobTitle: 'Senior Infrastructure Engineer',
+      department: 'IT & Infrastructure'
+    },
+    facilityDetails: {
+      facilityName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      facilityLicenseNo: '',
+      dohMohapRegNo: '',
+      facilityLocation: 'Abu Dhabi, UAE',
+      clinicalWing: ''
+    },
+    riskCommitteeContacts: {
+      committeeChair: 'Risk Review Committee Chair',
+      complianceOfficer: 'Senior Governance Lead',
+      dutyOfficerPhone: '+971 2 600 8899',
+      escalationEmail: 'compliance@alnahda.ae'
+    },
+    htmlContent: `<p>The Employee hereby confirms agreement to adhere strictly to all Information Security Policies, ADHICS Acceptable Use Rules, credential management standards, and workstation lock requirements established by <strong>AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L</strong>.</p>`,
+    employeeSignature: {
+      signedBy: 'Ahmed Al-Mansoori',
+      signerRole: 'Employee',
+      signedAt: '10/02/2026 09:30',
+      isUaePassVerified: true,
+      verificationHash: 'SHA256:8F9E0A1B2C3D4E5F',
+      ipAddress: '194.170.16.2'
+    },
+    employerSignature: {
+      signedBy: 'Rashid Al-Nuaimi',
+      signerRole: 'Employer Signatory',
+      signedAt: '10/02/2026 09:35',
+      isUaePassVerified: true,
+      verificationHash: 'SHA256:1A2B3C4D5E6F7A8B',
+      ipAddress: '194.170.16.1'
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'doc-empl-8802',
+    title: 'Remote Work & BYOD Mobile Security Protocol Agreement',
+    category: 'POLICY_ACK',
+    status: 'APPROVED_FROZEN',
+    currentVersion: '1.0',
+    isFrozen: true,
+    prePrintedLetterheadMode: false,
+    includeHrManagerSignatory: true,
+    isUaePassSealed: true,
+    legalMetadata: {
+      documentName: 'Remote Work & BYOD Mobile Security Protocol Agreement',
+      referenceCode: 'REF-HR-BYOD-8802',
+      legalStandards: 'UAE Cyber Security Council & ADHICS Remote Access Framework',
+      lawReference: 'Federal Decree-Law No. 45',
+      issueDate: '20 Mar 2026',
+      effectiveDate: '20 Mar 2026',
+      nextReviewDate: '20 Mar 2027',
+      documentClassification: 'CONFIDENTIAL'
+    },
+    entityCredentials: {
+      companyName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      tradeLicenseNo: 'CN-1005168',
+      emirateJurisdiction: 'Abu Dhabi',
+      registeredAddress: 'Abu Dhabi, UAE'
+    },
+    employeeDetails: {
+      fullLegalName: 'Ahmed Al-Mansoori',
+      employeeId: 'EMP-10442',
+      emiratesId: '784-1988-9876543-1',
+      passportNumber: 'N4488331',
+      jobTitle: 'Senior Infrastructure Engineer',
+      department: 'IT & Infrastructure'
+    },
+    facilityDetails: {
+      facilityName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      facilityLicenseNo: '',
+      dohMohapRegNo: '',
+      facilityLocation: 'Abu Dhabi, UAE',
+      clinicalWing: ''
+    },
+    riskCommitteeContacts: {
+      committeeChair: 'Risk Review Committee Chair',
+      complianceOfficer: 'Senior Governance Lead',
+      dutyOfficerPhone: '+971 2 600 8899',
+      escalationEmail: 'compliance@alnahda.ae'
+    },
+    htmlContent: `<p>This Remote Work and BYOD Agreement outlines mandatory endpoint controls, mandatory VPN tunneling, encrypted storage mandates, and remote-wipe permissions for personal devices connecting to corporate networks.</p>`,
+    employeeSignature: {
+      signedBy: 'Ahmed Al-Mansoori',
+      signerRole: 'Employee',
+      signedAt: '20/03/2026 11:15',
+      isUaePassVerified: true,
+      verificationHash: 'SHA256:7B8C9D0E1F2A3B4C',
+      ipAddress: '194.170.16.2'
+    },
+    employerSignature: {
+      signedBy: 'Rashid Al-Nuaimi',
+      signerRole: 'Employer Signatory',
+      signedAt: '20/03/2026 11:20',
+      isUaePassVerified: true,
+      verificationHash: 'SHA256:5C6D7E8F9A0B1C2D',
+      ipAddress: '194.170.16.1'
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'doc-empl-8803',
+    title: 'Conflict of Interest & Corporate Ethics Declaration',
+    category: 'COMPLIANCE',
+    status: 'APPROVED_FROZEN',
+    currentVersion: '1.0',
+    isFrozen: true,
+    prePrintedLetterheadMode: false,
+    includeHrManagerSignatory: true,
+    isUaePassSealed: true,
+    legalMetadata: {
+      documentName: 'Conflict of Interest & Corporate Ethics Declaration',
+      referenceCode: 'REF-HR-ETH-8803',
+      legalStandards: 'UAE Federal Commercial Code & Internal Anti-Bribery Standards',
+      lawReference: 'Federal Law No. 32 of 2021',
+      issueDate: '05 Apr 2026',
+      effectiveDate: '05 Apr 2026',
+      nextReviewDate: '05 Apr 2027',
+      documentClassification: 'RESTRICTED'
+    },
+    entityCredentials: {
+      companyName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      tradeLicenseNo: 'CN-1005168',
+      emirateJurisdiction: 'Abu Dhabi',
+      registeredAddress: 'Abu Dhabi, UAE'
+    },
+    employeeDetails: {
+      fullLegalName: 'Fatima Al-Suwaidi',
+      employeeId: 'EMP-10012',
+      emiratesId: '784-1992-5544332-9',
+      passportNumber: 'N9911223',
+      jobTitle: 'HR & Governance Manager',
+      department: 'Human Resources'
+    },
+    facilityDetails: {
+      facilityName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      facilityLicenseNo: '',
+      dohMohapRegNo: '',
+      facilityLocation: 'Abu Dhabi, UAE',
+      clinicalWing: ''
+    },
+    riskCommitteeContacts: {
+      committeeChair: 'Risk Review Committee Chair',
+      complianceOfficer: 'Senior Governance Lead',
+      dutyOfficerPhone: '+971 2 600 8899',
+      escalationEmail: 'compliance@alnahda.ae'
+    },
+    htmlContent: `<p>The Employee declares that they have no outside commercial engagements, financial interests, or vendor relationships that present an unmitigated conflict of interest with <strong>AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L</strong>.</p>`,
+    employeeSignature: {
+      signedBy: 'Fatima Al-Suwaidi',
+      signerRole: 'Employee',
+      signedAt: '05/04/2026 10:00',
+      isUaePassVerified: true,
+      verificationHash: 'SHA256:4D5E6F7A8B9C0D1E',
+      ipAddress: '194.170.16.1'
+    },
+    employerSignature: {
+      signedBy: 'Rashid Al-Nuaimi',
+      signerRole: 'Employer Signatory',
+      signedAt: '05/04/2026 10:05',
+      isUaePassVerified: true,
+      verificationHash: 'SHA256:2E3F4A5B6C7D8E9F',
+      ipAddress: '194.170.16.1'
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'doc-empl-8804',
+    title: 'Health Data Protection & Malaffi EMR Access Authorization Form',
+    category: 'COMPLIANCE',
+    status: 'APPROVED_FROZEN',
+    currentVersion: '2.0',
+    isFrozen: true,
+    prePrintedLetterheadMode: false,
+    includeHrManagerSignatory: true,
+    isUaePassSealed: true,
+    legalMetadata: {
+      documentName: 'Health Data Protection & Malaffi EMR Access Authorization Form',
+      referenceCode: 'REF-HR-MLF-8804',
+      legalStandards: 'DOH ADHICS Security Standard & Malaffi Health Information Exchange Controls',
+      lawReference: 'Federal Law No. 2 of 2019 on Health Data',
+      issueDate: '12 May 2026',
+      effectiveDate: '12 May 2026',
+      nextReviewDate: '12 May 2027',
+      documentClassification: 'CONFIDENTIAL'
+    },
+    entityCredentials: {
+      companyName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      tradeLicenseNo: 'CN-1005168',
+      emirateJurisdiction: 'Abu Dhabi',
+      registeredAddress: 'Abu Dhabi, UAE'
+    },
+    employeeDetails: {
+      fullLegalName: 'Dr. Sarah Al-Dhaheri',
+      employeeId: 'EMP-10901',
+      emiratesId: '784-1985-1122334-5',
+      passportNumber: 'N5566778',
+      jobTitle: 'Clinical Audit Supervisor',
+      department: 'Medical Claims & Audit'
+    },
+    facilityDetails: {
+      facilityName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      facilityLicenseNo: '',
+      dohMohapRegNo: '',
+      facilityLocation: 'Abu Dhabi, UAE',
+      clinicalWing: ''
+    },
+    riskCommitteeContacts: {
+      committeeChair: 'Risk Review Committee Chair',
+      complianceOfficer: 'Senior Governance Lead',
+      dutyOfficerPhone: '+971 2 600 8899',
+      escalationEmail: 'compliance@alnahda.ae'
+    },
+    htmlContent: `<p>Authorized Health Data Access Form authorizing the Employee to view and process patient medical records in accordance with DOH Abu Dhabi regulations and Malaffi security protocols.</p>`,
+    employeeSignature: {
+      signedBy: 'Dr. Sarah Al-Dhaheri',
+      signerRole: 'Employee',
+      signedAt: '12/05/2026 15:20',
+      isUaePassVerified: true,
+      verificationHash: 'SHA256:9A8B7C6D5E4F3A2B',
+      ipAddress: '194.170.16.5'
+    },
+    employerSignature: {
+      signedBy: 'Rashid Al-Nuaimi',
+      signerRole: 'Employer Signatory',
+      signedAt: '12/05/2026 15:25',
+      isUaePassVerified: true,
+      verificationHash: 'SHA256:6F5E4D3C2B1A0F9E',
+      ipAddress: '194.170.16.1'
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'doc-empl-8805',
+    title: 'Occupational Health, Safety & Emergency Protocol Sign-off',
+    category: 'GENERAL_HR',
+    status: 'APPROVED_FROZEN',
+    currentVersion: '1.0',
+    isFrozen: true,
+    prePrintedLetterheadMode: false,
+    includeHrManagerSignatory: true,
+    isUaePassSealed: true,
+    legalMetadata: {
+      documentName: 'Occupational Health, Safety & Emergency Protocol Sign-off',
+      referenceCode: 'REF-HR-OHS-8805',
+      legalStandards: 'UAE OSHAD System Framework & Civil Defense Safety Codes',
+      lawReference: 'Federal Decree-Law No. 33',
+      issueDate: '01 Jun 2026',
+      effectiveDate: '01 Jun 2026',
+      nextReviewDate: '01 Jun 2027',
+      documentClassification: 'GENERAL'
+    },
+    entityCredentials: {
+      companyName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      tradeLicenseNo: 'CN-1005168',
+      emirateJurisdiction: 'Abu Dhabi',
+      registeredAddress: 'Abu Dhabi, UAE'
+    },
+    employeeDetails: {
+      fullLegalName: 'Dr. Sarah Al-Dhaheri',
+      employeeId: 'EMP-10901',
+      emiratesId: '784-1985-1122334-5',
+      passportNumber: 'N5566778',
+      jobTitle: 'Clinical Audit Supervisor',
+      department: 'Medical Claims & Audit'
+    },
+    facilityDetails: {
+      facilityName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      facilityLicenseNo: '',
+      dohMohapRegNo: '',
+      facilityLocation: 'Abu Dhabi, UAE',
+      clinicalWing: ''
+    },
+    riskCommitteeContacts: {
+      committeeChair: 'Risk Review Committee Chair',
+      complianceOfficer: 'Senior Governance Lead',
+      dutyOfficerPhone: '+971 2 600 8899',
+      escalationEmail: 'compliance@alnahda.ae'
+    },
+    htmlContent: `<p>Acknowledgement of receipt and training on workplace fire evacuation, emergency protocols, hazardous material handling, and occupational safety rules mandated under UAE OSHAD standards.</p>`,
+    employeeSignature: {
+      signedBy: 'Dr. Sarah Al-Dhaheri',
+      signerRole: 'Employee',
+      signedAt: '01/06/2026 09:00',
+      isUaePassVerified: true,
+      verificationHash: 'SHA256:1C2D3E4F5A6B7C8D',
+      ipAddress: '194.170.16.5'
+    },
+    employerSignature: {
+      signedBy: 'Rashid Al-Nuaimi',
+      signerRole: 'Employer Signatory',
+      signedAt: '01/06/2026 09:05',
+      isUaePassVerified: true,
+      verificationHash: 'SHA256:3B4C5D6E7F8A9B0C',
+      ipAddress: '194.170.16.1'
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'doc-empl-8806',
+    title: 'Annual Cyber Security Training & Phishing Awareness Certificate Record',
+    category: 'GENERAL_HR',
+    status: 'APPROVED_FROZEN',
+    currentVersion: '2026.1',
+    isFrozen: true,
+    prePrintedLetterheadMode: false,
+    includeHrManagerSignatory: true,
+    isUaePassSealed: true,
+    legalMetadata: {
+      documentName: 'Annual Cyber Security Training & Phishing Awareness Certificate Record',
+      referenceCode: 'REF-HR-TRN-8806',
+      legalStandards: 'ADHICS Security Control A.7.2.2 & ISO 27001 Awareness',
+      lawReference: 'DOH ADHICS Domain A.7',
+      issueDate: '18 Jun 2026',
+      effectiveDate: '18 Jun 2026',
+      nextReviewDate: '18 Jun 2027',
+      documentClassification: 'CONFIDENTIAL'
+    },
+    entityCredentials: {
+      companyName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      tradeLicenseNo: 'CN-1005168',
+      emirateJurisdiction: 'Abu Dhabi',
+      registeredAddress: 'Abu Dhabi, UAE'
+    },
+    employeeDetails: {
+      fullLegalName: 'Tariq Al-Nuaimi',
+      employeeId: 'EMP-10773',
+      emiratesId: '784-1993-3322110-4',
+      passportNumber: 'N8877665',
+      jobTitle: 'IT Risk Analyst',
+      department: 'Cybersecurity Operations'
+    },
+    facilityDetails: {
+      facilityName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      facilityLicenseNo: '',
+      dohMohapRegNo: '',
+      facilityLocation: 'Abu Dhabi, UAE',
+      clinicalWing: ''
+    },
+    riskCommitteeContacts: {
+      committeeChair: 'Risk Review Committee Chair',
+      complianceOfficer: 'Senior Governance Lead',
+      dutyOfficerPhone: '+971 2 600 8899',
+      escalationEmail: 'compliance@alnahda.ae'
+    },
+    htmlContent: `<p>Official training completion certificate verifying that the employee passed the 2026 Annual Cybersecurity, Ransomware Defense, Social Engineering, and ADHICS Compliance Assessment.</p>`,
+    employeeSignature: {
+      signedBy: 'Tariq Al-Nuaimi',
+      signerRole: 'Employee',
+      signedAt: '18/06/2026 16:45',
+      isUaePassVerified: true,
+      verificationHash: 'SHA256:5E6F7A8B9C0D1E2F',
+      ipAddress: '194.170.16.3'
+    },
+    employerSignature: {
+      signedBy: 'Rashid Al-Nuaimi',
+      signerRole: 'Employer Signatory',
+      signedAt: '18/06/2026 16:50',
+      isUaePassVerified: true,
+      verificationHash: 'SHA256:7A8B9C0D1E2F3A4B',
+      ipAddress: '194.170.16.1'
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'doc-empl-8807',
+    title: 'Incident Response Protocol & Whistleblower Acknowledgment',
+    category: 'COMPLIANCE',
+    status: 'APPROVED_FROZEN',
+    currentVersion: '1.1',
+    isFrozen: true,
+    prePrintedLetterheadMode: false,
+    includeHrManagerSignatory: true,
+    isUaePassSealed: true,
+    legalMetadata: {
+      documentName: 'Incident Response Protocol & Whistleblower Acknowledgment',
+      referenceCode: 'REF-HR-INC-8807',
+      legalStandards: 'ADHICS Domain A.16 Security Incident Management & UAE Whistleblower Guidelines',
+      lawReference: 'Federal Decree-Law No. 45',
+      issueDate: '02 Jul 2026',
+      effectiveDate: '02 Jul 2026',
+      nextReviewDate: '02 Jul 2027',
+      documentClassification: 'CONFIDENTIAL'
+    },
+    entityCredentials: {
+      companyName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      tradeLicenseNo: 'CN-1005168',
+      emirateJurisdiction: 'Abu Dhabi',
+      registeredAddress: 'Abu Dhabi, UAE'
+    },
+    employeeDetails: {
+      fullLegalName: 'Tariq Al-Nuaimi',
+      employeeId: 'EMP-10773',
+      emiratesId: '784-1993-3322110-4',
+      passportNumber: 'N8877665',
+      jobTitle: 'IT Risk Analyst',
+      department: 'Cybersecurity Operations'
+    },
+    facilityDetails: {
+      facilityName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      facilityLicenseNo: '',
+      dohMohapRegNo: '',
+      facilityLocation: 'Abu Dhabi, UAE',
+      clinicalWing: ''
+    },
+    riskCommitteeContacts: {
+      committeeChair: 'Risk Review Committee Chair',
+      complianceOfficer: 'Senior Governance Lead',
+      dutyOfficerPhone: '+971 2 600 8899',
+      escalationEmail: 'compliance@alnahda.ae'
+    },
+    htmlContent: `<p>Mandatory policy acknowledgement governing immediate 15-minute reporting requirements for security breaches, ransomware detection, patient data spillages, and protected whistleblower channels.</p>`,
+    employeeSignature: {
+      signedBy: 'Tariq Al-Nuaimi',
+      signerRole: 'Employee',
+      signedAt: '02/07/2026 11:30',
+      isUaePassVerified: true,
+      verificationHash: 'SHA256:2D3E4F5A6B7C8D9E',
+      ipAddress: '194.170.16.3'
+    },
+    employerSignature: {
+      signedBy: 'Rashid Al-Nuaimi',
+      signerRole: 'Employer Signatory',
+      signedAt: '02/07/2026 11:35',
+      isUaePassVerified: true,
+      verificationHash: 'SHA256:8C9D0E1F2A3B4C5D',
+      ipAddress: '194.170.16.1'
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'doc-empl-8808',
+    title: 'Offboarding Data Sanitization & Exit NDA Declaration',
+    category: 'SEPARATION',
+    status: 'APPROVED_FROZEN',
+    currentVersion: '1.0',
+    isFrozen: true,
+    prePrintedLetterheadMode: false,
+    includeHrManagerSignatory: true,
+    isUaePassSealed: true,
+    legalMetadata: {
+      documentName: 'Offboarding Data Sanitization & Exit NDA Declaration',
+      referenceCode: 'REF-HR-EXT-8808',
+      legalStandards: 'ADHICS Domain A.7.3 Termination & ISO 27001 Control A.8.1.4',
+      lawReference: 'Federal Decree-Law No. 33',
+      issueDate: '25 Jul 2026',
+      effectiveDate: '25 Jul 2026',
+      nextReviewDate: '25 Jul 2027',
+      documentClassification: 'RESTRICTED'
+    },
+    entityCredentials: {
+      companyName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      tradeLicenseNo: 'CN-1005168',
+      emirateJurisdiction: 'Abu Dhabi',
+      registeredAddress: 'Abu Dhabi, UAE'
+    },
+    employeeDetails: {
+      fullLegalName: 'Hassan Al-Zaabi',
+      employeeId: 'EMP-10119',
+      emiratesId: '784-1982-6677889-0',
+      passportNumber: 'N3344556',
+      jobTitle: 'Former Systems Administrator',
+      department: 'IT Infrastructure'
+    },
+    facilityDetails: {
+      facilityName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      facilityLicenseNo: '',
+      dohMohapRegNo: '',
+      facilityLocation: 'Abu Dhabi, UAE',
+      clinicalWing: ''
+    },
+    riskCommitteeContacts: {
+      committeeChair: 'Risk Review Committee Chair',
+      complianceOfficer: 'Senior Governance Lead',
+      dutyOfficerPhone: '+971 2 600 8899',
+      escalationEmail: 'compliance@alnahda.ae'
+    },
+    htmlContent: `<p>Formal exit sign-off attesting that the departing employee has returned all company assets, deleted all offline copies of proprietary information, and remains bound by permanent NDA covenants.</p>`,
+    employeeSignature: {
+      signedBy: 'Hassan Al-Zaabi',
+      signerRole: 'Employee',
+      signedAt: '25/07/2026 17:00',
+      isUaePassVerified: true,
+      verificationHash: 'SHA256:9E0A1B2C3D4E5F6A',
+      ipAddress: '194.170.16.8'
+    },
+    employerSignature: {
+      signedBy: 'Rashid Al-Nuaimi',
+      signerRole: 'Employer Signatory',
+      signedAt: '25/07/2026 17:05',
+      isUaePassVerified: true,
+      verificationHash: 'SHA256:3D4E5F6A7B8C9D0E',
+      ipAddress: '194.170.16.1'
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'doc-empl-8809',
+    title: 'Staff Anti-Solicitation & Non-Compete Covenant',
+    category: 'CONTRACT',
+    status: 'APPROVED_FROZEN',
+    currentVersion: '1.0',
+    isFrozen: true,
+    prePrintedLetterheadMode: false,
+    includeHrManagerSignatory: true,
+    isUaePassSealed: true,
+    legalMetadata: {
+      documentName: 'Staff Anti-Solicitation & Non-Compete Covenant',
+      referenceCode: 'REF-HR-NCP-8809',
+      legalStandards: 'MOHRE Executive Regulations & Federal Decree-Law No. 33 Article 10',
+      lawReference: 'Federal Decree-Law No. 33',
+      issueDate: '01 Aug 2026',
+      effectiveDate: '01 Aug 2026',
+      nextReviewDate: '01 Aug 2027',
+      documentClassification: 'CONFIDENTIAL'
+    },
+    entityCredentials: {
+      companyName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      tradeLicenseNo: 'CN-1005168',
+      emirateJurisdiction: 'Abu Dhabi',
+      registeredAddress: 'Abu Dhabi, UAE'
+    },
+    employeeDetails: {
+      fullLegalName: 'Fatima Al-Suwaidi',
+      employeeId: 'EMP-10012',
+      emiratesId: '784-1992-5544332-9',
+      passportNumber: 'N9911223',
+      jobTitle: 'HR & Governance Manager',
+      department: 'Human Resources'
+    },
+    facilityDetails: {
+      facilityName: 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L',
+      facilityLicenseNo: '',
+      dohMohapRegNo: '',
+      facilityLocation: 'Abu Dhabi, UAE',
+      clinicalWing: ''
+    },
+    riskCommitteeContacts: {
+      committeeChair: 'Risk Review Committee Chair',
+      complianceOfficer: 'Senior Governance Lead',
+      dutyOfficerPhone: '+971 2 600 8899',
+      escalationEmail: 'compliance@alnahda.ae'
+    },
+    htmlContent: `<p>Restrictive covenant protecting <strong>AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L</strong> against unauthorized client solicitation, employee poaching, and unfair competition for a period of 24 months post-employment.</p>`,
+    employeeSignature: {
+      signedBy: 'Fatima Al-Suwaidi',
+      signerRole: 'Employee',
+      signedAt: '01/08/2026 14:30',
+      isUaePassVerified: true,
+      verificationHash: 'SHA256:1A2B3C4D5E6F7A8B',
+      ipAddress: '194.170.16.1'
+    },
+    employerSignature: {
+      signedBy: 'Rashid Al-Nuaimi',
+      signerRole: 'Employer Signatory',
+      signedAt: '01/08/2026 14:35',
+      isUaePassVerified: true,
+      verificationHash: 'SHA256:7B8C9D0E1F2A3B4C',
+      ipAddress: '194.170.16.1'
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   }
 ];
 
-export default function HrDocumentsHub({ client, currentUser, employees, onAddEmailLog }: HrDocumentsHubProps) {
+export default function HrDocumentsHub({ client, currentUser, employees, allClients, onAddEmailLog }: HrDocumentsHubProps) {
   const currentClientKey = client?.id || 'c1';
+
+  // Compliance Consultant Master Detection
+  const isConsultantMode = currentClientKey === 'c0' || 
+    currentClientKey === 'SPRC' || 
+    client?.client_code === 'SPRC' || 
+    client?.id === 'c0' ||
+    Boolean(client?.company_name && client.company_name.toLowerCase().includes('smartpro')) || 
+    Boolean(client?.company_name && client.company_name.toLowerCase().includes('compliance consultant')) || 
+    Boolean(client?.facility_type && client.facility_type.toLowerCase().includes('consultan'));
+
+  // Available Clients List for Cross-Client & All-Client Batch Copying
+  const availableClientsList = React.useMemo(() => {
+    let list: Client[] = [];
+    if (allClients && allClients.length > 0) {
+      list = allClients;
+    } else {
+      try {
+        const saved = localStorage.getItem('sh_clients');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
+        }
+      } catch (e) {}
+    }
+    if (list.length === 0) list = INITIAL_CLIENTS;
+    if (client && !list.some(c => c.id === client.id)) {
+      list = [client, ...list];
+    }
+    return list;
+  }, [allClients, client]);
 
   // Roster of registered employees from Employee & Operator Management
   const effectiveEmployees = React.useMemo(() => {
@@ -456,76 +1165,188 @@ export default function HrDocumentsHub({ client, currentUser, employees, onAddEm
     return INITIAL_EMPLOYEES;
   }, [employees, currentClientKey]);
 
-  const [documents, setDocuments] = useState<HRDocumentRecord[]>([]);
-
-  useEffect(() => {
+  // Helper to load documents safely and synchronously from storage
+  const loadDocumentsFromStorage = (targetClientKey: string, isConsultant: boolean, targetClientObj?: Client | null): HRDocumentRecord[] => {
     try {
-      const savedKey = `${STORAGE_KEY}_${currentClientKey}`;
-      const saved = localStorage.getItem(savedKey) || (currentClientKey === 'c1' ? localStorage.getItem(STORAGE_KEY) : null);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const mapped = parsed.map((doc: any) => {
-            const empDetails = {
-              ...DEFAULT_EMPLOYEE_DETAILS,
-              ...(doc.employeeDetails || {})
-            };
-            const legMetadata = {
-              ...DEFAULT_LEGAL_METADATA,
-              ...(doc.legalMetadata || {})
-            };
-            return {
-              ...doc,
-              client_id: currentClientKey,
-              legalMetadata: legMetadata,
-              entityCredentials: {
-                ...DEFAULT_ENTITY_CREDENTIALS,
-                ...(doc.entityCredentials || {})
-              },
-              employeeDetails: empDetails,
-              facilityDetails: doc.facilityDetails || DEFAULT_FACILITY_DETAILS,
-              riskCommitteeContacts: doc.riskCommitteeContacts || DEFAULT_RISK_COMMITTEE_CONTACTS,
-              employeeSignature: doc.employeeSignature || {
-                signedBy: empDetails.fullLegalName || 'Employee',
-                signerRole: 'Employee / Staff Member',
-                signedAt: legMetadata.issueDate || new Date().toISOString().split('T')[0],
-                isUaePassVerified: true,
-                verificationHash: 'UAE-PASS-VERIFIED-EMP',
-                ipAddress: '192.168.1.1'
-              },
-              employerSignature: doc.employerSignature || {
-                signedBy: 'Authorized Employer Signatory',
-                signerRole: 'HR / Operations Representative',
-                signedAt: legMetadata.issueDate || new Date().toISOString().split('T')[0],
-                isUaePassVerified: true,
-                verificationHash: 'UAE-PASS-VERIFIED-EMP-EXEC',
-                ipAddress: '192.168.1.1'
+      if (isConsultant) {
+        // COMPLIANCE CONSULTANT mode: load master documents
+        const consultantKeys = [
+          'smarthub_hr_documents_vault_v2_c0',
+          'smarthub_hr_documents_vault_v2_SPRC',
+          'smarthub_hr_documents_vault_c0',
+          'smarthub_hr_documents_vault_SPRC'
+        ];
+        for (const k of consultantKeys) {
+          const raw = localStorage.getItem(k);
+          if (raw) {
+            try {
+              const arr = JSON.parse(raw);
+              if (Array.isArray(arr) && arr.length > 0) {
+                return arr.map((doc: any) => ({
+                  ...doc,
+                  client_id: 'c0',
+                  legalMetadata: {
+                    ...DEFAULT_LEGAL_METADATA,
+                    ...(doc.legalMetadata || {}),
+                    issueDate: toISODate(doc.legalMetadata?.issueDate || doc.createdAt),
+                    effectiveDate: toISODate(doc.legalMetadata?.effectiveDate || doc.legalMetadata?.issueDate || doc.createdAt),
+                    nextReviewDate: toISODate(doc.legalMetadata?.nextReviewDate || doc.legalMetadata?.dueDateForRevision || '2027-07-28'),
+                    dueDateForRevision: toISODate(doc.legalMetadata?.dueDateForRevision || doc.legalMetadata?.nextReviewDate || '2027-07-28'),
+                    approvalDate: toISODate(doc.legalMetadata?.approvalDate || doc.legalMetadata?.effectiveDate || doc.legalMetadata?.issueDate || doc.createdAt)
+                  },
+                  entityCredentials: { ...DEFAULT_ENTITY_CREDENTIALS, ...(doc.entityCredentials || {}) },
+                  employeeDetails: { ...DEFAULT_EMPLOYEE_DETAILS, ...(doc.employeeDetails || {}) },
+                  facilityDetails: doc.facilityDetails || DEFAULT_FACILITY_DETAILS,
+                  riskCommitteeContacts: doc.riskCommitteeContacts || DEFAULT_RISK_COMMITTEE_CONTACTS
+                }));
               }
-            };
-          });
-          setDocuments(mapped);
-          return;
+            } catch (e) {}
+          }
         }
+
+        // If empty on Compliance Consultant, initialize master seed documents for SmartPro
+        const masterSeed = SEED_HR_DOCUMENTS.map((doc, idx) => ({
+          ...doc,
+          id: doc.id || `doc-master-${idx + 1}`,
+          client_id: 'c0',
+          isFrozen: true,
+          status: 'APPROVED_FROZEN' as const,
+          legalMetadata: {
+            ...DEFAULT_LEGAL_METADATA,
+            ...(doc.legalMetadata || {}),
+            issueDate: toISODate(doc.legalMetadata?.issueDate || doc.createdAt),
+            effectiveDate: toISODate(doc.legalMetadata?.effectiveDate || doc.legalMetadata?.issueDate || doc.createdAt),
+            nextReviewDate: toISODate(doc.legalMetadata?.nextReviewDate || doc.legalMetadata?.dueDateForRevision || '2027-07-28'),
+            dueDateForRevision: toISODate(doc.legalMetadata?.dueDateForRevision || doc.legalMetadata?.nextReviewDate || '2027-07-28'),
+            approvalDate: toISODate(doc.legalMetadata?.approvalDate || doc.legalMetadata?.effectiveDate || doc.legalMetadata?.issueDate || doc.createdAt)
+          },
+          entityCredentials: {
+            companyName: 'SmartPro Public Relations Consultancy & Cyber Risk Management Services',
+            tradeLicenseNo: 'TL-AD-10192',
+            emirateJurisdiction: 'Abu Dhabi',
+            registeredAddress: 'Al Mafraq, Abu Dhabi, United Arab Emirates'
+          },
+          facilityDetails: {
+            facilityName: 'SmartPro Public Relations Consultancy & Cyber Risk Management Services',
+            facilityLicenseNo: 'TL-AD-10192',
+            dohMohapRegNo: 'DOH-CONS-9921',
+            clinicalWing: '',
+            facilityLocation: 'Al Mafraq, Abu Dhabi, United Arab Emirates'
+          }
+        }));
+        try {
+          localStorage.setItem('smarthub_hr_documents_vault_v2_c0', JSON.stringify(masterSeed));
+          localStorage.setItem('smarthub_hr_documents_vault_v2_SPRC', JSON.stringify(masterSeed));
+        } catch (e) {}
+        return masterSeed;
+      } else {
+        // CLIENT MODE: Only load documents genuinely created, uploaded, or copied for this client
+        const candidateKeys = [
+          `${STORAGE_KEY}_${targetClientKey}`,
+          `smarthub_hr_documents_vault_${targetClientKey}`,
+          `sh_hr_documents_${targetClientKey}`,
+          `smarthub_hr_documents_vault_v2_${targetClientKey}`,
+          ...(targetClientKey === 'c1' || (targetClientObj?.company_name && targetClientObj.company_name.toLowerCase().includes('nahda'))
+            ? [`${STORAGE_KEY}_c1`, `smarthub_hr_documents_vault_v2_c1`, `smarthub_hr_documents_vault_c1`]
+            : [])
+        ];
+
+        for (const k of candidateKeys) {
+          const raw = localStorage.getItem(k);
+          if (raw) {
+            try {
+              const arr = JSON.parse(raw);
+              if (Array.isArray(arr) && arr.length > 0) {
+                return arr.map((doc: any) => ({
+                  ...doc,
+                  client_id: targetClientKey,
+                  legalMetadata: {
+                    ...DEFAULT_LEGAL_METADATA,
+                    ...(doc.legalMetadata || {}),
+                    issueDate: toISODate(doc.legalMetadata?.issueDate || doc.createdAt),
+                    effectiveDate: toISODate(doc.legalMetadata?.effectiveDate || doc.legalMetadata?.issueDate || doc.createdAt),
+                    nextReviewDate: toISODate(doc.legalMetadata?.nextReviewDate || doc.legalMetadata?.dueDateForRevision || '2027-07-28'),
+                    dueDateForRevision: toISODate(doc.legalMetadata?.dueDateForRevision || doc.legalMetadata?.nextReviewDate || '2027-07-28'),
+                    approvalDate: toISODate(doc.legalMetadata?.approvalDate || doc.legalMetadata?.effectiveDate || doc.legalMetadata?.issueDate || doc.createdAt)
+                  },
+                  entityCredentials: { ...DEFAULT_ENTITY_CREDENTIALS, ...(doc.entityCredentials || {}) },
+                  employeeDetails: { ...DEFAULT_EMPLOYEE_DETAILS, ...(doc.employeeDetails || {}) },
+                  facilityDetails: doc.facilityDetails || DEFAULT_FACILITY_DETAILS,
+                  riskCommitteeContacts: doc.riskCommitteeContacts || DEFAULT_RISK_COMMITTEE_CONTACTS
+                }));
+              }
+            } catch (e) {}
+          }
+        }
+        return [];
       }
     } catch (e) {
       console.warn('Failed to parse HR Documents Vault state', e);
+      return [];
     }
-    // Default seed documents scoped to active client
-    if (currentClientKey === 'c1') {
-      setDocuments(SEED_HR_DOCUMENTS.map(d => ({ ...d, client_id: 'c1' })));
-    } else {
-      setDocuments([]);
-    }
-  }, [currentClientKey]);
+  };
 
-  useEffect(() => {
-    if (!currentClientKey || documents.length === 0) return;
+  // Helper to persist documents synchronously and safely
+  const persistDocumentsToStorage = (targetClientKey: string, isConsultant: boolean, docs: HRDocumentRecord[], targetClientObj?: Client | null) => {
+    if (!targetClientKey) return;
     try {
-      localStorage.setItem(`${STORAGE_KEY}_${currentClientKey}`, JSON.stringify(documents));
+      const jsonStr = JSON.stringify(docs);
+      if (isConsultant) {
+        localStorage.setItem('smarthub_hr_documents_vault_v2_c0', jsonStr);
+        localStorage.setItem('smarthub_hr_documents_vault_v2_SPRC', jsonStr);
+      } else {
+        localStorage.setItem(`${STORAGE_KEY}_${targetClientKey}`, jsonStr);
+        if (targetClientKey === 'c1' || targetClientObj?.company_name?.toLowerCase().includes('al nahda')) {
+          localStorage.setItem(`${STORAGE_KEY}_c1`, jsonStr);
+        }
+      }
     } catch (e) {
       console.warn('Failed to save HR Documents to localStorage', e);
     }
-  }, [documents, currentClientKey]);
+  };
+
+  const isInitializedRef = useRef<boolean>(false);
+  const currentLoadedClientRef = useRef<string>(currentClientKey);
+  const [lastSavedTimestamp, setLastSavedTimestamp] = useState<string>(() => new Date().toLocaleTimeString());
+  const [saveStatusMessage, setSaveStatusMessage] = useState<string | null>(null);
+
+  // Synchronously initialize documents from storage on initial mount
+  const [documents, setDocuments] = useState<HRDocumentRecord[]>(() => {
+    const initialDocs = loadDocumentsFromStorage(currentClientKey, isConsultantMode, client);
+    isInitializedRef.current = true;
+    return initialDocs;
+  });
+
+  // Re-hydrate when client switches
+  useEffect(() => {
+    if (currentLoadedClientRef.current !== currentClientKey) {
+      currentLoadedClientRef.current = currentClientKey;
+      const loaded = loadDocumentsFromStorage(currentClientKey, isConsultantMode, client);
+      setDocuments(loaded);
+      isInitializedRef.current = true;
+      setLastSavedTimestamp(new Date().toLocaleTimeString());
+    }
+  }, [currentClientKey, isConsultantMode, client]);
+
+  // Persist Documents to Client-Specific Storage whenever documents array changes
+  useEffect(() => {
+    if (!isInitializedRef.current || currentLoadedClientRef.current !== currentClientKey) return;
+    persistDocumentsToStorage(currentClientKey, isConsultantMode, documents, client);
+    setLastSavedTimestamp(new Date().toLocaleTimeString());
+  }, [documents, currentClientKey, isConsultantMode, client]);
+
+  // Explicit Manual Save Vault Handler
+  const handleManualSaveVault = () => {
+    persistDocumentsToStorage(currentClientKey, isConsultantMode, documents, client);
+    const nowTime = new Date().toLocaleTimeString();
+    setLastSavedTimestamp(nowTime);
+    setSaveStatusMessage(`✓ Vault Saved (${documents.length} records) at ${nowTime}`);
+    setFormCopyPasteNotice(`✓ HR Documents Vault Registry successfully saved! All ${documents.length} file(s) are securely persisted.`);
+    setTimeout(() => {
+      setSaveStatusMessage(null);
+      setFormCopyPasteNotice(null);
+    }, 4000);
+  };
 
   const [activeTab, setActiveTab] = useState<'vault' | 'import' | 'export' | 'create'>('vault');
   const [searchQuery, setSearchQuery] = useState('');
@@ -533,95 +1354,49 @@ export default function HrDocumentsHub({ client, currentUser, employees, onAddEm
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [facilityFilter, setFacilityFilter] = useState<string>('ALL');
 
-  // Auto-sync active facility filter when Facility Management active client changes
+  // Keep facility filter defaulted to ALL so documents are never hidden
   useEffect(() => {
-    if (client?.company_name) {
-      setFacilityFilter(client.company_name);
-    }
-  }, [client?.company_name]);
+    setFacilityFilter('ALL');
+  }, [currentClientKey, client?.company_name]);
 
-  // Copy HR Documents from Al Nahda to (COMPLIANCE CONSULTANT)
-  const copyDocumentsFromAlNahdaToComplianceConsultant = React.useCallback(() => {
-    const consultantName = 'SmartPro Public Relations Consultancy & Cyber Risk Management Services';
-    
-    setDocuments(prevDocs => {
-      const updatedPrevDocs = prevDocs.map(doc => {
-        if (
-          doc.entityCredentials?.companyName?.toLowerCase().includes('smartpro') ||
-          doc.facilityDetails?.facilityName?.toLowerCase().includes('smartpro')
-        ) {
-          return {
-            ...doc,
-            facilityDetails: {
-              ...doc.facilityDetails,
-              facilityName: consultantName,
-              facilityLicenseNo: '',
-              dohMohapRegNo: '',
-              clinicalWing: '',
-              facilityLocation: 'Al Mafraq, Abu Dhabi, United Arab Emirates'
-            }
-          };
+  // Derived Master Consultant Documents for Copying to Client Vault
+  const consultantMasterDocs = React.useMemo(() => {
+    // 1. Check Compliance Consultant storage key first
+    try {
+      const keys = ['smarthub_hr_documents_vault_v2_c0', 'smarthub_hr_documents_vault_v2_SPRC'];
+      for (const k of keys) {
+        const raw = localStorage.getItem(k);
+        if (raw) {
+          const arr = JSON.parse(raw);
+          if (Array.isArray(arr) && arr.length > 0) {
+            return arr as HRDocumentRecord[];
+          }
         }
-        return doc;
-      });
-
-      const existingTitles = new Set(
-        updatedPrevDocs
-          .filter(d => d.entityCredentials?.companyName === consultantName)
-          .map(d => d.title)
-      );
-
-      const sourceDocs = updatedPrevDocs.filter(d => 
-        d.entityCredentials?.companyName?.toLowerCase().includes('al nahda') ||
-        d.facilityDetails?.facilityName?.toLowerCase().includes('al nahda') ||
-        d.entityCredentials?.companyName?.toLowerCase().includes('emirates corporate') ||
-        d.entityCredentials?.companyName?.toLowerCase().includes('zamzam')
-      );
-
-      const docsToCopy = sourceDocs.length > 0 ? sourceDocs : SEED_HR_DOCUMENTS;
-      const newCopies: HRDocumentRecord[] = [];
-
-      docsToCopy.forEach((doc, idx) => {
-        if (!existingTitles.has(doc.title)) {
-          newCopies.push({
-            ...doc,
-            id: `doc-sprc-copy-${Date.now()}-${idx}`,
-            title: doc.title,
-            entityCredentials: {
-              ...doc.entityCredentials,
-              companyName: consultantName,
-              tradeLicenseNo: 'CN-1029384-SPRC',
-              emirateJurisdiction: 'Abu Dhabi',
-              registeredAddress: 'Al Mafraq, Abu Dhabi, United Arab Emirates'
-            },
-            facilityDetails: {
-              ...doc.facilityDetails,
-              facilityName: consultantName,
-              facilityLicenseNo: '',
-              dohMohapRegNo: '',
-              clinicalWing: '',
-              facilityLocation: 'Al Mafraq, Abu Dhabi, United Arab Emirates'
-            },
-            updatedAt: new Date().toISOString()
-          });
-        }
-      });
-
-      if (newCopies.length === 0 && updatedPrevDocs === prevDocs) return prevDocs;
-
-      const updatedList = [...updatedPrevDocs, ...newCopies];
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
-      } catch (e) {
-        console.warn('Failed to save copied HR documents', e);
       }
-      return updatedList;
-    });
-  }, []);
+    } catch (e) {}
 
-  useEffect(() => {
-    copyDocumentsFromAlNahdaToComplianceConsultant();
-  }, [copyDocumentsFromAlNahdaToComplianceConsultant]);
+    // 2. Default baseline master documents from SmartPro Public Relations Consultancy & Cyber Risk Management Services
+    return SEED_HR_DOCUMENTS.map((doc, idx) => ({
+      ...doc,
+      id: doc.id || `doc-master-${idx + 1}`,
+      client_id: 'c0',
+      isFrozen: true,
+      status: 'APPROVED_FROZEN' as const,
+      entityCredentials: {
+        companyName: 'SmartPro Public Relations Consultancy & Cyber Risk Management Services',
+        tradeLicenseNo: 'TL-AD-10192',
+        emirateJurisdiction: 'Abu Dhabi',
+        registeredAddress: 'Al Mafraq, Abu Dhabi, United Arab Emirates'
+      },
+      facilityDetails: {
+        facilityName: 'SmartPro Public Relations Consultancy & Cyber Risk Management Services',
+        facilityLicenseNo: 'TL-AD-10192',
+        dohMohapRegNo: 'DOH-CONS-9921',
+        clinicalWing: '',
+        facilityLocation: 'Al Mafraq, Abu Dhabi, United Arab Emirates'
+      }
+    }));
+  }, [currentClientKey, isConsultantMode, documents]);
 
   // Fit to Page (A4 Scale Mode) state
   const [fitToPageA4, setFitToPageA4] = useState<boolean>(true);
@@ -633,13 +1408,19 @@ export default function HrDocumentsHub({ client, currentUser, employees, onAddEm
     effectiveEmployees.forEach(e => {
       if (e.branch_name) list.add(e.branch_name);
     });
+    documents.forEach(d => {
+      if (d.facilityDetails?.facilityName) list.add(d.facilityDetails.facilityName);
+      if (d.entityCredentials?.companyName) list.add(d.entityCredentials.companyName);
+    });
+    list.add('AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L');
+    list.add('SmartPro Public Relations Consultancy & Cyber Risk Management Services');
     list.add('AL KHAJA MEDICAL CENTER');
     list.add('Al Khatem Medical Branch');
     list.add('Cleveland Clinic Abu Dhabi');
     list.add('HealthPoint Hospital Abu Dhabi');
     list.add('Al Zahra Hospital Dubai');
-    return Array.from(list);
-  }, [client, effectiveEmployees]);
+    return Array.from(list).filter(Boolean);
+  }, [client, effectiveEmployees, documents]);
 
   // Selected Document & Modal Controls
   const [selectedDoc, setSelectedDoc] = useState<HRDocumentRecord | null>(null);
@@ -648,6 +1429,31 @@ export default function HrDocumentsHub({ client, currentUser, employees, onAddEm
   const [showTotalScriptModal, setShowTotalScriptModal] = useState(false);
   const [inspectViewMode, setInspectViewMode] = useState<'a4-preview' | 'data-grid'>('a4-preview');
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  // Group Selection & Bulk Operations
+  const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState<boolean>(false);
+
+  // Copy Files from Compliance Consultant Modal
+  const [showCopyFromConsultantModal, setShowCopyFromConsultantModal] = useState<boolean>(false);
+  const [selectedConsultantDocIds, setSelectedConsultantDocIds] = useState<string[]>([]);
+  const [consultantSearch, setConsultantSearch] = useState<string>('');
+  const [targetCopyDestination, setTargetCopyDestination] = useState<string>('ACTIVE_CLIENT');
+  const [showClearVaultModal, setShowClearVaultModal] = useState<boolean>(false);
+
+  // Dedicated Connect with Employee & Operator Management State
+  const [showConnectEmployeeModal, setShowConnectEmployeeModal] = useState<boolean>(false);
+  const [connectEmployeeTargetDoc, setConnectEmployeeTargetDoc] = useState<HRDocumentRecord | null>(null);
+  const [connectEmployeeSelectedId, setConnectEmployeeSelectedId] = useState<string>('');
+  const [connectEmployeeSearch, setConnectEmployeeSearch] = useState<string>('');
+  const [connectEmployeeRefreezeOnSave, setConnectEmployeeRefreezeOnSave] = useState<boolean>(true);
+  const [unfreezeSelectedEmployeeId, setUnfreezeSelectedEmployeeId] = useState<string>('');
+
+  // Freeze & Unfreeze Master Document Governance States
+  const [unfreezePromptDoc, setUnfreezePromptDoc] = useState<HRDocumentRecord | null>(null);
+  const [showUnfreezeConfirmModal, setShowUnfreezeConfirmModal] = useState<boolean>(false);
+  const [showMassUnfreezeConfirmModal, setShowMassUnfreezeConfirmModal] = useState<boolean>(false);
+  const [editRefreezeOnSave, setEditRefreezeOnSave] = useState<boolean>(true);
 
   // Global Header Toggles
   const [prePrintedLetterhead, setPrePrintedLetterhead] = useState(false);
@@ -672,6 +1478,7 @@ export default function HrDocumentsHub({ client, currentUser, employees, onAddEm
   const [newEmiratesId, setNewEmiratesId] = useState('');
   const [newJobTitle, setNewJobTitle] = useState('');
   const [newDept, setNewDept] = useState('');
+  const [newJoiningDate, setNewJoiningDate] = useState('2024-01-01');
   const [newFacilityName, setNewFacilityName] = useState('AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L');
   const [newFacilityLicenseNo, setNewFacilityLicenseNo] = useState('');
   const [newDohMohapRegNo, setNewDohMohapRegNo] = useState('');
@@ -729,8 +1536,67 @@ export default function HrDocumentsHub({ client, currentUser, employees, onAddEm
   const [showCompanyEmployeeInfo, setShowCompanyEmployeeInfo] = useState(true);
   const [showRegulatorySignatoryControls, setShowRegulatorySignatoryControls] = useState(true);
   const [showOptionalEmiratesId, setShowOptionalEmiratesId] = useState(true);
+  const [showJoiningDate, setShowJoiningDate] = useState(true);
   const [showOptionalHrManagerSignatory, setShowOptionalHrManagerSignatory] = useState(true);
-  const [useManualSignatures, setUseManualSignatures] = useState(false);
+  const [useManualSignatures, setUseManualSignatures] = useState(true);
+  const [signatoryPrintOption, setSignatoryPrintOption] = useState<'dual' | 'tri' | 'quad' | 'custom'>('tri');
+  const [selectedCommitteeIds, setSelectedCommitteeIds] = useState<string[]>(['auth_rep', 'med_dir', 'hr_mgr']);
+
+  // Committee Contacts connected directly from Facility Management > Facility Committee Signatory Controls (client)
+  const committeeContacts = React.useMemo(() => [
+    {
+      id: 'auth_rep',
+      role: client?.auth_representative?.designation || 'Authorized Representative',
+      name: client?.auth_representative?.name || 'Aseef Sulaiman',
+      email: client?.auth_representative?.email || 'aseef@smartpro.ae',
+      phone: client?.auth_representative?.phone || '+971 524846770',
+      designation: client?.auth_representative?.designation || 'Authorized Representative',
+    },
+    {
+      id: 'clinic_mgr',
+      role: client?.clinic_manager?.designation || 'Clinic Manager',
+      name: client?.clinic_manager?.name || 'Clinic Manager',
+      email: client?.clinic_manager?.email || 'manager@smartpro.ae',
+      phone: client?.clinic_manager?.phone || '+971 2 600 8899',
+      designation: client?.clinic_manager?.designation || 'Clinic Manager',
+    },
+    {
+      id: 'med_dir',
+      role: client?.medical_director?.designation || 'Medical Director',
+      name: client?.medical_director?.name || 'Raziya Aseef',
+      email: client?.medical_director?.email || 'raziya@smartpro.ae',
+      phone: client?.medical_director?.phone || '+971 50 9007267',
+      designation: client?.medical_director?.designation || 'Medical Director',
+    },
+    {
+      id: 'it_mgr',
+      role: client?.it_manager?.designation || 'IT Manager / Admin',
+      name: client?.it_manager?.name || 'IT Manager / Admin',
+      email: client?.it_manager?.email || 'it@smartpro.ae',
+      phone: client?.it_manager?.phone || '+971 52 4846770',
+      designation: client?.it_manager?.designation || 'IT Manager / Admin',
+    },
+    {
+      id: 'hr_mgr',
+      role: client?.hr_manager?.designation || 'HR Manager',
+      name: client?.hr_manager?.name || 'HR Manager',
+      email: client?.hr_manager?.email || 'hr@smartpro.ae',
+      phone: client?.hr_manager?.phone || '+971 2 600 8899',
+      designation: client?.hr_manager?.designation || 'HR Manager',
+    },
+  ], [client]);
+
+  const activeCommitteeSignatories = React.useMemo(() => {
+    if (signatoryPrintOption === 'dual') {
+      return [committeeContacts[0]]; // Auth Rep
+    } else if (signatoryPrintOption === 'tri') {
+      return [committeeContacts[0], committeeContacts[2]]; // Auth Rep + Medical Director
+    } else if (signatoryPrintOption === 'quad') {
+      return [committeeContacts[0], committeeContacts[2], committeeContacts[4]]; // Auth Rep + Medical Director + HR Manager
+    } else {
+      return committeeContacts.filter(c => selectedCommitteeIds.includes(c.id));
+    }
+  }, [signatoryPrintOption, committeeContacts, selectedCommitteeIds]);
   const [docFontFamily, setDocFontFamily] = useState('Arial, sans-serif');
   const [docFontSize, setDocFontSize] = useState('11px');
   const [docAreaPadding, setDocAreaPadding] = useState('16px');
@@ -753,6 +1619,7 @@ export default function HrDocumentsHub({ client, currentUser, employees, onAddEm
   const [editPassportNumber, setEditPassportNumber] = useState('');
   const [editJobTitle, setEditJobTitle] = useState('');
   const [editDept, setEditDept] = useState('');
+  const [editJoiningDate, setEditJoiningDate] = useState('');
   const [editFacilityName, setEditFacilityName] = useState('');
   const [editFacilityLicenseNo, setEditFacilityLicenseNo] = useState('');
   const [editDohMohapRegNo, setEditDohMohapRegNo] = useState('');
@@ -806,14 +1673,30 @@ export default function HrDocumentsHub({ client, currentUser, employees, onAddEm
     return matches.length > 0 ? matches : baseList;
   }, [effectiveEmployees, editFacilityName, client]);
 
+  // Filtered employees for Connect with Employee & Operator Management Modal
+  const filteredEmployeesForConnect = React.useMemo(() => {
+    let list = filteredEmployeesForEdit;
+    if (connectEmployeeSearch.trim()) {
+      const q = connectEmployeeSearch.toLowerCase().trim();
+      list = list.filter(emp => 
+        (emp.employee_name && emp.employee_name.toLowerCase().includes(q)) ||
+        (emp.employee_id && emp.employee_id.toLowerCase().includes(q)) ||
+        (emp.position && emp.position.toLowerCase().includes(q)) ||
+        (emp.department && emp.department.toLowerCase().includes(q)) ||
+        (emp.branch_name && emp.branch_name.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [filteredEmployeesForEdit, connectEmployeeSearch]);
+
   // Apply Document Reference Details from Loop Selector
   const handleApplyLoopToNewForm = (loopData: DocRefLoopData) => {
     setNewDocTitle(loopData.doc_name);
     setNewRefCode(loopData.ref_code);
     setNewVersionControl(loopData.version || 'v1.0 (Master Loop)');
-    setNewIssueDate(loopData.issue_date);
-    setNewDueDateForRevision(loopData.review_date);
-    setNewApprovalDate(loopData.approval_date);
+    setNewIssueDate(toISODate(loopData.issue_date));
+    setNewDueDateForRevision(toISODate(loopData.review_date));
+    setNewApprovalDate(toISODate(loopData.approval_date));
     setNewPreparedBy(loopData.prepared_by);
     setNewReviewedBy(loopData.reviewed_by);
     setNewApprovedBy(loopData.approved_by);
@@ -827,9 +1710,9 @@ export default function HrDocumentsHub({ client, currentUser, employees, onAddEm
     setEditDocTitle(loopData.doc_name);
     setEditRefCode(loopData.ref_code);
     setEditVersionControl(loopData.version || 'v1.0 (Master Loop)');
-    setEditIssueDate(loopData.issue_date);
-    setEditDueDateForRevision(loopData.review_date);
-    setEditApprovalDate(loopData.approval_date);
+    setEditIssueDate(toISODate(loopData.issue_date));
+    setEditDueDateForRevision(toISODate(loopData.review_date));
+    setEditApprovalDate(toISODate(loopData.approval_date));
     setEditPreparedBy(loopData.prepared_by);
     setEditReviewedBy(loopData.reviewed_by);
     setEditApprovedBy(loopData.approved_by);
@@ -948,18 +1831,254 @@ HR & Governance Division`);
     }
   };
 
+  // Request Edit with Freeze Check
+  const handleRequestEditDoc = (doc: HRDocumentRecord) => {
+    if (doc.isFrozen || (isConsultantMode && doc.isFrozen !== false)) {
+      setUnfreezePromptDoc(doc);
+      // Pre-select employee if already matching
+      const matched = effectiveEmployees.find(e => 
+        e.employee_id === doc.employeeDetails?.employeeId ||
+        e.employee_name?.toLowerCase() === doc.employeeDetails?.fullLegalName?.toLowerCase()
+      );
+      setUnfreezeSelectedEmployeeId(matched?.id || '');
+      setShowUnfreezeConfirmModal(true);
+      return;
+    }
+    handleOpenEditModal(doc);
+  };
+
+  // Confirm Unfreeze & Open Editor (with optional employee binding)
+  const handleConfirmUnfreezeAndEdit = (docToUnfreeze?: HRDocumentRecord, selectedEmpId?: string) => {
+    const target = docToUnfreeze && docToUnfreeze.id ? docToUnfreeze : unfreezePromptDoc;
+    if (!target) return;
+
+    const empIdToUse = selectedEmpId !== undefined ? selectedEmpId : unfreezeSelectedEmployeeId;
+    const emp = empIdToUse ? effectiveEmployees.find(e => e.id === empIdToUse) : null;
+
+    const updatedEmpDetails = emp ? {
+      ...target.employeeDetails,
+      fullLegalName: emp.employee_name,
+      employeeId: emp.employee_id,
+      jobTitle: emp.position || target.employeeDetails?.jobTitle || '',
+      department: emp.department || target.employeeDetails?.department || '',
+      joiningDate: (emp as any).joining_date || (emp as any).date_of_joining || target.employeeDetails?.joiningDate || ''
+    } : target.employeeDetails;
+
+    const updatedFacilityDetails = emp?.branch_name ? {
+      ...target.facilityDetails,
+      facilityName: emp.branch_name
+    } : target.facilityDetails;
+
+    const updatedEmpSignature = emp ? {
+      ...target.employeeSignature,
+      signedBy: emp.employee_name,
+      signerRole: `${emp.position || 'Staff'} (${emp.department || 'Operations'})`,
+      signedAt: new Date().toISOString().split('T')[0],
+      isUaePassVerified: true
+    } : target.employeeSignature;
+
+    const unfrozenDoc: HRDocumentRecord = {
+      ...target,
+      employeeDetails: updatedEmpDetails,
+      facilityDetails: updatedFacilityDetails,
+      employeeSignature: updatedEmpSignature,
+      isFrozen: false,
+      status: 'DRAFT_PENDING',
+      updatedAt: new Date().toISOString()
+    };
+
+    setDocuments(prev => prev.map(d => d.id === target.id ? unfrozenDoc : d));
+    if (selectedDoc && selectedDoc.id === target.id) {
+      setSelectedDoc(unfrozenDoc);
+    }
+    setShowUnfreezeConfirmModal(false);
+    setUnfreezePromptDoc(null);
+    setUnfreezeSelectedEmployeeId('');
+    setEditRefreezeOnSave(true);
+    handleOpenEditModal(unfrozenDoc);
+    setFormCopyPasteNotice(`🔓 Master Document "${target.title}" unfrozen${emp ? ` and connected with ${emp.employee_name} (${emp.employee_id})` : ''}.`);
+    setTimeout(() => setFormCopyPasteNotice(null), 4000);
+  };
+
+  // Quick Connect Employee & Re-freeze directly from Unfreeze Dialog without opening full editor
+  const handleQuickConnectAndRefreezeFromModal = (docToProcess: HRDocumentRecord, empId: string) => {
+    const emp = effectiveEmployees.find(e => e.id === empId);
+    if (!emp) return;
+
+    const updatedEmpDetails = {
+      ...docToProcess.employeeDetails,
+      fullLegalName: emp.employee_name,
+      employeeId: emp.employee_id,
+      jobTitle: emp.position || docToProcess.employeeDetails?.jobTitle || '',
+      department: emp.department || docToProcess.employeeDetails?.department || '',
+      joiningDate: (emp as any).joining_date || (emp as any).date_of_joining || docToProcess.employeeDetails?.joiningDate || ''
+    };
+
+    const updatedFacilityDetails = emp?.branch_name ? {
+      ...docToProcess.facilityDetails,
+      facilityName: emp.branch_name
+    } : docToProcess.facilityDetails;
+
+    const updatedEmpSignature = {
+      ...docToProcess.employeeSignature,
+      signedBy: emp.employee_name,
+      signerRole: `${emp.position || 'Staff'} (${emp.department || 'Operations'})`,
+      signedAt: new Date().toISOString().split('T')[0],
+      isUaePassVerified: true
+    };
+
+    const frozenDoc: HRDocumentRecord = {
+      ...docToProcess,
+      employeeDetails: updatedEmpDetails,
+      facilityDetails: updatedFacilityDetails,
+      employeeSignature: updatedEmpSignature,
+      isFrozen: true,
+      status: 'APPROVED_FROZEN',
+      updatedAt: new Date().toISOString()
+    };
+
+    setDocuments(prev => prev.map(d => d.id === docToProcess.id ? frozenDoc : d));
+    if (selectedDoc && selectedDoc.id === docToProcess.id) {
+      setSelectedDoc(frozenDoc);
+    }
+    setShowUnfreezeConfirmModal(false);
+    setUnfreezePromptDoc(null);
+    setUnfreezeSelectedEmployeeId('');
+    setFormCopyPasteNotice(`🔒 Connected "${emp.employee_name} (${emp.employee_id})" to "${docToProcess.title}" & sealed as FROZEN MASTER.`);
+    setTimeout(() => setFormCopyPasteNotice(null), 4000);
+  };
+
+  // Open Dedicated Connect with Employee & Operator Management Modal
+  const handleOpenConnectEmployeeModal = (doc: HRDocumentRecord) => {
+    setConnectEmployeeTargetDoc(doc);
+    const matched = effectiveEmployees.find(e => 
+      e.employee_id === doc.employeeDetails?.employeeId ||
+      e.employee_name?.toLowerCase() === doc.employeeDetails?.fullLegalName?.toLowerCase()
+    );
+    setConnectEmployeeSelectedId(matched?.id || '');
+    setConnectEmployeeSearch('');
+    setConnectEmployeeRefreezeOnSave(doc.isFrozen !== false);
+    setShowConnectEmployeeModal(true);
+  };
+
+  // Save Connection from Dedicated Modal
+  const handleSaveConnectEmployee = (openInEditor: boolean = false) => {
+    if (!connectEmployeeTargetDoc) return;
+    const emp = effectiveEmployees.find(e => e.id === connectEmployeeSelectedId);
+    
+    if (!emp && !openInEditor) {
+      setFormCopyPasteNotice('⚠️ Please select an employee from Employee & Operator Management roster.');
+      setTimeout(() => setFormCopyPasteNotice(null), 3000);
+      return;
+    }
+
+    const updatedEmployeeDetails = emp ? {
+      ...connectEmployeeTargetDoc.employeeDetails,
+      fullLegalName: emp.employee_name,
+      employeeId: emp.employee_id,
+      jobTitle: emp.position || connectEmployeeTargetDoc.employeeDetails?.jobTitle || '',
+      department: emp.department || connectEmployeeTargetDoc.employeeDetails?.department || '',
+      joiningDate: (emp as any).joining_date || (emp as any).date_of_joining || connectEmployeeTargetDoc.employeeDetails?.joiningDate || ''
+    } : connectEmployeeTargetDoc.employeeDetails;
+
+    const updatedFacilityDetails = emp?.branch_name ? {
+      ...connectEmployeeTargetDoc.facilityDetails,
+      facilityName: emp.branch_name
+    } : connectEmployeeTargetDoc.facilityDetails;
+
+    const updatedEmployeeSignature = emp ? {
+      ...connectEmployeeTargetDoc.employeeSignature,
+      signedBy: emp.employee_name,
+      signerRole: `${emp.position || 'Staff'} (${emp.department || 'Operations'})`,
+      signedAt: new Date().toISOString().split('T')[0],
+      isUaePassVerified: true
+    } : connectEmployeeTargetDoc.employeeSignature;
+
+    const updatedDoc: HRDocumentRecord = {
+      ...connectEmployeeTargetDoc,
+      employeeDetails: updatedEmployeeDetails,
+      facilityDetails: updatedFacilityDetails,
+      employeeSignature: updatedEmployeeSignature,
+      isFrozen: openInEditor ? false : connectEmployeeRefreezeOnSave,
+      status: (openInEditor ? 'DRAFT_PENDING' : (connectEmployeeRefreezeOnSave ? 'APPROVED_FROZEN' : 'DRAFT_PENDING')) as any,
+      updatedAt: new Date().toISOString()
+    };
+
+    setDocuments(prev => prev.map(d => d.id === updatedDoc.id ? updatedDoc : d));
+    if (selectedDoc && selectedDoc.id === updatedDoc.id) {
+      setSelectedDoc(updatedDoc);
+    }
+
+    setShowConnectEmployeeModal(false);
+    setConnectEmployeeTargetDoc(null);
+
+    if (openInEditor) {
+      handleOpenEditModal(updatedDoc);
+    } else {
+      setFormCopyPasteNotice(`✓ Connected "${emp?.employee_name || 'Staff'}" (${emp?.employee_id || 'ID'}) from Employee & Operator Management to "${updatedDoc.title}".`);
+      setTimeout(() => setFormCopyPasteNotice(null), 4000);
+    }
+  };
+
+  // Quick Toggle Freeze / Unfreeze for single document
+  const handleToggleFreezeDoc = (doc: HRDocumentRecord) => {
+    if (doc.isFrozen) {
+      setUnfreezePromptDoc(doc);
+      setShowUnfreezeConfirmModal(true);
+    } else {
+      const frozenDoc: HRDocumentRecord = {
+        ...doc,
+        isFrozen: true,
+        status: 'APPROVED_FROZEN',
+        updatedAt: new Date().toISOString()
+      };
+      setDocuments(prev => prev.map(d => d.id === doc.id ? frozenDoc : d));
+      if (selectedDoc && selectedDoc.id === doc.id) {
+        setSelectedDoc(frozenDoc);
+      }
+      setFormCopyPasteNotice(`🔒 Master Document "${doc.title}" is now FROZEN & locked against modification.`);
+      setTimeout(() => setFormCopyPasteNotice(null), 4000);
+    }
+  };
+
+  // Mass Freeze All Documents
+  const handleFreezeAllDocuments = () => {
+    setDocuments(prev => prev.map(d => ({
+      ...d,
+      isFrozen: true,
+      status: 'APPROVED_FROZEN',
+      updatedAt: new Date().toISOString()
+    })));
+    setFormCopyPasteNotice(`🔒 All ${documents.length} Master HR Documents in Vault are now FROZEN & Protected!`);
+    setTimeout(() => setFormCopyPasteNotice(null), 5000);
+  };
+
+  // Mass Unfreeze All Documents
+  const handleUnfreezeAllDocuments = () => {
+    setDocuments(prev => prev.map(d => ({
+      ...d,
+      isFrozen: false,
+      updatedAt: new Date().toISOString()
+    })));
+    setShowMassUnfreezeConfirmModal(false);
+    setFormCopyPasteNotice(`🔓 All Master HR Documents have been UNROZEN for modification.`);
+    setTimeout(() => setFormCopyPasteNotice(null), 5000);
+  };
+
   // Open Edit Document Modal
   const handleOpenEditModal = (doc: HRDocumentRecord) => {
     setEditingDoc(doc);
     setEditDocTitle(doc.title);
     setEditDocCategory(doc.category);
     setEditDocStatus(doc.status);
+    setEditRefreezeOnSave(true);
     setEditEmpName(doc.employeeDetails?.fullLegalName || '');
     setEditEmpId(doc.employeeDetails?.employeeId || '');
     setEditEmiratesId(doc.employeeDetails?.emiratesId || '');
     setEditPassportNumber(doc.employeeDetails?.passportNumber || '');
     setEditJobTitle(doc.employeeDetails?.jobTitle || '');
     setEditDept(doc.employeeDetails?.department || '');
+    setEditJoiningDate(toISODate(doc.employeeDetails?.joiningDate || '2024-01-01'));
     setEditFacilityName(doc.facilityDetails?.facilityName || DEFAULT_FACILITY_DETAILS.facilityName);
     setEditFacilityLicenseNo(doc.facilityDetails?.facilityLicenseNo || DEFAULT_FACILITY_DETAILS.facilityLicenseNo);
     setEditDohMohapRegNo(doc.facilityDetails?.dohMohapRegNo || DEFAULT_FACILITY_DETAILS.dohMohapRegNo);
@@ -973,9 +2092,9 @@ HR & Governance Division`);
     // Populate legal metadata loop fields
     setEditRefCode(doc.legalMetadata?.referenceCode || `REF-HR-${Math.floor(Math.random()*9000+1000)}`);
     setEditVersionControl(doc.legalMetadata?.versionControl || doc.currentVersion || 'v1.0 (Master Loop)');
-    setEditIssueDate(doc.legalMetadata?.issueDate || new Date().toISOString().split('T')[0]);
-    setEditDueDateForRevision(doc.legalMetadata?.dueDateForRevision || doc.legalMetadata?.nextReviewDate || new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0]);
-    setEditApprovalDate(doc.legalMetadata?.approvalDate || doc.legalMetadata?.effectiveDate || new Date().toISOString().split('T')[0]);
+    setEditIssueDate(toISODate(doc.legalMetadata?.issueDate || doc.createdAt));
+    setEditDueDateForRevision(toISODate(doc.legalMetadata?.dueDateForRevision || doc.legalMetadata?.nextReviewDate || new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0]));
+    setEditApprovalDate(toISODate(doc.legalMetadata?.approvalDate || doc.legalMetadata?.effectiveDate || doc.legalMetadata?.issueDate || doc.createdAt));
     setEditPreparedBy(doc.legalMetadata?.preparedBy || 'HR Director');
     setEditReviewedBy(doc.legalMetadata?.reviewedBy || 'Compliance Officer');
     setEditApprovedBy(doc.legalMetadata?.approvedBy || 'Risk Committee Lead');
@@ -990,11 +2109,17 @@ HR & Governance Division`);
     e.preventDefault();
     if (!editingDoc) return;
 
+    const isDocFrozenAfterSave = editRefreezeOnSave ? true : false;
+    const finalIssueDate = toISODate(editIssueDate || editingDoc.legalMetadata?.issueDate || editingDoc.createdAt);
+    const finalDueDate = toISODate(editDueDateForRevision || editingDoc.legalMetadata?.dueDateForRevision || editingDoc.legalMetadata?.nextReviewDate || '2027-07-28');
+    const finalApprovalDate = toISODate(editApprovalDate || editingDoc.legalMetadata?.approvalDate || editingDoc.legalMetadata?.effectiveDate || finalIssueDate);
+
     const updated: HRDocumentRecord = {
       ...editingDoc,
       title: editDocTitle,
       category: editDocCategory,
-      status: editDocStatus,
+      status: isDocFrozenAfterSave ? 'APPROVED_FROZEN' : editDocStatus,
+      isFrozen: isDocFrozenAfterSave,
       currentVersion: editVersionControl || editingDoc.currentVersion,
       updatedAt: new Date().toISOString(),
       legalMetadata: {
@@ -1002,10 +2127,10 @@ HR & Governance Division`);
         ...(editingDoc.legalMetadata || {}),
         documentName: editDocTitle,
         referenceCode: editRefCode || editingDoc.legalMetadata?.referenceCode || 'REF-HR-0000',
-        issueDate: editIssueDate || editingDoc.legalMetadata?.issueDate || '',
-        nextReviewDate: editDueDateForRevision || editingDoc.legalMetadata?.nextReviewDate || '',
-        dueDateForRevision: editDueDateForRevision || editingDoc.legalMetadata?.nextReviewDate || '',
-        approvalDate: editApprovalDate || editingDoc.legalMetadata?.effectiveDate || '',
+        issueDate: finalIssueDate,
+        nextReviewDate: finalDueDate,
+        dueDateForRevision: finalDueDate,
+        approvalDate: finalApprovalDate,
         versionControl: editVersionControl || 'v1.0 (Master Loop)',
         preparedBy: editPreparedBy || 'HR Director',
         reviewedBy: editReviewedBy || 'Compliance Officer',
@@ -1022,6 +2147,7 @@ HR & Governance Division`);
         passportNumber: editPassportNumber,
         jobTitle: editJobTitle,
         department: editDept,
+        joiningDate: toISODate(editJoiningDate)
       },
       facilityDetails: {
         facilityName: editFacilityName,
@@ -1049,13 +2175,15 @@ HR & Governance Division`);
       htmlContent: editHtmlContent,
     };
 
-    setDocuments(prev => prev.map(d => d.id === editingDoc.id ? updated : d));
+    const updatedDocList = documents.map(d => d.id === editingDoc.id ? updated : d);
+    setDocuments(updatedDocList);
+    persistDocumentsToStorage(currentClientKey, isConsultantMode, updatedDocList, client);
     if (selectedDoc && selectedDoc.id === editingDoc.id) {
       setSelectedDoc(updated);
     }
     setShowEditModal(false);
     setEditingDoc(null);
-    setFormCopyPasteNotice(`✓ Document "${editDocTitle}" updated successfully in Vault Registry!`);
+    setFormCopyPasteNotice(`✓ Document "${editDocTitle}" saved successfully ${isDocFrozenAfterSave ? '(🔒 Re-frozen)' : '(🔓 Unfrozen)'}!`);
     setTimeout(() => setFormCopyPasteNotice(null), 4000);
   };
 
@@ -1230,15 +2358,6 @@ HR & Governance Division`);
       setNewHtmlContent(prev => (prev || '') + excelBoxHtml);
     }
   };
-
-  // Sync to LocalStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(documents));
-    } catch (e) {
-      console.warn('Failed to save HR Documents to localStorage', e);
-    }
-  }, [documents]);
 
   const companyName = client?.company_name || 'AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L';
   const tradeLicense = client?.trade_license_no || 'CN-1005168';
@@ -1460,7 +2579,7 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
   <div class="header">
     <div class="title">${doc.entityCredentials?.companyName || companyName}</div>
     <div style="font-size: 9pt; color: #64748b; margin-top: 4pt;">Trade License: ${doc.entityCredentials?.tradeLicenseNo || tradeLicense} | ${doc.legalMetadata?.lawReference || ''}</div>
-    <h2 style="font-size: 14pt; margin-top: 10pt; color: #0f172a;">${getProcessedHtmlContent(doc.title, doc, companyName) || doc.title}</h2>
+    <h2 style="font-size: 14pt; margin-top: 10pt; color: #0f172a;">${getProcessedHtmlContent(doc.title, doc, companyName, client) || doc.title}</h2>
   </div>
 
   <table class="meta-table">
@@ -1474,7 +2593,7 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
   </table>
 
   <div class="content">
-    ${getProcessedHtmlContent(doc.htmlContent, doc, companyName)}
+    ${getProcessedHtmlContent(doc.htmlContent, doc, companyName, client)}
   </div>
 
   <div class="sig-box">
@@ -1667,6 +2786,10 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
 
     const refCodeToUse = newRefCode || `REF-HR-${Math.floor(Math.random() * 9000 + 1000)}`;
 
+    const finalIssueDate = toISODate(newIssueDate);
+    const finalDueDate = toISODate(newDueDateForRevision || '2027-07-28');
+    const finalApprovalDate = toISODate(newApprovalDate || finalIssueDate);
+
     const createdDoc: HRDocumentRecord = {
       id: `doc-custom-${Date.now()}`,
       title: newDocTitle,
@@ -1682,11 +2805,11 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
         referenceCode: refCodeToUse,
         legalStandards: 'MOHRE & ADHCS Compliance Standard',
         lawReference: 'Federal Decree-Law No. 50',
-        issueDate: newIssueDate || new Date().toISOString().split('T')[0],
-        effectiveDate: newApprovalDate || new Date().toISOString().split('T')[0],
-        nextReviewDate: newDueDateForRevision || '2027-07-28',
-        dueDateForRevision: newDueDateForRevision || '2027-07-28',
-        approvalDate: newApprovalDate || new Date().toISOString().split('T')[0],
+        issueDate: finalIssueDate,
+        effectiveDate: finalApprovalDate,
+        nextReviewDate: finalDueDate,
+        dueDateForRevision: finalDueDate,
+        approvalDate: finalApprovalDate,
         versionControl: newVersionControl || 'v1.0 (Master Loop)',
         preparedBy: newPreparedBy || 'HR Director',
         reviewedBy: newReviewedBy || 'Compliance Officer',
@@ -1706,7 +2829,8 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
         emiratesId: newEmiratesId || '784-1990-1234567-1',
         passportNumber: 'N12345678',
         jobTitle: newJobTitle || 'Staff Member',
-        department: newDept || 'General Operations'
+        department: newDept || 'General Operations',
+        joiningDate: toISODate(newJoiningDate || '2024-01-01')
       },
       facilityDetails: {
         facilityName: newFacilityName || DEFAULT_FACILITY_DETAILS.facilityName,
@@ -1750,7 +2874,9 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
       updatedAt: new Date().toISOString()
     };
 
-    setDocuments([createdDoc, ...documents]);
+    const newDocsList = [createdDoc, ...documents];
+    setDocuments(newDocsList);
+    persistDocumentsToStorage(currentClientKey, isConsultantMode, newDocsList, client);
     setNewDocTitle('');
     setNewEmpName('');
     setNewEmpId('');
@@ -1774,6 +2900,7 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
     const targetId = deletingDoc.id;
     const targetTitle = deletingDoc.title;
     setDocuments(prev => prev.filter(d => d.id !== targetId));
+    setSelectedDocIds(prev => prev.filter(id => id !== targetId));
     if (selectedDoc?.id === targetId) {
       setSelectedDoc(null);
       setShowPreviewModal(false);
@@ -1781,6 +2908,213 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
     setDeletingDoc(null);
     setFormCopyPasteNotice(`✓ Record "${targetTitle}" deleted from HR Vault.`);
     setTimeout(() => setFormCopyPasteNotice(null), 4000);
+  };
+
+  // Bulk Delete Selected HR Documents
+  const handleBulkDelete = () => {
+    if (selectedDocIds.length === 0) return;
+    const count = selectedDocIds.length;
+    setDocuments(prev => prev.filter(d => !selectedDocIds.includes(d.id)));
+    if (selectedDoc && selectedDocIds.includes(selectedDoc.id)) {
+      setSelectedDoc(null);
+      setShowPreviewModal(false);
+    }
+    setSelectedDocIds([]);
+    setShowBulkDeleteModal(false);
+    setFormCopyPasteNotice(`✓ Permanently deleted ${count} selected document(s) from HR Vault.`);
+    setTimeout(() => setFormCopyPasteNotice(null), 4000);
+  };
+
+  // Clear / Purge All Documents from Current Vault
+  const handleClearVault = () => {
+    setDocuments([]);
+    setSelectedDocIds([]);
+    setSelectedDoc(null);
+    setShowPreviewModal(false);
+    try {
+      localStorage.removeItem(`${STORAGE_KEY}_${currentClientKey}`);
+      if (currentClientKey === 'c1') {
+        localStorage.removeItem(`${STORAGE_KEY}_c1`);
+      }
+      if (isConsultantMode) {
+        localStorage.removeItem('smarthub_hr_documents_vault_v2_c0');
+        localStorage.removeItem('smarthub_hr_documents_vault_v2_SPRC');
+      }
+    } catch (e) {}
+    setShowClearVaultModal(false);
+    setFormCopyPasteNotice(`✓ All documents removed from this vault.`);
+    setTimeout(() => setFormCopyPasteNotice(null), 4000);
+  };
+
+  // Duplicate / Clone Selected Documents
+  const handleDuplicateSelectedDocs = () => {
+    if (selectedDocIds.length === 0) return;
+    const docsToDuplicate = documents.filter(d => selectedDocIds.includes(d.id));
+    const clones: HRDocumentRecord[] = docsToDuplicate.map((doc, idx) => ({
+      ...doc,
+      id: `doc-clone-${Date.now()}-${idx}`,
+      title: `${doc.title} (Copy)`,
+      legalMetadata: {
+        ...doc.legalMetadata,
+        referenceCode: `${doc.legalMetadata?.referenceCode || 'REF-HR'}-COPY`
+      },
+      updatedAt: new Date().toISOString()
+    }));
+    setDocuments(prev => [...clones, ...prev]);
+    setFormCopyPasteNotice(`✓ Duplicated ${clones.length} document(s) in HR Vault.`);
+    setSelectedDocIds([]);
+    setTimeout(() => setFormCopyPasteNotice(null), 4000);
+  };
+
+  // Filtered Consultant Master Documents for Copy Modal
+  const filteredConsultantDocs = React.useMemo(() => {
+    if (!consultantSearch) return consultantMasterDocs;
+    const term = consultantSearch.toLowerCase();
+    return consultantMasterDocs.filter(d =>
+      d.title.toLowerCase().includes(term) ||
+      d.category.toLowerCase().includes(term) ||
+      (d.legalMetadata?.referenceCode || '').toLowerCase().includes(term)
+    );
+  }, [consultantMasterDocs, consultantSearch]);
+
+  // Copy Files from COMPLIANCE CONSULTANT to Client(s) Vault
+  const handleExecuteCopyFromConsultant = (overrideDocIds?: string[], targetDestOverride?: string) => {
+    const targetIds = overrideDocIds || selectedConsultantDocIds;
+    if (targetIds.length === 0) return;
+
+    const dest = targetDestOverride || targetCopyDestination;
+    const sourceDocsToCopy = consultantMasterDocs.filter(d => targetIds.includes(d.id));
+
+    let targetsToProcess: Client[] = [];
+    if (dest === 'ALL_CLIENTS') {
+      targetsToProcess = availableClientsList;
+    } else if (dest === 'ACTIVE_CLIENT') {
+      targetsToProcess = client ? [client] : [availableClientsList[0]];
+    } else {
+      const found = availableClientsList.find(c => c.id === dest);
+      targetsToProcess = found ? [found] : (client ? [client] : [availableClientsList[0]]);
+    }
+
+    let totalCopiesCreated = 0;
+    const currentActiveClientCopies: HRDocumentRecord[] = [];
+
+    targetsToProcess.forEach(targetClient => {
+      const targetClientName = targetClient.company_name;
+      const targetClientId = targetClient.id;
+      const tradeLic = targetClient.trade_license_no || (targetClient as any).trade_license || 'TL-AD-10192';
+      const cityAddress = targetClient.address || targetClient.city || 'Abu Dhabi, United Arab Emirates';
+      const dohLic = targetClient.doh_license_no || (targetClient as any).doh_moh_license || '';
+      const authRep = targetClient.auth_representative?.name || targetClient.owner_name || 'Authorized Representative';
+      const clinicMgr = (targetClient as any).clinic_manager?.name || 'Operations Lead';
+      const medDir = (targetClient as any).medical_director?.name || 'Medical Director';
+      const itMgr = (targetClient as any).it_manager?.name || (targetClient as any).it_lead || 'IT & Security Officer';
+      const hrMgr = (targetClient as any).hr_manager?.name || targetClient.auth_representative?.name || 'HR Manager';
+
+      const newCopies: HRDocumentRecord[] = sourceDocsToCopy.map((doc, idx) => {
+        const timestamp = Date.now();
+        const newId = `doc-${targetClientId}-master-copy-${timestamp}-${idx}-${Math.floor(Math.random() * 1000)}`;
+
+        // Deep content placeholder replacement for Target Client
+        let customizedHtml = doc.htmlContent || '';
+        customizedHtml = customizedHtml
+          .replace(/AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W\.L\.L/gi, targetClientName)
+          .replace(/SmartPro Public Relations Consultancy & Cyber Risk Management Services/gi, targetClientName)
+          .replace(/\(Company Name\)/gi, targetClientName)
+          .replace(/\[Company Name\]/gi, targetClientName)
+          .replace(/\(Authorized Representative\)/gi, authRep)
+          .replace(/\(Clinic Manager\)/gi, clinicMgr)
+          .replace(/\(Medical Director\)/gi, medDir);
+
+        return {
+          ...doc,
+          id: newId,
+          client_id: targetClientId,
+          status: 'APPROVED_FROZEN' as const,
+          isFrozen: true,
+          entityCredentials: {
+            ...doc.entityCredentials,
+            companyName: targetClientName,
+            tradeLicenseNo: tradeLic,
+            registeredAddress: cityAddress,
+            emirateJurisdiction: targetClient.city || 'Abu Dhabi'
+          },
+          facilityDetails: {
+            ...doc.facilityDetails,
+            facilityName: targetClientName,
+            facilityLicenseNo: tradeLic,
+            dohMohapRegNo: dohLic,
+            facilityLocation: cityAddress
+          },
+          riskCommitteeContacts: {
+            ...doc.riskCommitteeContacts,
+            committeeChair: authRep,
+            complianceOfficer: itMgr,
+            dutyOfficerPhone: targetClient.auth_representative?.phone || '+971 2 600 8899',
+            escalationEmail: targetClient.auth_representative?.email || targetClient.owner_email || 'compliance@facility.ae'
+          },
+          employerSignature: {
+            ...doc.employerSignature,
+            signedBy: authRep,
+            signerRole: 'Authorized Employer Signatory',
+            signedAt: new Date().toISOString().split('T')[0],
+            isUaePassVerified: true
+          },
+          hrManagerSignature: doc.hrManagerSignature ? {
+            ...doc.hrManagerSignature,
+            signedBy: hrMgr,
+            signedAt: new Date().toISOString().split('T')[0],
+            isUaePassVerified: true
+          } : undefined,
+          htmlContent: customizedHtml,
+          updatedAt: new Date().toISOString()
+        };
+      });
+
+      totalCopiesCreated += newCopies.length;
+
+      // Store in target client's localStorage bucket
+      try {
+        const key = `${STORAGE_KEY}_${targetClientId}`;
+        const existingRaw = localStorage.getItem(key);
+        let existingArr: HRDocumentRecord[] = [];
+        if (existingRaw) {
+          try {
+            existingArr = JSON.parse(existingRaw);
+          } catch (e) {}
+        }
+        
+        // Merge or overwrite matching title copies
+        const existingFiltered = existingArr.filter(e => !newCopies.some(n => n.title === e.title));
+        const combined = [...newCopies, ...existingFiltered];
+        localStorage.setItem(key, JSON.stringify(combined));
+        if (targetClientId === 'c1' || targetClientName.toLowerCase().includes('al nahda')) {
+          localStorage.setItem(`${STORAGE_KEY}_c1`, JSON.stringify(combined));
+        }
+      } catch (err) {
+        console.warn(`Failed to store copies for client ${targetClientId}`, err);
+      }
+
+      if (targetClientId === currentClientKey) {
+        currentActiveClientCopies.push(...newCopies);
+      }
+    });
+
+    if (currentActiveClientCopies.length > 0) {
+      setDocuments(prev => {
+        const filtered = prev.filter(p => !currentActiveClientCopies.some(c => c.title === p.title));
+        return [...currentActiveClientCopies, ...filtered];
+      });
+    }
+
+    setShowCopyFromConsultantModal(false);
+    setSelectedConsultantDocIds([]);
+
+    const destLabel = dest === 'ALL_CLIENTS'
+      ? `ALL ${targetsToProcess.length} Clients HR Documents Vault Registry`
+      : `Client Vault "${targetsToProcess[0]?.company_name || 'Active Client'}"`;
+
+    setFormCopyPasteNotice(`✓ Successfully copied ${targetIds.length} Master Document(s) from COMPLIANCE CONSULTANT to ${destLabel}! (${totalCopiesCreated} client records synchronized)`);
+    setTimeout(() => setFormCopyPasteNotice(null), 6000);
   };
 
   // Filtered Vault Items
@@ -1797,7 +3131,8 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
       (doc.facilityDetails?.facilityName || '').toLowerCase().includes(facilityFilter.toLowerCase()) ||
       (doc.entityCredentials?.companyName || '').toLowerCase().includes(facilityFilter.toLowerCase()) ||
       facilityFilter.toLowerCase().includes((doc.facilityDetails?.facilityName || '---').toLowerCase()) ||
-      facilityFilter.toLowerCase().includes((doc.entityCredentials?.companyName || '---').toLowerCase());
+      facilityFilter.toLowerCase().includes((doc.entityCredentials?.companyName || '---').toLowerCase()) ||
+      (doc.client_id && currentClientKey && doc.client_id === currentClientKey);
 
     return matchSearch && matchCat && matchStatus && matchFacility;
   });
@@ -1819,6 +3154,15 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
               <span className="px-3 py-1 rounded-full text-[10px] font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                 Vault Size: {documents.length} Records
               </span>
+              {isConsultantMode ? (
+                <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-amber-400" /> Compliance Consultant Master Mode (Frozen Baseline)
+                </span>
+              ) : (
+                <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 flex items-center gap-1">
+                  <Building2 className="w-3 h-3 text-cyan-400" /> Client: {client?.company_name || 'Active Entity'}
+                </span>
+              )}
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-3">
@@ -1826,12 +3170,12 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
               HR Documents Hub & Vault
             </h1>
             <p className="text-slate-300 text-xs sm:text-sm max-w-3xl leading-relaxed">
-              Enterprise HR Document Repository under <span className="font-bold text-white">Document Repository & Version Control</span>. Features multi-format application ingestion, governance matrix loops, and full JSON/XML data transfer export packages.
+              Enterprise HR Document Repository under <span className="font-bold text-white">Document Repository & Version Control</span>. All master baseline documents are securely frozen by default. Any modification requires authorized unfreezing.
             </p>
           </div>
 
-          {/* Dual-Mode Signatory & Letterhead Toggles */}
-          <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3 shrink-0 shadow-lg">
+          {/* Dual-Mode Signatory & Letterhead Toggles & Freeze Controls */}
+          <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3 shrink-0 shadow-lg max-w-md w-full lg:w-auto">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
               Regulatory Signatory & Layout Controls
             </span>
@@ -1858,21 +3202,113 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
               </label>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                copyDocumentsFromAlNahdaToComplianceConsultant();
-                setFormCopyPasteNotice('✓ Successfully copied HR documents from Al Nahda National Insurance Brokers to (COMPLIANCE CONSULTANT)!');
-                setTimeout(() => setFormCopyPasteNotice(null), 4000);
-              }}
-              className="mt-2 w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md border border-emerald-400/40"
-            >
-              <Copy className="w-3.5 h-3.5" />
-              <span>Copy HR Docs from Al Nahda to (COMPLIANCE CONSULTANT)</span>
-            </button>
+            <div className="flex flex-col gap-2 pt-1 border-t border-slate-800">
+              {isConsultantMode ? (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={handleFreezeAllDocuments}
+                      className="py-1.5 px-3 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-emerald-700/60"
+                      title="Lock and freeze all documents against unauthorized modification"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-emerald-400" /> Freeze All Master Docs
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowMassUnfreezeConfirmModal(true)}
+                      className="py-1.5 px-3 bg-amber-950 hover:bg-amber-900 text-amber-300 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-amber-700/60"
+                      title="Unfreeze all documents for bulk template revisions"
+                    >
+                      <Unlock className="w-3.5 h-3.5 text-amber-400" /> Unfreeze All
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetCopyDestination('ALL_CLIENTS');
+                      setSelectedConsultantDocIds(consultantMasterDocs.map(d => d.id));
+                      setShowCopyFromConsultantModal(true);
+                    }}
+                    className="w-full py-2 px-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black text-xs rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md border border-cyan-400/40"
+                  >
+                    <Layers className="w-3.5 h-3.5 text-cyan-200" />
+                    <span>Distribute Master Data to ALL Clients ({availableClientsList.length})</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleExecuteCopyFromConsultant(consultantMasterDocs.map(d => d.id), 'ACTIVE_CLIENT')}
+                    className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md border border-emerald-400/40"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>⚡ 1-Click Copy Master Data from COMPLIANCE CONSULTANT</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetCopyDestination('ACTIVE_CLIENT');
+                      setSelectedConsultantDocIds(consultantMasterDocs.map(d => d.id));
+                      setShowCopyFromConsultantModal(true);
+                    }}
+                    className="w-full py-1.5 px-3 bg-cyan-950/80 hover:bg-cyan-900/80 text-cyan-200 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer border border-cyan-500/40"
+                  >
+                    <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Select Specific Master Documents to Copy</span>
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
+
+      {/* MASTER DATA COPY & GOVERNANCE PROMPT BANNER FOR CLIENTS */}
+      {!isConsultantMode && (
+        <div className="bg-gradient-to-r from-cyan-950/70 via-slate-900 to-emerald-950/60 p-4 rounded-2xl border border-cyan-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-lg">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shrink-0">
+              <Layers className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-black text-white">Master HR Documents Hub & Vault Sync</h4>
+                <span className="px-2 py-0.5 rounded text-[10px] font-black bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                  SOURCE: COMPLIANCE CONSULTANT (SmartPro)
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Copy master certified templates into <strong className="text-white">{client?.company_name || 'Active Client'}</strong>. Entity credentials, trade license, and facility signatory contacts are auto-bound and locked with baseline freeze.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            <button
+              type="button"
+              onClick={() => handleExecuteCopyFromConsultant(consultantMasterDocs.map(d => d.id), 'ACTIVE_CLIENT')}
+              className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center gap-1.5"
+            >
+              <Copy className="w-3.5 h-3.5" /> Copy Master Data
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTargetCopyDestination('ACTIVE_CLIENT');
+                setSelectedConsultantDocIds(consultantMasterDocs.map(d => d.id));
+                setShowCopyFromConsultantModal(true);
+              }}
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 font-bold text-xs rounded-xl cursor-pointer transition-all flex items-center gap-1.5"
+            >
+              <Sliders className="w-3.5 h-3.5" /> Browse Master ({consultantMasterDocs.length})
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* TOP ACTION BAR - NAVIGATION TABS & SCRIPT EXPORTER BTN */}
       <div className="bg-slate-900/90 p-2 rounded-2xl border border-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-md">
@@ -1922,12 +3358,47 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
           </button>
         </div>
 
-        <button
-          onClick={() => setShowTotalScriptModal(true)}
-          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-amber-950/40"
-        >
-          <Code className="w-4 h-4" /> Attach Total JSON Script (.json)
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleManualSaveVault}
+            className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-emerald-950/40 border border-emerald-400/30"
+            title="Explicitly save and persist all documents in HR Vault Registry"
+          >
+            <Save className="w-4 h-4" /> Save Vault Registry ({documents.length})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setTargetCopyDestination('ACTIVE_CLIENT');
+              setSelectedConsultantDocIds(consultantMasterDocs.map(d => d.id));
+              setShowCopyFromConsultantModal(true);
+            }}
+            className="px-3.5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold text-xs transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-cyan-950/40 border border-cyan-400/30"
+          >
+            <Copy className="w-4 h-4" /> Copy Files from Compliance Consultant
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setTargetCopyDestination('ALL_CLIENTS');
+              setSelectedConsultantDocIds(consultantMasterDocs.map(d => d.id));
+              setShowCopyFromConsultantModal(true);
+            }}
+            className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-700 to-blue-700 hover:from-cyan-600 hover:to-blue-600 text-white font-black text-xs transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-cyan-950/40 border border-cyan-400/30"
+          >
+            <Layers className="w-4 h-4" /> Copy to ALL Clients Registry
+          </button>
+
+          <button
+            onClick={() => setShowTotalScriptModal(true)}
+            className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-amber-950/40"
+          >
+            <Code className="w-4 h-4" /> Attach Total JSON Script (.json)
+          </button>
+        </div>
       </div>
 
       {/* NOTIFICATION BANNERS */}
@@ -1998,24 +3469,98 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
             </div>
           </div>
 
+          {/* BULK SELECTION ACTION BAR */}
+          {selectedDocIds.length > 0 && (
+            <div className="bg-emerald-950/80 border border-emerald-500/40 p-3 px-4 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs shadow-lg">
+              <div className="flex items-center gap-2 text-emerald-200 font-bold">
+                <CheckSquare className="w-4 h-4 text-emerald-400" />
+                <span>{selectedDocIds.length} Document(s) Selected</span>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setShowBulkDeleteModal(true)}
+                  className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs cursor-pointer flex items-center gap-1.5 shadow-md transition-all"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Delete Selected ({selectedDocIds.length})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDuplicateSelectedDocs}
+                  className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs cursor-pointer flex items-center gap-1.5 shadow-md transition-all"
+                >
+                  <Copy className="w-3.5 h-3.5" /> Duplicate Selected ({selectedDocIds.length})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedDocIds([])}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs cursor-pointer transition-all"
+                >
+                  Clear Selection
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* VAULT TABLE */}
           <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
-            <div className="p-4 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <div className="p-4 bg-slate-950/80 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
                 <h3 className="font-extrabold text-xs text-white uppercase tracking-wider">
                   HR Documents Vault Registry ({filteredDocs.length} Active Records)
                 </h3>
+                <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/80 border border-emerald-500/30 px-2 py-0.5 rounded-md flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  Saved: {lastSavedTimestamp}
+                </span>
               </div>
-              <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
-                Click <span className="text-emerald-400 font-bold">Inspect</span> to view or export full document details.
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleManualSaveVault}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition-all border border-emerald-400/30"
+                  title="Force save all current document records to persistent storage"
+                >
+                  <Save className="w-3.5 h-3.5" /> Save Vault Registry
+                </button>
+                {documents.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowClearVaultModal(true)}
+                    className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
+                    title="Remove all documents from this client vault"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-400" /> Clear Vault
+                  </button>
+                )}
+                <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
+                  Click <span className="text-emerald-400 font-bold">Inspect</span> to view or export full document details.
+                </span>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="bg-slate-950/50 text-slate-400 font-bold uppercase text-[10px] tracking-wider border-b border-slate-800">
+                    <th className="p-4 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={filteredDocs.length > 0 && filteredDocs.every(d => selectedDocIds.includes(d.id))}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedDocIds(filteredDocs.map(d => d.id));
+                          } else {
+                            setSelectedDocIds([]);
+                          }
+                        }}
+                        className="rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                        title="Select or deselect all filtered documents"
+                      />
+                    </th>
                     <th className="p-4">Reference & Title</th>
                     <th className="p-4">Employee Details</th>
                     <th className="p-4">Category</th>
@@ -2024,15 +3569,72 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 font-medium">
-                  {filteredDocs.length === 0 ? (
+                  {documents.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-slate-500">
+                      <td colSpan={6} className="p-10 text-center">
+                        <div className="max-w-md mx-auto space-y-3 py-4">
+                          <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center">
+                            <FileText className="w-7 h-7" />
+                          </div>
+                          <div className="space-y-1">
+                            <h3 className="text-sm font-black text-white uppercase tracking-wider">Vault is Clean & Empty</h3>
+                            <p className="text-xs text-slate-400 leading-relaxed">
+                              Auto-loading of unwanted documents has been stopped. You can create your own documents, ingest files, or copy master certified documents from <strong>COMPLIANCE CONSULTANT</strong>.
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => handleExecuteCopyFromConsultant(consultantMasterDocs.map(d => d.id), 'ACTIVE_CLIENT')}
+                              className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg cursor-pointer transition-all flex items-center gap-1.5"
+                            >
+                              <Copy className="w-4 h-4" /> 1-Click Copy Master Documents ({consultantMasterDocs.length})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTargetCopyDestination('ACTIVE_CLIENT');
+                                setSelectedConsultantDocIds(consultantMasterDocs.map(d => d.id));
+                                setShowCopyFromConsultantModal(true);
+                              }}
+                              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 font-bold text-xs rounded-xl cursor-pointer transition-all flex items-center gap-1.5"
+                            >
+                              <Layers className="w-3.5 h-3.5" /> Select Specific Master Docs
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setActiveTab('create')}
+                              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs rounded-xl cursor-pointer transition-all flex items-center gap-1.5"
+                            >
+                              <Plus className="w-3.5 h-3.5 text-emerald-400" /> Create Custom Doc
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : filteredDocs.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-slate-500">
                         No HR documents matched your search filter.
                       </td>
                     </tr>
                   ) : (
                     filteredDocs.map(doc => (
-                      <tr key={doc.id} className="hover:bg-slate-800/40 transition-colors">
+                      <tr key={doc.id} className={`transition-colors ${selectedDocIds.includes(doc.id) ? 'bg-emerald-950/25 hover:bg-emerald-950/35' : 'hover:bg-slate-800/40'}`}>
+                        <td className="p-4 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedDocIds.includes(doc.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedDocIds(prev => [...prev, doc.id]);
+                              } else {
+                                setSelectedDocIds(prev => prev.filter(id => id !== doc.id));
+                              }
+                            }}
+                            className="rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                          />
+                        </td>
                         <td className="p-4">
                           <div className="space-y-0.5">
                             <span className="font-mono text-[10px] text-emerald-400 font-bold block">
@@ -2045,9 +3647,17 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                         <td className="p-4">
                           <div>
                             <span className="font-bold text-slate-200 block">{doc.employeeDetails?.fullLegalName || 'Employee'}</span>
-                            <span className="text-[10px] text-slate-400 font-mono">
+                            <span className="text-[10px] text-slate-400 font-mono block">
                               ID: {doc.employeeDetails?.employeeId || 'N/A'} &bull; {doc.employeeDetails?.department || 'General'}
                             </span>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenConnectEmployeeModal(doc)}
+                              className="text-[10px] text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1 font-bold mt-1 transition-colors cursor-pointer"
+                              title="Connect or change staff record from Employee & Operator Management"
+                            >
+                              <UserCheck className="w-3 h-3" /> Connect Staff Record
+                            </button>
                           </div>
                         </td>
 
@@ -2058,23 +3668,63 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                         </td>
 
                         <td className="p-4 text-center">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                            doc.status === 'APPROVED_FROZEN'
-                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                              : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                          }`}>
-                            {doc.status}
-                          </span>
+                          {doc.isFrozen !== false ? (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 inline-flex items-center gap-1">
+                              <Lock className="w-3 h-3 text-emerald-400" /> FROZEN (MASTER)
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40 inline-flex items-center gap-1">
+                              <Unlock className="w-3 h-3 text-amber-400" /> UNFROZEN (EDITABLE)
+                            </span>
+                          )}
                         </td>
 
                         <td className="p-4 text-right">
                           <div className="flex flex-wrap items-center justify-end gap-1.5">
                             <button
-                              onClick={() => handleOpenEditModal(doc)}
-                              className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-xs cursor-pointer flex items-center gap-1 transition-all"
-                              title="Edit HR Document Record"
+                              type="button"
+                              onClick={() => handleOpenConnectEmployeeModal(doc)}
+                              className="px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 font-bold text-xs cursor-pointer flex items-center gap-1 transition-all shadow-xs"
+                              title="Connect with Employee & Operator Management (Select staff member from roster)"
                             >
-                              <Edit3 className="w-3.5 h-3.5" /> Edit
+                              <UserCheck className="w-3.5 h-3.5 text-cyan-400" /> Connect Staff
+                            </button>
+
+                            {doc.isFrozen !== false ? (
+                              <button
+                                type="button"
+                                onClick={() => handleRequestEditDoc(doc)}
+                                className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-xs cursor-pointer flex items-center gap-1 transition-all"
+                                title="This document is frozen. Click to unfreeze and edit."
+                              >
+                                <Unlock className="w-3.5 h-3.5 text-amber-400" /> Unfreeze to Edit
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditModal(doc)}
+                                className="px-2.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs cursor-pointer flex items-center gap-1 transition-all shadow-sm"
+                                title="Edit Document Record"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" /> Edit Record
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => handleToggleFreezeDoc(doc)}
+                              className={`p-1.5 rounded-xl border font-bold text-xs cursor-pointer transition-all ${
+                                doc.isFrozen !== false
+                                  ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700'
+                                  : 'bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border-emerald-700'
+                              }`}
+                              title={doc.isFrozen !== false ? 'Unfreeze Document' : 'Freeze & Lock Document'}
+                            >
+                              {doc.isFrozen !== false ? (
+                                <Unlock className="w-3.5 h-3.5 text-amber-400" />
+                              ) : (
+                                <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                              )}
                             </button>
 
                             <button
@@ -2120,16 +3770,7 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const confirmDel = window.confirm(`Are you sure you want to delete "${doc.title}" (${doc.legalMetadata?.referenceCode || ''}) from the HR Vault?`);
-                                if (confirmDel) {
-                                  setDocuments(prev => prev.filter(d => d.id !== doc.id));
-                                  if (selectedDoc?.id === doc.id) {
-                                    setSelectedDoc(null);
-                                    setShowPreviewModal(false);
-                                  }
-                                  setFormCopyPasteNotice(`✓ Document "${doc.title}" deleted from HR Vault.`);
-                                  setTimeout(() => setFormCopyPasteNotice(null), 4000);
-                                }
+                                setDeletingDoc(doc);
                               }}
                               className="px-2.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-bold text-xs cursor-pointer flex items-center gap-1 transition-all shadow-xs"
                               title="Delete Record from Vault"
@@ -2460,6 +4101,58 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                 </select>
               </div>
 
+              {/* GOVERNANCE & FORM LIFECYCLE CONTROLS */}
+              <div className="col-span-1 sm:col-span-2 bg-slate-950/80 border border-indigo-500/30 p-4 rounded-xl space-y-3">
+                <div className="flex items-center justify-between border-b border-indigo-500/20 pb-2">
+                  <span className="text-xs font-extrabold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <FileCheck className="w-4 h-4 text-indigo-400" /> Document Governance & Loop Metadata
+                  </span>
+                  <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-bold border border-indigo-500/30">
+                    Audit-Ready
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-amber-400 block mb-1">Document Ref Code</label>
+                    <input
+                      type="text"
+                      value={newRefCode}
+                      onChange={e => setNewRefCode(e.target.value)}
+                      placeholder="REF-HR-0000"
+                      className="w-full p-2 bg-slate-900 border border-amber-500/30 rounded-xl text-xs text-amber-300 font-mono font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-indigo-400 block mb-1">Version Control</label>
+                    <input
+                      type="text"
+                      value={newVersionControl}
+                      onChange={e => setNewVersionControl(e.target.value)}
+                      placeholder="v1.0 (Master Loop)"
+                      className="w-full p-2 bg-slate-900 border border-indigo-500/30 rounded-xl text-xs text-indigo-300 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-cyan-400 block mb-1">Issue Date *</label>
+                    <input
+                      type="date"
+                      value={toISODate(newIssueDate)}
+                      onChange={e => setNewIssueDate(e.target.value)}
+                      className="w-full p-2 bg-slate-900 border border-cyan-500/30 rounded-xl text-xs text-cyan-300 font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-rose-400 block mb-1">Due for Revision</label>
+                    <input
+                      type="date"
+                      value={toISODate(newDueDateForRevision)}
+                      onChange={e => setNewDueDateForRevision(e.target.value)}
+                      className="w-full p-2 bg-slate-900 border border-rose-500/30 rounded-xl text-xs text-rose-300 font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* EMPLOYEE ROSTER CONNECTED SELECTOR (FILTERED BY SELECTED FACILITY) */}
               <div className="col-span-1 sm:col-span-2 bg-slate-900/90 border border-emerald-500/40 p-3.5 rounded-xl space-y-2 shadow-xs">
                 <div className="flex items-center justify-between">
@@ -2479,6 +4172,9 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                       setNewEmpId(emp.employee_id);
                       setNewJobTitle(emp.position || '');
                       setNewDept(emp.department || '');
+                      if ((emp as any).joining_date || (emp as any).date_of_joining || (emp as any).joiningDate) {
+                        setNewJoiningDate((emp as any).joining_date || (emp as any).date_of_joining || (emp as any).joiningDate);
+                      }
                       if (emp.branch_name) {
                         setNewFacilityName(emp.branch_name);
                       }
@@ -2556,6 +4252,16 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                   placeholder="e.g. Quality & IT Security"
                   value={newDept}
                   onChange={e => setNewDept(e.target.value)}
+                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:ring-2 focus:ring-emerald-500/30"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">Joining Date</label>
+                <input
+                  type="date"
+                  value={newJoiningDate}
+                  onChange={e => setNewJoiningDate(e.target.value)}
                   className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:ring-2 focus:ring-emerald-500/30"
                 />
               </div>
@@ -2637,10 +4343,10 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
               </div>
             </div>
 
-            {/* RISK REVIEW COMMITTEE FIELDSET */}
+            {/* FACILITY COMMITTEE SIGNATORY CONTROLS */}
             <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
               <h3 className="font-extrabold text-xs text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                <UserCheck className="w-4 h-4" /> Risk Review Committee / Authorized Personnel Contacts
+                <UserCheck className="w-4 h-4" /> Facility Committee Signatory Controls
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -2857,9 +4563,50 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                 <span className="font-mono text-emerald-400 font-bold text-[11px]">
                   {selectedDoc.legalMetadata?.lawReference || 'Federal Decree-Law No. 50'}
                 </span>
+                {selectedDoc.isFrozen !== false ? (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-950 text-emerald-300 border border-emerald-800 inline-flex items-center gap-1">
+                    <Lock className="w-3 h-3 text-emerald-400" /> FROZEN BASELINE
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-950 text-amber-300 border border-amber-800 inline-flex items-center gap-1">
+                    <Unlock className="w-3 h-3 text-amber-400" /> UNFROZEN / EDITABLE
+                  </span>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenConnectEmployeeModal(selectedDoc)}
+                  className="px-3 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 font-extrabold text-xs cursor-pointer shadow-md flex items-center gap-1.5 transition-all"
+                  title="Connect with Employee & Operator Management"
+                >
+                  <UserCheck className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Connect Staff</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleToggleFreezeDoc(selectedDoc)}
+                  className={`px-3 py-2 rounded-xl font-extrabold text-xs cursor-pointer shadow-md flex items-center gap-1.5 transition-all border ${
+                    selectedDoc.isFrozen !== false
+                      ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40'
+                      : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40'
+                  }`}
+                >
+                  {selectedDoc.isFrozen !== false ? (
+                    <>
+                      <Unlock className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Unfreeze to Modify</span>
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Freeze Master Document</span>
+                    </>
+                  )}
+                </button>
+
                 <button
                   onClick={() => handleExportPdf(selectedDoc)}
                   disabled={isExportingPdf}
@@ -2885,12 +4632,11 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
 
                 <button
                   onClick={() => {
-                    setShowPreviewModal(false);
-                    handleOpenEditModal(selectedDoc);
+                    handleRequestEditDoc(selectedDoc);
                   }}
                   className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs cursor-pointer shadow-md shadow-amber-950/30 flex items-center gap-1.5 transition-all"
                 >
-                  <Edit3 className="w-3.5 h-3.5" /> Edit Document
+                  <Edit3 className="w-3.5 h-3.5" /> {selectedDoc.isFrozen !== false ? 'Unfreeze & Edit' : 'Edit Document'}
                 </button>
 
                 <button
@@ -2902,6 +4648,37 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                 </button>
               </div>
             </div>
+
+            {/* FROZEN WARNING NOTIFICATION BANNER */}
+            {selectedDoc.isFrozen !== false && (
+              <div className="bg-amber-950/70 border border-amber-500/50 p-3 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-md">
+                <div className="flex items-center gap-2.5 text-amber-200">
+                  <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>
+                    <strong>Master Baseline Document is FROZEN:</strong> Text clauses, employee designations, and entity credentials are locked against accidental modification.
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenConnectEmployeeModal(selectedDoc)}
+                    className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-black text-xs cursor-pointer transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    <UserCheck className="w-3.5 h-3.5" /> Connect Staff
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUnfreezePromptDoc(selectedDoc);
+                      setShowUnfreezeConfirmModal(true);
+                    }}
+                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl font-black text-xs cursor-pointer transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Unlock className="w-3.5 h-3.5" /> Unfreeze to Modify
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* TAB 1: A4 REALISTIC DOCUMENT PAPER PREVIEW */}
             {inspectViewMode === 'a4-preview' && (
@@ -3212,7 +4989,7 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                       {/* Document Title Banner */}
                       <div className="bg-slate-100 p-3 rounded border border-slate-200 text-center">
                         <h2 className="text-base font-extrabold text-slate-900 uppercase tracking-tight text-center font-bold">
-                          {getProcessedHtmlContent(selectedDoc.title, selectedDoc, companyName) || selectedDoc.title}
+                          {getProcessedHtmlContent(selectedDoc.title, selectedDoc, companyName, client) || selectedDoc.title}
                         </h2>
                       </div>
 
@@ -3223,6 +5000,15 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                             <div className="bg-slate-800 text-white font-extrabold text-[10px] px-3 py-1 uppercase tracking-wider flex items-center justify-between">
                               <span>Company Employee Information</span>
                               <div className="flex items-center gap-3 no-print print:hidden" data-no-print="true">
+                                <label className="text-[9px] font-normal text-slate-300 flex items-center gap-1 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={showJoiningDate}
+                                    onChange={e => setShowJoiningDate(e.target.checked)}
+                                    className="rounded accent-emerald-500"
+                                  />
+                                  <span>Include Joining Date (Optional)</span>
+                                </label>
                                 <label className="text-[9px] font-normal text-slate-300 flex items-center gap-1 cursor-pointer">
                                   <input
                                     type="checkbox"
@@ -3257,8 +5043,17 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                               </div>
                               <div>
                                 <span className="text-[9px] text-slate-500 font-bold uppercase block">Department:</span>
-                                <span className="font-bold text-slate-900">{selectedDoc.employeeDetails?.department || 'Operations'}</span>
+                                <span className="font-bold text-slate-900">{selectedDoc.employeeDetails?.department || 'Admin'}</span>
                               </div>
+                              {showJoiningDate && (
+                                <div className="col-span-2 pt-1 border-t border-slate-200/60 flex items-center justify-between">
+                                  <div>
+                                    <span className="text-[9px] text-slate-500 font-bold uppercase block">Joining Date:</span>
+                                    <span className="font-mono font-bold text-indigo-900">{selectedDoc.employeeDetails?.joiningDate || '2024-01-01'}</span>
+                                  </div>
+                                  <span className="text-[9px] text-slate-400 font-mono italic no-print print:hidden">(Optional Joining Date)</span>
+                                </div>
+                              )}
                               {showOptionalEmiratesId && (
                                 <div className="col-span-2 pt-1 border-t border-slate-200/60 flex items-center justify-between">
                                   <div>
@@ -3300,6 +5095,7 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                                       let job = selectedDoc.employeeDetails?.jobTitle || 'Healthcare Specialist';
                                       let dept = selectedDoc.employeeDetails?.department || 'Operations';
                                       let eid = selectedDoc.employeeDetails?.emiratesId || '784-1990-1234567-1';
+                                      let joinDate = selectedDoc.employeeDetails?.joiningDate || '2024-01-01';
 
                                       try {
                                         const parsed = JSON.parse(text);
@@ -3325,7 +5121,8 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                                           employeeId: empId,
                                           jobTitle: job,
                                           department: dept,
-                                          emiratesId: eid || selectedDoc.employeeDetails?.emiratesId || '784-1990-1234567-1'
+                                          emiratesId: eid || selectedDoc.employeeDetails?.emiratesId || '784-1990-1234567-1',
+                                          joiningDate: joinDate || selectedDoc.employeeDetails?.joiningDate || '2024-01-01'
                                         },
                                         employeeSignature: {
                                           ...(selectedDoc.employeeSignature || {
@@ -3372,7 +5169,7 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                             textAlign: docTextAlign,
                           }}
                           className="bg-slate-50/70 border border-slate-200 rounded-lg leading-relaxed space-y-2"
-                          dangerouslySetInnerHTML={{ __html: getProcessedHtmlContent(selectedDoc.htmlContent, selectedDoc, companyName) }}
+                          dangerouslySetInnerHTML={{ __html: getProcessedHtmlContent(selectedDoc.htmlContent, selectedDoc, companyName, client) }}
                         />
                       </div>
 
@@ -3380,134 +5177,155 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                       {showRegulatorySignatoryControls && (
                         <div className="pt-2 border-t border-slate-200">
                           {/* Control Header Bar - Hidden during print */}
-                          <div className="flex items-center justify-between mb-1.5 no-print print:hidden" data-no-print="true">
-                            <h3 className="font-black text-slate-900 text-[10px] uppercase tracking-wider">
-                              Regulatory Signatory Controls
-                            </h3>
-                            <div className="flex items-center gap-3">
-                              <label className="text-[9px] text-slate-600 font-extrabold flex items-center gap-1 cursor-pointer bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                          <div className="flex flex-wrap items-center justify-between gap-2 mb-2 no-print print:hidden bg-slate-100 p-2 rounded-lg border border-slate-200" data-no-print="true">
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                              <h3 className="font-black text-slate-900 text-[10px] uppercase tracking-wider">
+                                Facility Committee Signatory Controls
+                              </h3>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              {/* Layout Options */}
+                              <div className="flex items-center bg-white border border-slate-300 rounded p-0.5 text-[9px] font-bold">
+                                <button
+                                  type="button"
+                                  onClick={() => setSignatoryPrintOption('dual')}
+                                  className={`px-2 py-0.5 rounded transition-all cursor-pointer ${signatoryPrintOption === 'dual' ? 'bg-indigo-600 text-white' : 'text-slate-700 hover:bg-slate-100'}`}
+                                >
+                                  Option 1: Dual (Auth Rep)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSignatoryPrintOption('tri')}
+                                  className={`px-2 py-0.5 rounded transition-all cursor-pointer ${signatoryPrintOption === 'tri' ? 'bg-indigo-600 text-white' : 'text-slate-700 hover:bg-slate-100'}`}
+                                >
+                                  Option 2: Executive Tri-Signatory
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSignatoryPrintOption('quad')}
+                                  className={`px-2 py-0.5 rounded transition-all cursor-pointer ${signatoryPrintOption === 'quad' ? 'bg-indigo-600 text-white' : 'text-slate-700 hover:bg-slate-100'}`}
+                                >
+                                  Option 3: Quad Committee
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSignatoryPrintOption('custom')}
+                                  className={`px-2 py-0.5 rounded transition-all cursor-pointer ${signatoryPrintOption === 'custom' ? 'bg-indigo-600 text-white' : 'text-slate-700 hover:bg-slate-100'}`}
+                                >
+                                  Custom
+                                </button>
+                              </div>
+
+                              <label className="text-[9px] text-slate-700 font-extrabold flex items-center gap-1 cursor-pointer bg-white px-2 py-1 rounded border border-slate-300">
                                 <input
                                   type="checkbox"
                                   checked={useManualSignatures}
                                   onChange={e => setUseManualSignatures(e.target.checked)}
                                   className="rounded accent-indigo-600"
                                 />
-                                <span>Manual Signature Line</span>
-                              </label>
-
-                              <label className="text-[9px] text-slate-500 font-bold flex items-center gap-1 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={showOptionalHrManagerSignatory}
-                                  onChange={e => setShowOptionalHrManagerSignatory(e.target.checked)}
-                                  className="rounded accent-amber-600"
-                                />
-                                <span>Include HR Manager Signatory (Optional)</span>
+                                <span>Physical Signature / Stamp Lines</span>
                               </label>
 
                               <button
                                 type="button"
                                 onClick={() => setShowRegulatorySignatoryControls(false)}
-                                className="text-[9px] bg-rose-500/20 hover:bg-rose-500/40 text-rose-700 px-1.5 py-0.5 rounded border border-rose-500/30 font-bold transition-all cursor-pointer"
+                                className="text-[9px] bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 px-1.5 py-1 rounded border border-rose-300 font-bold transition-all cursor-pointer"
                                 title="Disable / Hide Regulatory Signatory Controls section"
                               >
-                                ✕ Disable Section
+                                ✕ Hide
                               </button>
                             </div>
+
+                            {/* Custom Member Checkboxes if Custom layout selected */}
+                            {signatoryPrintOption === 'custom' && (
+                              <div className="w-full pt-1.5 border-t border-slate-200/80 flex flex-wrap items-center gap-2 text-[9px] text-slate-700 font-semibold">
+                                <span className="font-extrabold text-slate-900">Select Committee Members:</span>
+                                {committeeContacts.map(c => (
+                                  <label key={c.id} className="flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-slate-300 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedCommitteeIds.includes(c.id)}
+                                      onChange={e => {
+                                        if (e.target.checked) {
+                                          setSelectedCommitteeIds(prev => [...prev, c.id]);
+                                        } else {
+                                          setSelectedCommitteeIds(prev => prev.filter(id => id !== c.id));
+                                        }
+                                      }}
+                                      className="rounded accent-indigo-600"
+                                    />
+                                    <span>{c.role}: <strong className="text-slate-900">{c.name}</strong></span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
                           </div>
 
-                          {useManualSignatures ? (
-                            /* Manual Physical Signature Box Option */
-                            <div className={`grid gap-2.5 ${showOptionalHrManagerSignatory ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
-                              {/* Employee Signatory Manual Box */}
-                              <div className="p-2.5 border-2 border-slate-300 bg-white rounded space-y-1">
-                                <span className="text-[8px] font-black uppercase text-slate-700 tracking-wider block">Employee Signatory</span>
-                                <span className="font-extrabold text-slate-900 text-xs block">{selectedDoc.employeeSignature?.signedBy || selectedDoc.employeeDetails?.fullLegalName || 'Staff Member'}</span>
-                                <div className="border-b-2 border-dashed border-slate-400 my-2 h-6 flex items-end">
-                                  <span className="text-[7px] text-slate-400 italic">Physical Signature / Stamp</span>
-                                </div>
-                                <div className="flex justify-between items-center text-[8px] text-slate-600 font-mono pt-0.5">
-                                  <span>Signed: ________________</span>
-                                  <span>Date: ___/___/2026</span>
-                                </div>
-                              </div>
-
-                              {/* Employer Signatory Manual Box */}
-                              <div className="p-2.5 border-2 border-slate-300 bg-white rounded space-y-1">
-                                <span className="text-[8px] font-black uppercase text-slate-700 tracking-wider block">Employer Signatory</span>
-                                <span className="font-extrabold text-slate-900 text-xs block">{selectedDoc.employerSignature?.signedBy || 'Authorized Employer Signatory'}</span>
-                                <div className="border-b-2 border-dashed border-slate-400 my-2 h-6 flex items-end">
-                                  <span className="text-[7px] text-slate-400 italic">Physical Signature / Stamp</span>
-                                </div>
-                                <div className="flex justify-between items-center text-[8px] text-slate-600 font-mono pt-0.5">
-                                  <span>Signed: ________________</span>
-                                  <span>Date: ___/___/2026</span>
-                                </div>
-                              </div>
-
-                              {/* HR Manager Signatory (Optional) Manual Box */}
-                              {showOptionalHrManagerSignatory && (
-                                <div className="p-2.5 border-2 border-slate-300 bg-white rounded space-y-1">
-                                  <span className="text-[8px] font-black uppercase text-slate-700 tracking-wider block flex items-center justify-between">
-                                    <span>HR Manager Signatory</span>
-                                    <span className="text-[7px] text-slate-500 font-normal italic no-print print:hidden">(Optional)</span>
-                                  </span>
-                                  <span className="font-extrabold text-slate-900 text-xs block">
-                                    {selectedDoc.hrManagerSignature?.signedBy || 'Fatima Al-Suwaidi (HR Director)'}
-                                  </span>
-                                  <div className="border-b-2 border-dashed border-slate-400 my-2 h-6 flex items-end">
+                          {/* Signatures Grid */}
+                          <div className={`grid gap-2.5 ${
+                            activeCommitteeSignatories.length === 1 ? 'grid-cols-1 sm:grid-cols-2' :
+                            activeCommitteeSignatories.length === 2 ? 'grid-cols-1 sm:grid-cols-3' :
+                            'grid-cols-1 sm:grid-cols-2 md:grid-cols-4'
+                          }`}>
+                            {/* 1. Employee Signatory */}
+                            <div className="p-2.5 border-2 border-slate-300 bg-white rounded space-y-1">
+                              <span className="text-[8px] font-black uppercase text-slate-700 tracking-wider block">Employee Signatory</span>
+                              <span className="font-extrabold text-slate-900 text-xs block">{selectedDoc.employeeSignature?.signedBy || selectedDoc.employeeDetails?.fullLegalName || 'Staff Member'}</span>
+                              <span className="text-[8px] text-slate-500 block truncate">{selectedDoc.employeeDetails?.jobTitle || 'Employee / Staff Member'}</span>
+                              
+                              {useManualSignatures ? (
+                                <>
+                                  <div className="border-b-2 border-dashed border-slate-400 my-2 h-5 flex items-end">
                                     <span className="text-[7px] text-slate-400 italic">Physical Signature / Stamp</span>
                                   </div>
                                   <div className="flex justify-between items-center text-[8px] text-slate-600 font-mono pt-0.5">
                                     <span>Signed: ________________</span>
                                     <span>Date: ___/___/2026</span>
                                   </div>
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            /* Digital Attestation Signature Box Option */
-                            <div className={`grid gap-2.5 ${showOptionalHrManagerSignatory ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
-                              {/* Employee Signatory */}
-                              <div className="p-2.5 border-2 border-emerald-600 bg-emerald-50/40 rounded space-y-1">
-                                <span className="text-[8px] font-black uppercase text-emerald-800 tracking-wider block">Employee Signatory</span>
-                                <span className="font-extrabold text-slate-900 text-xs block">{selectedDoc.employeeSignature?.signedBy || selectedDoc.employeeDetails?.fullLegalName || 'Staff Member'}</span>
-                                <div className="flex items-center gap-1 text-[8px] font-extrabold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300 w-fit">
-                                  <ShieldCheck className="w-3 h-3 text-emerald-600" /> Verified & Attested
-                                </div>
-                                <p className="text-[8px] text-slate-500 font-mono">Signed: {selectedDoc.employeeSignature?.signedAt || selectedDoc.legalMetadata?.issueDate || '2026-08-01'}</p>
-                              </div>
-
-                              {/* Employer Signatory */}
-                              <div className="p-2.5 border-2 border-emerald-600 bg-emerald-50/40 rounded space-y-1">
-                                <span className="text-[8px] font-black uppercase text-emerald-800 tracking-wider block">Employer Signatory</span>
-                                <span className="font-extrabold text-slate-900 text-xs block">{selectedDoc.employerSignature?.signedBy || 'Authorized Employer Signatory'}</span>
-                                <div className="flex items-center gap-1 text-[8px] font-extrabold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300 w-fit">
-                                  <ShieldCheck className="w-3 h-3 text-emerald-600" /> Verified & Attested
-                                </div>
-                                <p className="text-[8px] text-slate-500 font-mono">Signed: {selectedDoc.employerSignature?.signedAt || selectedDoc.legalMetadata?.issueDate || '2026-08-01'}</p>
-                              </div>
-
-                              {/* HR Manager Signatory (Optional) */}
-                              {showOptionalHrManagerSignatory && (
-                                <div className="p-2.5 border-2 border-amber-600 bg-amber-50/40 rounded space-y-1">
-                                  <span className="text-[8px] font-black uppercase text-amber-900 tracking-wider block flex items-center justify-between">
-                                    <span>HR Manager Signatory</span>
-                                    <span className="text-[7px] text-amber-700 font-normal italic no-print print:hidden">(Optional)</span>
-                                  </span>
-                                  <span className="font-extrabold text-slate-900 text-xs block">
-                                    {selectedDoc.hrManagerSignature?.signedBy || 'Fatima Al-Suwaidi (HR Director)'}
-                                  </span>
-                                  <div className="flex items-center gap-1 text-[8px] font-extrabold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300 w-fit">
-                                    <Award className="w-3 h-3 text-amber-600" /> HR ATTESTED
+                                </>
+                              ) : (
+                                <div className="pt-1">
+                                  <div className="flex items-center gap-1 text-[8px] font-extrabold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300 w-fit">
+                                    <ShieldCheck className="w-3 h-3 text-emerald-600" /> Verified & Attested
                                   </div>
-                                  <p className="text-[8px] text-slate-500 font-mono">
-                                    Signed: {selectedDoc.hrManagerSignature?.signedAt || selectedDoc.legalMetadata?.issueDate || ''}
-                                  </p>
+                                  <p className="text-[8px] text-slate-500 font-mono mt-0.5">Signed: {selectedDoc.employeeSignature?.signedAt || selectedDoc.legalMetadata?.issueDate || '2026-08-01'}</p>
                                 </div>
                               )}
                             </div>
-                          )}
+
+                            {/* 2. Committee Signatories connected from Facility Management */}
+                            {activeCommitteeSignatories.map(sig => (
+                              <div key={sig.id} className="p-2.5 border-2 border-slate-300 bg-white rounded space-y-1">
+                                <span className="text-[8px] font-black uppercase text-slate-700 tracking-wider block">{sig.role}</span>
+                                <span className="font-extrabold text-slate-900 text-xs block">{sig.name}</span>
+                                <div className="text-[8px] text-slate-600 font-mono space-y-0.2">
+                                  <p className="truncate">{sig.email}</p>
+                                  <p>{sig.phone}</p>
+                                </div>
+
+                                {useManualSignatures ? (
+                                  <>
+                                    <div className="border-b-2 border-dashed border-slate-400 my-2 h-5 flex items-end">
+                                      <span className="text-[7px] text-slate-400 italic">Physical Signature / Stamp</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-[8px] text-slate-600 font-mono pt-0.5">
+                                      <span>Signed: ________________</span>
+                                      <span>Date: ___/___/2026</span>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="pt-1">
+                                    <div className="flex items-center gap-1 text-[8px] font-extrabold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300 w-fit">
+                                      <ShieldCheck className="w-3 h-3 text-emerald-600" /> Verified & Attested
+                                    </div>
+                                    <p className="text-[8px] text-slate-500 font-mono mt-0.5">Signed: {selectedDoc.employerSignature?.signedAt || selectedDoc.legalMetadata?.issueDate || '2026-08-01'}</p>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -3562,6 +5380,7 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                     <p className="text-slate-400">Employee ID: {selectedDoc.employeeDetails?.employeeId || 'N/A'}</p>
                     <p className="text-slate-400">Emirates ID: {selectedDoc.employeeDetails?.emiratesId || 'N/A'}</p>
                     <p className="text-slate-400">Title: {selectedDoc.employeeDetails?.jobTitle || ''} ({selectedDoc.employeeDetails?.department || ''})</p>
+                    <p className="text-slate-400">Joining Date: {selectedDoc.employeeDetails?.joiningDate || '2024-01-01'}</p>
                   </div>
 
                   <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
@@ -3582,7 +5401,7 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
 
                   <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
                     <span className="font-extrabold text-amber-400 uppercase text-[10px] block flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5" /> Risk Review Committee & Contacts
+                      <ShieldCheck className="w-3.5 h-3.5" /> Facility Committee Signatory Controls
                     </span>
                     <p className="text-white font-bold">Chair: {selectedDoc.riskCommitteeContacts?.committeeChair || DEFAULT_RISK_COMMITTEE_CONTACTS.committeeChair}</p>
                     <p className="text-slate-400">Compliance Lead: {selectedDoc.riskCommitteeContacts?.complianceOfficer || DEFAULT_RISK_COMMITTEE_CONTACTS.complianceOfficer}</p>
@@ -3822,12 +5641,12 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-cyan-400 block mb-1">Form Issue Date</label>
+                  <label className="text-xs font-bold text-cyan-400 block mb-1">Form Issue Date *</label>
                   <input
                     type="date"
-                    value={editIssueDate}
+                    value={toISODate(editIssueDate)}
                     onChange={e => setEditIssueDate(e.target.value)}
-                    className="w-full p-2 bg-slate-950 border border-cyan-500/30 rounded-xl text-xs text-cyan-300"
+                    className="w-full p-2 bg-slate-950 border border-cyan-500/30 rounded-xl text-xs text-cyan-300 font-medium"
                   />
                 </div>
 
@@ -3835,10 +5654,34 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                   <label className="text-xs font-bold text-rose-400 block mb-1">Form Due for Revision</label>
                   <input
                     type="date"
-                    value={editDueDateForRevision}
+                    value={toISODate(editDueDateForRevision)}
                     onChange={e => setEditDueDateForRevision(e.target.value)}
                     className="w-full p-2 bg-slate-950 border border-rose-500/30 rounded-xl text-xs text-rose-300 font-bold"
                   />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-emerald-400 block mb-1">Approval Date</label>
+                  <input
+                    type="date"
+                    value={toISODate(editApprovalDate)}
+                    onChange={e => setEditApprovalDate(e.target.value)}
+                    className="w-full p-2 bg-slate-950 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-purple-400 block mb-1">Document Classification</label>
+                  <select
+                    value={editDocClassification}
+                    onChange={e => setEditDocClassification(e.target.value)}
+                    className="w-full p-2 bg-slate-950 border border-purple-500/30 rounded-xl text-xs text-purple-300 cursor-pointer"
+                  >
+                    <option value="CONFIDENTIAL">CONFIDENTIAL</option>
+                    <option value="RESTRICTED">RESTRICTED</option>
+                    <option value="INTERNAL">INTERNAL</option>
+                    <option value="PUBLIC">PUBLIC</option>
+                  </select>
                 </div>
 
                 {/* EMPLOYEE ROSTER CONNECTED SELECTOR FOR EDIT MODAL */}
@@ -3860,6 +5703,9 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                         setEditEmpId(emp.employee_id);
                         setEditJobTitle(emp.position || '');
                         setEditDept(emp.department || '');
+                        if ((emp as any).joining_date || (emp as any).date_of_joining || (emp as any).joiningDate) {
+                          setEditJoiningDate((emp as any).joining_date || (emp as any).date_of_joining || (emp as any).joiningDate);
+                        }
                         if (emp.branch_name) {
                           setEditFacilityName(emp.branch_name);
                         }
@@ -3945,6 +5791,16 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                     className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:ring-2 focus:ring-amber-500/30"
                   />
                 </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">Joining Date</label>
+                  <input
+                    type="date"
+                    value={editJoiningDate}
+                    onChange={e => setEditJoiningDate(e.target.value)}
+                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:ring-2 focus:ring-amber-500/30"
+                  />
+                </div>
               </div>
 
               {/* Facility & Clinical Wing Details */}
@@ -4014,10 +5870,10 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                 </div>
               </div>
 
-              {/* Risk Review Committee Details */}
+              {/* Facility Committee Signatory Controls */}
               <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
                 <h3 className="font-extrabold text-xs text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <UserCheck className="w-4 h-4" /> Risk Review Committee & Contacts
+                  <UserCheck className="w-4 h-4" /> Facility Committee Signatory Controls
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
@@ -4153,24 +6009,39 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
               </div>
 
               {/* Modal Footer Controls */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowEditModal(false);
-                    setEditingDoc(null);
-                  }}
-                  className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-extrabold text-xs cursor-pointer border border-slate-700"
-                >
-                  Cancel
-                </button>
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-300 hover:text-white bg-slate-950 px-3 py-2 rounded-xl border border-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={editDocStatus === 'APPROVED_FROZEN'}
+                    onChange={e => setEditDocStatus(e.target.checked ? 'APPROVED_FROZEN' : 'DRAFT_PENDING')}
+                    className="rounded bg-slate-900 border-slate-700 text-emerald-500 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                  />
+                  <span className="flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                    Re-freeze Master Document on Save (Locked baseline protection)
+                  </span>
+                </label>
 
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs cursor-pointer shadow-lg shadow-amber-950/40 flex items-center gap-2"
-                >
-                  <CheckCircle2 className="w-4 h-4" /> Save Changes to Vault Record
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditModal(false);
+                      setEditingDoc(null);
+                    }}
+                    className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-extrabold text-xs cursor-pointer border border-slate-700"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs cursor-pointer shadow-lg shadow-amber-950/40 flex items-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4" /> Save Changes to Vault Record
+                  </button>
+                </div>
               </div>
             </form>
 
@@ -4321,6 +6192,634 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-extrabold shadow-lg shadow-rose-950/40 transition-all cursor-pointer flex items-center gap-1.5"
               >
                 <Trash2 className="w-3.5 h-3.5" /> Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BULK DELETE CONFIRMATION MODAL */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
+              <div className="p-3 bg-rose-500/20 text-rose-400 rounded-xl border border-rose-500/30">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-white">Delete Selected HR Documents</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Bulk Vault Permanent Deletion</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Are you sure you want to permanently remove <strong className="text-rose-400 font-mono">{selectedDocIds.length} selected document(s)</strong> from the HR Documents Vault for <strong>{client?.company_name || 'Active Client'}</strong>? This action cannot be undone.
+            </p>
+
+            <div className="max-h-36 overflow-y-auto bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5 text-xs text-slate-300">
+              {documents.filter(d => selectedDocIds.includes(d.id)).map(d => (
+                <div key={d.id} className="flex items-center justify-between text-[11px]">
+                  <span className="truncate font-semibold text-slate-200">{d.title}</span>
+                  <span className="font-mono text-emerald-400 text-[10px] ml-2 shrink-0">{d.legalMetadata?.referenceCode}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowBulkDeleteModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-extrabold shadow-lg shadow-rose-950/40 transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Confirm Delete {selectedDocIds.length} Records
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* COPY FILES FROM COMPLIANCE CONSULTANT MODAL */}
+      {showCopyFromConsultantModal && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-cyan-500/20 text-cyan-400 rounded-xl border border-cyan-500/30">
+                  <Copy className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-white">Copy HR Documents from Compliance Consultant</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Source: <span className="text-emerald-400 font-bold">COMPLIANCE CONSULTANT (SmartPro)</span> &rarr; Target: <span className="text-cyan-300 font-extrabold">{targetCopyDestination === 'ALL_CLIENTS' ? `ALL ${availableClientsList.length} CLIENTS REGISTRY` : (availableClientsList.find(c => c.id === targetCopyDestination)?.company_name || client?.company_name || 'Active Client')}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCopyFromConsultantModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-xs text-slate-300 flex items-start gap-2.5">
+              <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+              <p className="leading-relaxed">
+                Select master documents from the Compliance Consultant library to copy into the client vault. Entity credentials, trade licenses, and committee signatory contacts will be dynamically bound to each target client.
+              </p>
+            </div>
+
+            {/* TARGET DESTINATION SELECTOR */}
+            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold text-cyan-300 flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-cyan-400" /> Target HR Vault Registry Destination:
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">({availableClientsList.length} Clients Registered)</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setTargetCopyDestination('ACTIVE_CLIENT')}
+                  className={`p-2.5 rounded-lg border font-bold text-left transition-all cursor-pointer ${
+                    targetCopyDestination === 'ACTIVE_CLIENT'
+                      ? 'bg-emerald-950/60 border-emerald-500/80 text-emerald-200 ring-1 ring-emerald-500/50'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  <div className="text-[10px] text-emerald-400 font-black uppercase tracking-wider">Active Client</div>
+                  <div className="truncate text-xs font-bold text-slate-100">{client?.company_name || 'Active Client'}</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTargetCopyDestination('ALL_CLIENTS')}
+                  className={`p-2.5 rounded-lg border font-bold text-left transition-all cursor-pointer ${
+                    targetCopyDestination === 'ALL_CLIENTS'
+                      ? 'bg-cyan-950/60 border-cyan-500/80 text-cyan-200 ring-1 ring-cyan-500/50'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  <div className="text-[10px] text-cyan-400 font-black uppercase tracking-wider">✨ All Clients Registry</div>
+                  <div className="truncate text-xs font-bold text-slate-100">Copy to ALL {availableClientsList.length} Clients</div>
+                </button>
+
+                <div className="relative">
+                  <select
+                    value={targetCopyDestination !== 'ACTIVE_CLIENT' && targetCopyDestination !== 'ALL_CLIENTS' ? targetCopyDestination : ''}
+                    onChange={e => {
+                      if (e.target.value) setTargetCopyDestination(e.target.value);
+                    }}
+                    className={`w-full h-full p-2.5 rounded-lg border font-bold text-xs bg-slate-900 transition-all cursor-pointer ${
+                      targetCopyDestination !== 'ACTIVE_CLIENT' && targetCopyDestination !== 'ALL_CLIENTS'
+                        ? 'border-indigo-500 text-indigo-200 bg-indigo-950/60'
+                        : 'border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <option value="">Select Specific Client...</option>
+                    {availableClientsList.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.company_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Search master consultant documents..."
+                  value={consultantSearch}
+                  onChange={e => setConsultantSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedConsultantDocIds.length === filteredConsultantDocs.length) {
+                    setSelectedConsultantDocIds([]);
+                  } else {
+                    setSelectedConsultantDocIds(filteredConsultantDocs.map(d => d.id));
+                  }
+                }}
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 cursor-pointer"
+              >
+                {selectedConsultantDocIds.length === filteredConsultantDocs.length ? 'Deselect All' : 'Select All'}
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 pr-1 space-y-2 max-h-[280px]">
+              {filteredConsultantDocs.map(doc => {
+                const isAlreadyInVault = documents.some(d => d.title === doc.title && d.client_id === currentClientKey);
+                const isSelected = selectedConsultantDocIds.includes(doc.id);
+                return (
+                  <label
+                    key={doc.id}
+                    className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-cyan-950/30 border-cyan-500/50 text-white'
+                        : 'bg-slate-950/40 border-slate-800 text-slate-300 hover:bg-slate-800/40'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={e => {
+                        if (e.target.checked) {
+                          setSelectedConsultantDocIds(prev => [...prev, doc.id]);
+                        } else {
+                          setSelectedConsultantDocIds(prev => prev.filter(id => id !== doc.id));
+                        }
+                      }}
+                      className="mt-1 rounded bg-slate-900 border-slate-700 text-cyan-500 focus:ring-cyan-500 w-4 h-4 cursor-pointer"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-xs text-slate-100 truncate">{doc.title}</span>
+                        <span className="text-[10px] font-mono font-bold text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/30">
+                          {doc.legalMetadata?.referenceCode || 'REF-HR-0000'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-400">
+                        <span>Category: {doc.category}</span>
+                        {isAlreadyInVault && (
+                          <span className="text-amber-400 font-bold flex items-center gap-1 text-[10px]">
+                            <AlertTriangle className="w-3 h-3" /> Already in Client Vault
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between pt-3 border-t border-slate-800 gap-2">
+              <span className="text-xs text-slate-400 font-semibold">
+                {selectedConsultantDocIds.length} of {filteredConsultantDocs.length} selected
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCopyFromConsultantModal(false)}
+                  className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  disabled={selectedConsultantDocIds.length === 0}
+                  onClick={() => handleExecuteCopyFromConsultant(undefined, 'ACTIVE_CLIENT')}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-extrabold shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <Copy className="w-3.5 h-3.5" /> Copy to Active Client
+                </button>
+
+                <button
+                  type="button"
+                  disabled={selectedConsultantDocIds.length === 0}
+                  onClick={() => handleExecuteCopyFromConsultant(undefined, 'ALL_CLIENTS')}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 text-white text-xs font-black shadow-lg shadow-cyan-950/40 transition-all cursor-pointer flex items-center gap-1.5 border border-cyan-400/30"
+                >
+                  <Layers className="w-4 h-4" /> Copy to ALL Clients Registry ({availableClientsList.length})
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* UNFREEZE SINGLE DOCUMENT CONFIRMATION MODAL WITH EMPLOYEE ROSTER CONNECT OPTION */}
+      {showUnfreezeConfirmModal && unfreezePromptDoc && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-amber-500/50 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+              <div className="p-3 bg-amber-500/20 text-amber-400 rounded-xl border border-amber-500/30">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-white">Document Freeze Protection Active</h3>
+                <p className="text-xs text-slate-400">Master Document Version & Governance Control</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-amber-950/30 rounded-xl border border-amber-500/30 text-xs space-y-2 text-slate-300">
+              <p className="font-bold text-amber-200">
+                You are requesting to edit a frozen master document:
+              </p>
+              <div className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 space-y-1">
+                <div className="font-black text-slate-100">{unfreezePromptDoc.title}</div>
+                <div className="text-[11px] font-mono text-cyan-400">
+                  Ref: {unfreezePromptDoc.legalMetadata?.referenceCode || 'REF-HR-0000'} &bull; Status: {unfreezePromptDoc.status}
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  Current Connected Staff: <strong className="text-slate-200">{unfreezePromptDoc.employeeDetails?.fullLegalName || 'None'}</strong> {unfreezePromptDoc.employeeDetails?.employeeId ? `(${unfreezePromptDoc.employeeDetails.employeeId})` : ''}
+                </div>
+              </div>
+              <p className="leading-relaxed">
+                By unfreezing, legal clauses, employee metadata, and signatories can be modified.
+              </p>
+            </div>
+
+            {/* CONNECT WITH EMPLOYEE & OPERATOR MANAGEMENT SECTION */}
+            <div className="p-3.5 bg-slate-950/90 rounded-xl border border-cyan-500/40 space-y-2.5 shadow-inner">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-extrabold text-cyan-400 flex items-center gap-1.5">
+                  <UserCheck className="w-4 h-4 text-cyan-400" /> Connect with Employee & Operator Management
+                </label>
+                <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full font-bold border border-cyan-500/30">
+                  {filteredEmployeesForEdit.length} Roster Records
+                </span>
+              </div>
+              <select
+                value={unfreezeSelectedEmployeeId}
+                onChange={e => setUnfreezeSelectedEmployeeId(e.target.value)}
+                className="w-full p-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:ring-2 focus:ring-cyan-500 cursor-pointer font-medium"
+              >
+                <option value="">-- Keep Existing Document Record / Manual Edit --</option>
+                {filteredEmployeesForEdit.map(emp => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.employee_name} ({emp.employee_id}) • {emp.position || 'Staff'} • {emp.department || 'Operations'} ({emp.branch_name || 'Main Facility'})
+                  </option>
+                ))}
+              </select>
+
+              {unfreezeSelectedEmployeeId && (() => {
+                const matchedEmp = effectiveEmployees.find(e => e.id === unfreezeSelectedEmployeeId);
+                if (!matchedEmp) return null;
+                return (
+                  <div className="bg-cyan-950/40 border border-cyan-500/30 p-2.5 rounded-lg text-xs space-y-1 text-cyan-200">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-white">{matchedEmp.employee_name}</span>
+                      <span className="font-mono text-[11px] text-cyan-300 font-extrabold">{matchedEmp.employee_id}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-300">
+                      Designation: <strong>{matchedEmp.position || 'Staff'}</strong> &bull; Dept: <strong>{matchedEmp.department || 'Operations'}</strong>
+                    </div>
+                    {matchedEmp.branch_name && (
+                      <div className="text-[10.5px] text-slate-400">
+                        Facility: {matchedEmp.branch_name}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+              <p className="text-[10.5px] text-slate-400 italic">
+                Select a staff member from the facility roster to auto-fill their credentials and electronic signatory role when unfreezing.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUnfreezeConfirmModal(false);
+                  setUnfreezePromptDoc(null);
+                  setUnfreezeSelectedEmployeeId('');
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all cursor-pointer"
+              >
+                Keep Frozen & Cancel
+              </button>
+
+              {unfreezeSelectedEmployeeId && (
+                <button
+                  type="button"
+                  onClick={() => handleQuickConnectAndRefreezeFromModal(unfreezePromptDoc, unfreezeSelectedEmployeeId)}
+                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-black shadow-lg shadow-emerald-950/40 transition-all cursor-pointer flex items-center gap-1.5 border border-emerald-400/30"
+                  title="Directly bind selected employee to document and keep frozen as master"
+                >
+                  <Lock className="w-3.5 h-3.5" /> Quick Connect & Re-Freeze
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => handleConfirmUnfreezeAndEdit(unfreezePromptDoc, unfreezeSelectedEmployeeId)}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-black shadow-lg shadow-amber-950/40 transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Unlock className="w-4 h-4" /> {unfreezeSelectedEmployeeId ? 'Unfreeze & Connect Staff' : 'Unfreeze & Open Editor'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DEDICATED CONNECT WITH EMPLOYEE & OPERATOR MANAGEMENT MODAL */}
+      {showConnectEmployeeModal && connectEmployeeTargetDoc && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-cyan-500/50 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl max-h-[92vh] flex flex-col animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-cyan-500/20 text-cyan-400 rounded-xl border border-cyan-500/30">
+                  <UserCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-white">Connect with Employee & Operator Management</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Document: <span className="text-cyan-300 font-bold">{connectEmployeeTargetDoc.title}</span> ({connectEmployeeTargetDoc.legalMetadata?.referenceCode || 'REF-HR-0000'})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConnectEmployeeModal(false);
+                  setConnectEmployeeTargetDoc(null);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* SEARCH AND ROSTER SUMMARY BAR */}
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  placeholder="Search staff by name, employee code/ID, designation, department, branch..."
+                  value={connectEmployeeSearch}
+                  onChange={e => setConnectEmployeeSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                />
+                {connectEmployeeSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setConnectEmployeeSearch('')}
+                    className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-white"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
+                <span>Facility Staff Records: <strong className="text-cyan-300">{filteredEmployeesForConnect.length}</strong> available</span>
+                <span>Current Document Staff: <strong className="text-white">{connectEmployeeTargetDoc.employeeDetails?.fullLegalName || 'None'}</strong></span>
+              </div>
+            </div>
+
+            {/* EMPLOYEE ROSTER CARDS LIST */}
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[38vh]">
+              {filteredEmployeesForConnect.length === 0 ? (
+                <div className="text-center py-8 text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl">
+                  No staff members matched your search in Employee & Operator Management.
+                </div>
+              ) : (
+                filteredEmployeesForConnect.map(emp => {
+                  const isSelected = connectEmployeeSelectedId === emp.id;
+                  const isCurrentlyBound = connectEmployeeTargetDoc.employeeDetails?.employeeId === emp.employee_id;
+
+                  return (
+                    <div
+                      key={emp.id}
+                      onClick={() => setConnectEmployeeSelectedId(emp.id)}
+                      className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                        isSelected
+                          ? 'bg-cyan-950/60 border-cyan-500 text-white ring-1 ring-cyan-500/50 shadow-md'
+                          : 'bg-slate-950/60 border-slate-800/80 text-slate-300 hover:bg-slate-800/50 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${isSelected ? 'border-cyan-400 bg-cyan-500' : 'border-slate-600'}`}>
+                          {isSelected && <div className="w-1.5 h-1.5 bg-slate-950 rounded-full" />}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-xs text-white">{emp.employee_name}</span>
+                            <span className="text-[10px] font-mono font-extrabold text-cyan-400 bg-cyan-950 px-2 py-0.5 rounded border border-cyan-500/30">
+                              {emp.employee_id}
+                            </span>
+                            {isCurrentlyBound && (
+                              <span className="text-[9.5px] font-black text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/40">
+                                CURRENTLY BOUND
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-400 flex-wrap">
+                            <span>Role: <strong className="text-slate-200">{emp.position || 'Staff'}</strong></span>
+                            <span>Dept: <strong className="text-slate-200">{emp.department || 'Operations'}</strong></span>
+                            {emp.branch_name && <span>Facility: <strong className="text-slate-300">{emp.branch_name}</strong></span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 text-right">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
+                          emp.status === 'Active' || emp.current_status === 'Active' || !emp.status
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                            : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                        }`}>
+                          {emp.current_status || emp.status || 'Active'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* LIVE PREVIEW CARD OF CHOSEN EMPLOYEE */}
+            {connectEmployeeSelectedId && (() => {
+              const chosen = effectiveEmployees.find(e => e.id === connectEmployeeSelectedId);
+              if (!chosen) return null;
+              return (
+                <div className="p-3 bg-cyan-950/30 rounded-xl border border-cyan-500/40 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between text-cyan-300 font-bold">
+                    <span className="flex items-center gap-1.5">
+                      <UserCheck className="w-4 h-4 text-cyan-400" /> Selected Staff for Auto-Binding:
+                    </span>
+                    <span className="font-mono text-[11px] text-white font-black">{chosen.employee_name} ({chosen.employee_id})</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-slate-300 pt-1">
+                    <div><span className="text-slate-400 block text-[10px]">DESIGNATION</span><strong>{chosen.position || 'Staff'}</strong></div>
+                    <div><span className="text-slate-400 block text-[10px]">DEPARTMENT</span><strong>{chosen.department || 'Operations'}</strong></div>
+                    <div><span className="text-slate-400 block text-[10px]">FACILITY / BRANCH</span><strong>{chosen.branch_name || client?.company_name || 'Main Facility'}</strong></div>
+                    <div><span className="text-slate-400 block text-[10px]">STATUS</span><strong className="text-emerald-400">{chosen.current_status || chosen.status || 'Active'}</strong></div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* FREEZE GOVERNANCE TOGGLE */}
+            <div className="flex items-center justify-between p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-xs">
+              <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={connectEmployeeRefreezeOnSave}
+                  onChange={e => setConnectEmployeeRefreezeOnSave(e.target.checked)}
+                  className="rounded bg-slate-900 border-slate-700 text-cyan-500 focus:ring-cyan-500 w-4 h-4 cursor-pointer"
+                />
+                <span className="font-bold">Keep / Seal document as Frozen Master after connecting</span>
+              </label>
+              <span className="text-[10.5px] text-slate-500 italic hidden sm:inline">Prevents unintended clause edits</span>
+            </div>
+
+            {/* MODAL ACTIONS */}
+            <div className="flex flex-wrap items-center justify-between pt-2 border-t border-slate-800 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConnectEmployeeModal(false);
+                  setConnectEmployeeTargetDoc(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={!connectEmployeeSelectedId}
+                  onClick={() => handleSaveConnectEmployee(true)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-cyan-300 border border-slate-700 text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <Edit3 className="w-3.5 h-3.5" /> Bind & Open in Full Editor
+                </button>
+
+                <button
+                  type="button"
+                  disabled={!connectEmployeeSelectedId}
+                  onClick={() => handleSaveConnectEmployee(false)}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 disabled:opacity-50 text-white text-xs font-black shadow-lg shadow-cyan-950/40 transition-all cursor-pointer flex items-center gap-1.5 border border-cyan-400/30"
+                >
+                  <UserCheck className="w-4 h-4" /> Save & Bind to Document
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MASS UNFREEZE CONFIRMATION MODAL */}
+      {showMassUnfreezeConfirmModal && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-amber-500/50 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+              <div className="p-3 bg-amber-500/20 text-amber-400 rounded-xl border border-amber-500/30">
+                <Unlock className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-white">Unfreeze All Documents?</h3>
+                <p className="text-xs text-slate-400">Bulk Repository Modification Mode</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Are you sure you want to unfreeze all <strong>{documents.length}</strong> HR documents in the vault? This will make all documents immediately editable. You can re-freeze all documents at any time.
+            </p>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowMassUnfreezeConfirmModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleUnfreezeAllDocuments}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shadow-lg transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Unlock className="w-4 h-4" /> Yes, Unfreeze All Documents
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CLEAR / PURGE VAULT CONFIRMATION MODAL */}
+      {showClearVaultModal && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-rose-500/50 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+              <div className="p-3 bg-rose-500/20 text-rose-400 rounded-xl border border-rose-500/30">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-white">Clear All Vault Documents?</h3>
+                <p className="text-xs text-slate-400">Purge Unwanted & Legacy Records</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Are you sure you want to remove all <strong>{documents.length}</strong> document(s) from this vault? This will leave your vault clean so only files you explicitly create or copy will be stored.
+            </p>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowClearVaultModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleClearVault}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black shadow-lg transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" /> Yes, Clear All Documents
               </button>
             </div>
           </div>

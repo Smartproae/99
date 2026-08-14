@@ -22,7 +22,7 @@ export const DEFAULT_LOOP_DOC_RECORDS: DocRefLoopData[] = [
     doc_name: 'Employee Confidentiality Agreement',
     module_name: 'HR Compliance',
     classification: 'CONFIDENTIAL',
-    issue_date: '03 Aug 2026',
+    issue_date: '2026-08-03',
     review_date: '2027-08-03',
     approval_date: '2026-08-03',
     prepared_by: 'HR & Legal Desk',
@@ -35,7 +35,7 @@ export const DEFAULT_LOOP_DOC_RECORDS: DocRefLoopData[] = [
     doc_name: 'INCIDENT MANAGEMENT FORM',
     module_name: 'Incident Response',
     classification: 'RESTRICTED',
-    issue_date: '01 Aug 2026',
+    issue_date: '2026-08-01',
     review_date: '2027-08-01',
     approval_date: '2026-08-01',
     prepared_by: 'CISO / Security Desk',
@@ -48,7 +48,7 @@ export const DEFAULT_LOOP_DOC_RECORDS: DocRefLoopData[] = [
     doc_name: 'ORIENTATION CHECKLIST',
     module_name: 'Staff Onboarding',
     classification: 'RESTRICTED',
-    issue_date: '01 Aug 2026',
+    issue_date: '2026-08-01',
     review_date: '2027-08-01',
     approval_date: '2026-08-01',
     prepared_by: 'HR Training Officer',
@@ -61,7 +61,7 @@ export const DEFAULT_LOOP_DOC_RECORDS: DocRefLoopData[] = [
     doc_name: 'Staff & Operator Governance & HR Compliance Record',
     module_name: 'HR Governance',
     classification: 'RESTRICTED',
-    issue_date: '03 Aug 2026',
+    issue_date: '2026-08-03',
     review_date: '2027-07-28',
     approval_date: '2026-08-03',
     prepared_by: 'HR Director',
@@ -74,7 +74,7 @@ export const DEFAULT_LOOP_DOC_RECORDS: DocRefLoopData[] = [
     doc_name: 'Staff & Operator Governance & HR Compliance Record',
     module_name: 'HR Governance',
     classification: 'OFFICIAL / RESTRICTED',
-    issue_date: '03 Aug 2026',
+    issue_date: '2026-08-03',
     review_date: '2027-07-28',
     approval_date: '2026-08-03',
     prepared_by: 'HR Director',
@@ -207,6 +207,17 @@ interface DocRefLoopSelectorProps {
   compact?: boolean;
 }
 
+const toISODate = (val?: string): string => {
+  if (!val) return new Date().toISOString().split('T')[0];
+  const trimmed = val.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const parsed = Date.parse(trimmed);
+  if (!isNaN(parsed)) {
+    return new Date(parsed).toISOString().split('T')[0];
+  }
+  return new Date().toISOString().split('T')[0];
+};
+
 export const DocRefLoopSelector: React.FC<DocRefLoopSelectorProps> = ({
   onApplyLoop,
   currentRefCode,
@@ -228,9 +239,9 @@ export const DocRefLoopSelector: React.FC<DocRefLoopSelectorProps> = ({
             doc_name: d.doc_name || 'Governance Record',
             module_name: d.module_name || 'General',
             classification: d.classification || 'CONFIDENTIAL',
-            issue_date: d.issue_date || new Date().toISOString().split('T')[0],
-            review_date: d.next_due_date || d.review_date || new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
-            approval_date: d.approval_date || d.effective_date || new Date().toISOString().split('T')[0],
+            issue_date: toISODate(d.issue_date),
+            review_date: toISODate(d.next_due_date || d.review_date),
+            approval_date: toISODate(d.approval_date || d.effective_date),
             prepared_by: d.prepared_by || 'HR Director',
             reviewed_by: d.reviewed_by || 'Compliance Officer',
             approved_by: d.approved_by || 'Risk Lead',

@@ -381,38 +381,58 @@ Corporate computing resources are provided to facilitate business operations. Al
     defaults.compliance_clarifications = `For software installation requests or website access unblocking, contact the IT Department.`;
     defaults.compliance_checks = `The IT Department performs continuous automated log monitoring and periodic clean-desk checks.`;
     defaults.compliance_exceptions = `Software or network access exceptions require written justification approved by the IT Manager.`;
-    
-    defaults.policy_statement = `### CONTROL OBJECTIVES AND APPLICABILITY
 
-The following control objectives are applicable to ${clientName || '[Entity Name]'}:
+  } else if (normNo === 'POL-SEC-005' || normNo === 'M-POLICY-019' || normTitle.includes('clear desk') || normTitle.includes('clear screen')) {
+    // Clear Desk & Clear Screen Policy
+    defaults.objective = `The objective of this Clear Desk and Clear Screen Policy is to reduce the risk of unauthorized access, physical theft, loss, and visual exposure of confidential, sensitive, and patient health information during and outside normal operating hours at ${entity}.`;
 
-| Control Area | Control Objective | Applicability |
+    defaults.scope = `This policy applies to all personnel, medical staff, administrative employees, contractors, consultants, and temporary workers operating workstations, laptops, clinical desks, consultation rooms, and physical file archives within ${entity}.`;
+
+    defaults.resp_it_manager = `• Enforces automated screen lock policies (maximum 5 minutes idle timeout) via Active Directory Group Policy or Endpoint Management.
+• Configures password/PIN/biometric requirement upon screen wake-up across all endpoints.
+• Reviews physical security and visual privacy safeguards in public-facing and reception areas.
+• Coordinates with HR and Facility Management on regular clean-desk audit walkthroughs.`;
+
+    defaults.resp_md = `• Ensures all departments are equipped with adequate lockable storage (lockable drawers, filing cabinets, and document shredder bins).
+• Approves disciplinary enforcement measures for recurring non-compliance.`;
+
+    defaults.resp_all_users = `• Lock workstation screens (Windows Key + L / Command + Control + Q) immediately whenever leaving the desk unattended.
+• Lock all physical documents, patient files, medical charts, prescription pads, and confidential papers in lockable drawers or cabinets when not in active use.
+• Clear physical desks, meeting tables, and consultation surfaces completely at the end of the working day.
+• Retrieve printed, scanned, or photocopied documents from printers immediately.
+• Store and secure all removable storage media (USBs, external hard disks) and keys in locked drawers.`;
+
+    defaults.policy_statement = `### CLEAR SCREEN DIRECTIVES
+1. Automatic Screen Timeout: All desktop computers, clinical terminals, and laptops must engage a password-protected screen saver or screen lock after a maximum of five (5) minutes of user inactivity.
+2. Manual Lockout Mandate: Users must manually lock their workstation session whenever stepping away from their desk, even for brief intervals.
+3. Visual Privacy & Screen Orientation: Display monitors in reception, waiting rooms, and public corridors must be angled away from public view or fitted with polarized privacy filters to prevent shoulder-surfing.
+4. Session Termination: Users must log off completely or shut down their workstations at the end of their daily shift.
+
+### CLEAR DESK & PHYSICAL SECURITY DIRECTIVES
+1. Paper & Patient Files: Physical records containing patient identifiable data (PID), financial records, or operational secrets must never be left unattended on desks.
+2. End-of-Day Clear Desk Standard: At the conclusion of the workday, all desks, workstations, and consultation counters must be cleared of all working papers and physical files.
+3. Lockable Storage: All confidential papers and removable electronic media must be locked inside desk drawers or designated fire-resistant filing cabinets. Keys must be kept in the custody of authorized staff.
+4. Whiteboards and Meeting Rooms: All whiteboards and glass panels in meeting rooms and conference areas must be wiped clean immediately upon completion of discussions.
+5. Print, Copy & Scan Security: Print jobs containing confidential data must be sent using Secure PIN Release or retrieved immediately from the output tray. Unclaimed printouts must be shredded.
+6. Disposal & Destruction: Waste documents containing confidential or operational information must be deposited into locked confidential shredding bins for cross-cut shredding.
+
+| Workspace Area | Working Hours Requirement | End-of-Shift / Unattended Requirement |
 |---|---|---|
-| Risk Management | Identify, assess, and mitigate risks to patient safety and operations | Applicable |
-| Compliance | Adhere to UAE healthcare regulatory and legal requirements | Applicable |
-| Human Resources Security | Ensure proper hiring, training, and management of personnel | Applicable |
-| Asset Management | Maintain and protect information assets | Applicable |
-| Physical and Environmental Security | Safeguard clinical infrastructure and sensitive areas | Applicable |
-| Access Control | Restrict unauthorized access to sensitive systems and data | Applicable |
-| Communications and Operations Management | Securely manage IT and operational processes | Applicable |
-| Data Privacy and Protection | Ensure confidentiality and integrity of patient data | Applicable |
-| Cloud Security | Secure cloud-based information systems and storage | Applicable |
-| Third-Party Security | Ensure compliance of vendors and partners with security standards | Applicable |
-| Information Systems Acquisition, Development, and Maintenance | Implement secure IT solutions and updates | Applicable |
-| Information Security Incident Management | Establish processes for detecting and responding to security incidents | Applicable |
-| Information Systems Continuity Management | Ensure continuity planning for IT services | Not applicable |`;
-    
-    defaults.core_principles = `1. Periodic Evaluation: The Statement of Applicability must be reviewed and re-verified at least annually or upon major structural or systems change.
-2. Comprehensive Coverage: All control areas must be addressed and exceptions documented with valid justifications.
-3. Integration with Risk Register: Applicability decisions must correlate with identified risk treatments and business objectives.`;
-    
-    defaults.compliance_disciplinary = `Failure to comply with applicable security controls may lead to security vulnerabilities, potential regulatory audits, and subsequent internal disciplinary actions.`;
-    
-    defaults.compliance_clarifications = `For questions regarding the applicability of any security controls, contact the IT Department or Compliance Officer.`;
-    
-    defaults.compliance_checks = `Regular compliance audits and automated system checks will be carried out to verify that all 'Applicable' controls are actively enforced.`;
-    
-    defaults.compliance_exceptions = `Any exclusion of controls marked 'Applicable' must be supported by a formally signed business justification and approved by the Managing Director.`;
+| Open Workstations | Only active working papers on desk; screen locked when leaving | 100% Clear surface; all papers locked; computer logged off |
+| Clinical Consultation Rooms | Patient charts enclosed; screen turned away from patient view | Desks clear; diagnostic terminals locked; cabinets secured |
+| Reception & Front Desk | No patient lists visible; monitors shielded from visitors | All registers locked; screens powered down/locked |
+| Printing & Copy Stations | Collect printouts immediately upon printing | No abandoned paper; trays clear; waste shredded |
+| Meeting & Board Rooms | Secure note-taking during session | Whiteboards cleared; handouts collected and shredded |`;
+
+    defaults.core_principles = `1. Surface Cleanliness: Desks and meeting surfaces must remain free of unattended confidential materials.
+2. Instant Screen Locking: Workstation sessions must be locked the moment a user steps away.
+3. Locked Physical Custody: Sensitive records and storage media must reside inside locked furniture when not in active use.
+4. Controlled Shredding: All draft or obsolete confidential paperwork must be destroyed using high-security cross-cut shredders.`;
+
+    defaults.compliance_disciplinary = `Failure to comply with clear desk and clear screen requirements creates severe information security vulnerabilities. Violations identified during audits will be logged and subject to HR disciplinary procedures under the Employee Code of Conduct.`;
+    defaults.compliance_clarifications = `For lockable cabinet key replacements, privacy screen filter requests, or shredder maintenance, contact the IT Department or Facilities Team.`;
+    defaults.compliance_checks = `Unannounced periodic clean desk and clean screen inspections are conducted by the Compliance Officer and IT Department.`;
+    defaults.compliance_exceptions = `Any operational requirement preventing compliance must be formally documented and approved by the IT Manager and Managing Director.`;
 
   } else if (policyNo === 'POL-SEC-013') {
     defaults.objective = `The objective of this policy is to prevent unauthorized physical access, damage, or hazard to ${clientName}'s operational rooms, healthcare suites, and physical networks.`;

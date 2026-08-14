@@ -248,7 +248,17 @@ export default function App() {
         return p;
       });
 
-      // Ensure all 34 master policies exist in repository
+      // Ensure all 34 master policies exist for SmartPro (c0) Compliance Consultant
+      const spMasterPolicies = getMasterSmartProPolicies();
+      const c0PolicyCodes = new Set(loaded.filter((p: any) => p.client_id === 'c0').map((p: any) => (p.policy_no || p.code || '').toUpperCase().trim()));
+      spMasterPolicies.forEach(spPol => {
+        if (!c0PolicyCodes.has(spPol.policy_no.toUpperCase().trim())) {
+          loaded.push(spPol);
+          c0PolicyCodes.add(spPol.policy_no.toUpperCase().trim());
+        }
+      });
+
+      // Ensure all 34 master policies exist in repository for default client c1
       const existingCodes = new Set(loaded.map((p: any) => (p.policy_no || p.code || '').toUpperCase().trim()));
       MASTER_34_POLICY_TEMPLATES.forEach((tpl, idx) => {
         if (!existingCodes.has(tpl.policy_no.toUpperCase().trim())) {
@@ -278,12 +288,30 @@ export default function App() {
   const [risks, setRisks] = useState<RiskItem[]>(() => {
     const saved = localStorage.getItem('sh_risks');
     const loaded = safeParseJSON(saved, INITIAL_RISK_ITEMS);
+    if (Array.isArray(loaded)) {
+      const spMasterRisks = getMasterSmartProRisks();
+      const c0RiskIds = new Set(loaded.filter((r: any) => r.client_id === 'c0').map((r: any) => r.risk_id));
+      spMasterRisks.forEach(mr => {
+        if (!c0RiskIds.has(mr.risk_id)) {
+          loaded.push(mr);
+        }
+      });
+    }
     return sanitizeAndDeduplicate(loaded, 'r');
   });
 
   const [assets, setAssets] = useState<Asset[]>(() => {
     const saved = localStorage.getItem('sh_assets');
     const loaded = safeParseJSON(saved, INITIAL_ASSETS);
+    if (Array.isArray(loaded)) {
+      const spMasterAssets = getMasterSmartProAssets();
+      const c0AssetCodes = new Set(loaded.filter((a: any) => a.client_id === 'c0').map((a: any) => a.asset_code));
+      spMasterAssets.forEach(ma => {
+        if (!c0AssetCodes.has(ma.asset_code)) {
+          loaded.push(ma);
+        }
+      });
+    }
     return sanitizeAndDeduplicate(loaded, 'a');
   });
 
@@ -308,6 +336,15 @@ export default function App() {
   const [forms, setForms] = useState<ComplianceForm[]>(() => {
     const saved = localStorage.getItem('sh_forms');
     const loaded = safeParseJSON(saved, INITIAL_FORMS);
+    if (Array.isArray(loaded)) {
+      const spMasterForms = getMasterSmartProForms();
+      const c0FormRefs = new Set(loaded.filter((f: any) => f.client_id === 'c0').map((f: any) => f.doc_ref));
+      spMasterForms.forEach(mf => {
+        if (!c0FormRefs.has(mf.doc_ref)) {
+          loaded.push(mf);
+        }
+      });
+    }
     return sanitizeAndDeduplicate(loaded, 'frm');
   });
 
@@ -319,6 +356,14 @@ export default function App() {
     INITIAL_DOCUMENTS.forEach(initDoc => {
       if (!combined.some(d => d.id === initDoc.id || (d.client_id === initDoc.client_id && d.document_code === initDoc.document_code))) {
         combined.push(initDoc);
+      }
+    });
+    // Ensure master documents for SmartPro (c0) are present
+    const spMasterDocs = getMasterSmartProDocuments();
+    const c0DocNames = new Set(combined.filter((d: any) => d.client_id === 'c0').map((d: any) => d.document_name));
+    spMasterDocs.forEach(md => {
+      if (!c0DocNames.has(md.document_name)) {
+        combined.push(md);
       }
     });
     return sanitizeAndDeduplicate(combined, 'doc');
@@ -1279,6 +1324,10 @@ export default function App() {
           ...p,
           id: makeNewId('pol'),
           client_id: targetClientId,
+          policy_statement: replaceCompanyNames(p.policy_statement || '', sourceClient.company_name, targetClient.company_name),
+          full_content: replaceCompanyNames(p.full_content || '', sourceClient.company_name, targetClient.company_name),
+          objective: replaceCompanyNames(p.objective || '', sourceClient.company_name, targetClient.company_name),
+          scope: replaceCompanyNames(p.scope || '', sourceClient.company_name, targetClient.company_name),
           created_at: new Date().toISOString()
         }));
         const newPolicies = [...policies, ...copiedPolicies];
@@ -1962,6 +2011,7 @@ export default function App() {
               <ClientManagement
                 clients={clients}
                 users={users}
+                employees={employees}
                 onAddClient={handleAddClient}
                 onUpdateClient={(updated) => setClients(prev => prev.map(c => c.id === updated.id ? updated : c))}
                 onDeleteClient={handleDeleteClient}
@@ -2180,6 +2230,9 @@ export default function App() {
                 logAuditTrail={logAuditTrail}
                 allClients={clients}
                 onSelectClient={handleSelectClient}
+                policies={policies}
+                onUpdatePolicy={handleUpdatePolicy}
+                onAddPolicy={handleAddPolicy}
               />
             )}
 
@@ -2188,6 +2241,7 @@ export default function App() {
                 client={currentClient}
                 currentUser={currentUser}
                 employees={employees}
+                allClients={clients}
                 onAddEmailLog={handleAddEmailLog}
               />
             )}

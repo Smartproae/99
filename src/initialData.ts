@@ -1962,5 +1962,15 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     joining_date: '2023-08-20',
     last_working_date: '2026-04-01',
     current_status: 'Terminated'
+  },
+  {
+    id: 'emp-sprc-01',
+    client_id: 'SPRC',
+    employee_id: 'SPRC-01',
+    employee_name: 'Raziya Aseef',
+    position: 'Manager',
+    department: 'Admin',
+    joining_date: '2024-01-01',
+    current_status: 'Active'
   }
 ];

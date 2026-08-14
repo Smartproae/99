@@ -29,6 +29,7 @@ import {
   Search,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   FileSpreadsheet,
   X,
   FileCode,
@@ -95,6 +96,7 @@ export default function PolicyFrameworksSetup({
   const [isEditingPolicy, setIsEditingPolicy] = useState(false);
   const [emailPolicy, setEmailPolicy] = useState<Policy | null>(null);
   const [confirmDeletePolicy, setConfirmDeletePolicy] = useState<Policy | null>(null);
+  const [confirmBatchDeletePolicies, setConfirmBatchDeletePolicies] = useState<Policy[] | null>(null);
   const [emailRecipient, setEmailRecipient] = useState('');
   const [emailCoverNote, setEmailCoverNote] = useState('');
   const [isEmailing, setIsEmailing] = useState(false);
@@ -235,7 +237,7 @@ export default function PolicyFrameworksSetup({
     showToast(`🔒 Successfully FROZE ${count} policy record(s) against modifications!`);
   };
 
-  // Group Delete Selected Policies
+  // Group Delete Selected Policies (triggers In-App Batch Deletion Modal)
   const handleGroupDeleteSelected = () => {
     const targets = selectedPolicyIds.length > 0
       ? filteredPolicies.filter(p => selectedPolicyIds.includes(p.id))
@@ -246,20 +248,7 @@ export default function PolicyFrameworksSetup({
       return;
     }
 
-    const frozenCount = targets.filter(p => p.is_frozen || p.status === 'FROZEN').length;
-    let confirmMsg = `Are you sure you want to delete ${targets.length} selected policy document(s)?`;
-    if (frozenCount > 0) {
-      confirmMsg += `\n\nNotice: ${frozenCount} of the selected records are currently FROZEN. Deleting will permanently remove them.`;
-    }
-
-    if (window.confirm(confirmMsg)) {
-      if (onDeletePolicy) {
-        const targetIds = targets.map(p => p.id);
-        onDeletePolicy(targetIds);
-        setSelectedPolicyIds([]);
-        showToast(`✓ Successfully deleted ${targets.length} policy record(s)!`);
-      }
-    }
+    setConfirmBatchDeletePolicies(targets);
   };
 
   // Quick Master Setup Loop state
@@ -2351,17 +2340,7 @@ export default function PolicyFrameworksSetup({
                             {onDeletePolicy && (
                               <button
                                 type="button"
-                                onClick={() => {
-                                  const isFrozen = p.is_frozen || p.status === 'FROZEN';
-                                  let confirmMsg = `Are you sure you want to delete policy record [${p.policy_no}] "${p.policy_name}"?`;
-                                  if (isFrozen) {
-                                    confirmMsg = `🔒 Policy [${p.policy_no}] is currently FROZEN / LOCKED.\nAre you sure you want to override the lock and delete this record?`;
-                                  }
-                                  if (window.confirm(confirmMsg)) {
-                                    onDeletePolicy(p.id);
-                                    showToast(`✓ Deleted policy record [${p.policy_no}]`);
-                                  }
-                                }}
+                                onClick={() => setConfirmDeletePolicy(p)}
                                 className="px-2.5 py-1 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/60 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1"
                                 title="Delete Policy Record"
                               >
@@ -2916,19 +2895,7 @@ export default function PolicyFrameworksSetup({
                 {onDeletePolicy && (
                   <button
                     type="button"
-                    onClick={() => {
-                      const isFrozen = selectedPolicy.is_frozen || selectedPolicy.status === 'FROZEN';
-                      let confirmMsg = `Are you sure you want to delete policy record [${selectedPolicy.policy_no}] "${selectedPolicy.policy_name}"?`;
-                      if (isFrozen) {
-                        confirmMsg = `🔒 Policy [${selectedPolicy.policy_no}] is currently FROZEN / LOCKED.\nAre you sure you want to override the lock and delete this record?`;
-                      }
-                      if (window.confirm(confirmMsg)) {
-                        onDeletePolicy(selectedPolicy.id);
-                        setSelectedPolicy(null);
-                        setIsEditingPolicy(false);
-                        showToast(`✓ Deleted policy record [${selectedPolicy.policy_no}]`);
-                      }
-                    }}
+                    onClick={() => setConfirmDeletePolicy(selectedPolicy)}
                     className="px-3 py-1.5 bg-rose-600/80 hover:bg-rose-600 text-white rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 border border-rose-500 shadow-md"
                     title="Delete Policy Record"
                   >
@@ -3419,54 +3386,235 @@ export default function PolicyFrameworksSetup({
           </div>
         </div>
       )}
-      {/* DELETE POLICY CONFIRMATION MODAL */}
+      {/* DELETE SINGLE POLICY CONFIRMATION MODAL */}
       {confirmDeletePolicy && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 animate-scale-in">
-            <div className="flex items-center gap-3 text-rose-600">
-              <div className="p-3 bg-rose-100 rounded-full shrink-0">
-                <Trash2 className="w-6 h-6" />
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full p-6 space-y-4 animate-scale-in">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3 text-rose-600">
+                <div className="p-2.5 bg-rose-100 text-rose-700 rounded-xl shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base">Confirm Policy Deletion</h3>
+                  <p className="text-xs text-slate-500">Are you sure you want to delete this policy record? This action cannot be undone.</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-extrabold text-slate-900 text-base">Confirm Policy Deletion</h3>
-                <p className="text-xs text-slate-500">Are you sure you want to delete this policy record? This action cannot be undone.</p>
-              </div>
+              <button
+                type="button"
+                onClick={() => setConfirmDeletePolicy(null)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1.5 font-sans">
-              <div className="flex justify-between items-center">
+            {/* FROZEN / LOCKED NOTICE */}
+            {(confirmDeletePolicy.is_frozen || confirmDeletePolicy.status === 'FROZEN') && (
+              <div className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 flex items-start gap-3 text-amber-900 text-xs">
+                <div className="p-1.5 bg-amber-200/80 rounded-lg text-amber-900 shrink-0 mt-0.5">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div className="space-y-0.5">
+                  <span className="font-extrabold block text-amber-950">
+                    🔒 Record is Marked as FROZEN / LOCKED
+                  </span>
+                  <p className="text-[11.5px] text-amber-800 leading-relaxed">
+                    This policy is currently locked against modifications. Deleting it will override the security lock and permanently remove the record from the repository.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* POLICY DETAILS GRID */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs space-y-2.5 font-sans">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-200/70">
                 <span className="text-slate-500 font-medium">Reference Code:</span>
-                <strong className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">{confirmDeletePolicy.policy_no}</strong>
+                <strong className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200/60">
+                  {confirmDeletePolicy.policy_no}
+                </strong>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-medium">Policy Title:</span>
-                <strong className="font-bold text-slate-900 text-right max-w-[220px] truncate">{confirmDeletePolicy.policy_name}</strong>
+              <div className="flex justify-between items-start pb-2 border-b border-slate-200/70">
+                <span className="text-slate-500 font-medium shrink-0 mr-2">Document Title:</span>
+                <strong className="font-bold text-slate-900 text-right">
+                  {confirmDeletePolicy.policy_name}
+                </strong>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-medium">Category:</span>
-                <span className="text-slate-700 font-semibold">{confirmDeletePolicy.category}</span>
+              <div className="grid grid-cols-2 gap-2 pb-2 border-b border-slate-200/70">
+                <div>
+                  <span className="text-slate-500 font-medium block text-[11px]">Category:</span>
+                  <span className="text-slate-800 font-semibold">{confirmDeletePolicy.category || 'Information Security'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 font-medium block text-[11px]">Department:</span>
+                  <span className="text-slate-800 font-semibold">{confirmDeletePolicy.department || 'Information Technology'}</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="text-slate-500 font-medium block text-[11px]">Classification:</span>
+                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200">
+                    {confirmDeletePolicy.classification || 'CONFIDENTIAL'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500 font-medium block text-[11px]">Client Facility Scope:</span>
+                  <span className="text-slate-800 font-semibold truncate block">
+                    {confirmDeletePolicy.company_name || confirmDeletePolicy.facility_name || client?.company_name || 'Client Facility'}
+                  </span>
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-2">
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setConfirmDeletePolicy(null)}
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
               >
-                Cancel
+                Cancel, Keep Policy
               </button>
               <button
                 type="button"
                 onClick={() => {
                   if (onDeletePolicy && confirmDeletePolicy) {
+                    const deletedCode = confirmDeletePolicy.policy_no;
                     onDeletePolicy(confirmDeletePolicy.id);
+                    if (selectedPolicy && selectedPolicy.id === confirmDeletePolicy.id) {
+                      setSelectedPolicy(null);
+                      setIsEditingPolicy(false);
+                    }
+                    setSelectedPolicyIds(prev => prev.filter(id => id !== confirmDeletePolicy.id));
+                    setConfirmDeletePolicy(null);
+                    showToast(`✓ Deleted policy record [${deletedCode}]`);
                   }
-                  setConfirmDeletePolicy(null);
                 }}
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
               >
                 <Trash2 className="w-3.5 h-3.5" /> Yes, Delete Record
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE BATCH POLICIES CONFIRMATION MODAL */}
+      {confirmBatchDeletePolicies && confirmBatchDeletePolicies.length > 0 && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-xl w-full p-6 space-y-4 animate-scale-in">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3 text-rose-600">
+                <div className="p-2.5 bg-rose-100 text-rose-700 rounded-xl shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base">Confirm Batch Deletion</h3>
+                  <p className="text-xs text-slate-500">
+                    Are you sure you want to delete {confirmBatchDeletePolicies.length} selected policy document{confirmBatchDeletePolicies.length > 1 ? 's' : ''}?
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfirmBatchDeletePolicies(null)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* FROZEN / LOCKED POLICIES WARNING BANNER */}
+            {(() => {
+              const lockedCount = confirmBatchDeletePolicies.filter(p => p.is_frozen || p.status === 'FROZEN').length;
+              if (lockedCount === 0) return null;
+              return (
+                <div className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 flex items-start gap-3 text-amber-900 text-xs">
+                  <div className="p-1.5 bg-amber-200/80 rounded-lg text-amber-900 shrink-0 mt-0.5">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="font-extrabold block text-amber-950">
+                      🔒 {lockedCount} Locked / Frozen Document{lockedCount > 1 ? 's' : ''} Included
+                    </span>
+                    <p className="text-[11.5px] text-amber-800 leading-relaxed">
+                      {lockedCount === confirmBatchDeletePolicies.length
+                        ? 'All selected documents are currently marked as FROZEN / LOCKED against changes. Deleting will override their security lock and permanently remove them.'
+                        : `${lockedCount} of the ${confirmBatchDeletePolicies.length} selected documents are marked as FROZEN / LOCKED. Proceeding will override their security locks.`}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* LIST OF SELECTED DOCUMENTS */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center text-xs font-bold text-slate-700">
+                <span>Selected Documents ({confirmBatchDeletePolicies.length}):</span>
+                <span className="text-[11px] text-slate-400 font-normal">Review items before permanent deletion</span>
+              </div>
+              <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 bg-slate-50/50">
+                {confirmBatchDeletePolicies.map((p, idx) => {
+                  const isLocked = p.is_frozen || p.status === 'FROZEN';
+                  return (
+                    <div key={p.id || idx} className="p-2.5 flex items-center justify-between gap-3 text-xs hover:bg-white transition-colors">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="font-mono font-bold text-indigo-700 text-[11px] bg-white px-1.5 py-0.5 rounded border border-slate-200 shrink-0">
+                          {p.policy_no}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900 truncate text-[11.5px]">{p.policy_name}</p>
+                          <p className="text-[10px] text-slate-500 truncate">
+                            {p.category || 'Information Security'} • {p.department || 'IT'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {isLocked && (
+                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-900 font-bold rounded text-[9.5px] border border-amber-200 flex items-center gap-1">
+                            <Lock className="w-2.5 h-2.5" /> FROZEN
+                          </span>
+                        )}
+                        <span className="px-1.5 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded text-[9.5px] font-semibold">
+                          {p.classification || 'CONFIDENTIAL'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-500 italic text-center">
+              This action cannot be undone. All selected records will be permanently removed from the repository.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setConfirmBatchDeletePolicies(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Cancel, Keep Policies
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeletePolicy && confirmBatchDeletePolicies) {
+                    const count = confirmBatchDeletePolicies.length;
+                    const targetIds = confirmBatchDeletePolicies.map(p => p.id);
+                    onDeletePolicy(targetIds);
+                    if (selectedPolicy && targetIds.includes(selectedPolicy.id)) {
+                      setSelectedPolicy(null);
+                      setIsEditingPolicy(false);
+                    }
+                    setSelectedPolicyIds(prev => prev.filter(id => !targetIds.includes(id)));
+                    setConfirmBatchDeletePolicies(null);
+                    showToast(`✓ Successfully deleted ${count} policy record(s)!`);
+                  }
+                }}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Yes, Delete ({confirmBatchDeletePolicies.length}) Records
               </button>
             </div>
           </div>

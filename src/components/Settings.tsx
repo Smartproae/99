@@ -804,11 +804,12 @@ export default function Settings({
       (user, token) => {
         setGoogleUser(user);
         setIsDriveAuthorized(true);
-        fetchBackups();
+        fetchBackups(false);
       },
       () => {
         setGoogleUser(null);
         setIsDriveAuthorized(false);
+        setDriveBackups([]);
       }
     );
     return () => unsubscribe();
@@ -818,6 +819,14 @@ export default function Settings({
     const msg = typeof err === 'string' ? err : (err?.message || String(err));
     if (typeof msg === 'string') {
       const lower = msg.toLowerCase();
+      if (
+        lower.includes('popup-closed-by-user') ||
+        lower.includes('cancelled-popup-request') ||
+        lower.includes('user cancelled') ||
+        lower.includes('closed the popup')
+      ) {
+        return '';
+      }
       if (
         lower.includes('401') || 
         lower.includes('unauthenticated') || 
@@ -839,22 +848,31 @@ export default function Settings({
     return msg;
   };
 
-  const fetchBackups = async () => {
+  const fetchBackups = async (isUserAction: boolean = true) => {
     setIsDriveLoading(true);
-    setDriveError(null);
+    if (isUserAction) {
+      setDriveError(null);
+    }
     try {
       const list = await listBackupsFromGoogleDrive();
       setDriveBackups(list);
     } catch (err: any) {
-      console.error(err);
       const formatted = formatDriveError(err);
-      setDriveError(formatted);
-      if (
+      const isAuthError =
         formatted.includes('unauthenticated') || 
         formatted.includes('expired') || 
-        formatted.includes('Connect Google Account')
-      ) {
+        formatted.includes('Connect Google Account') ||
+        formatted.includes('401') ||
+        formatted.includes('Invalid Credentials');
+
+      if (isAuthError) {
         setIsDriveAuthorized(false);
+        setGoogleUser(null);
+        setDriveBackups([]);
+      }
+
+      if (isUserAction && formatted) {
+        setDriveError(formatted);
       }
     } finally {
       setIsDriveLoading(false);
@@ -875,8 +893,11 @@ export default function Settings({
         setDriveSuccess('Successfully authenticated and connected with Google Drive!');
       }
     } catch (err: any) {
-      console.error(err);
-      setDriveError(formatDriveError(`Connection failed: ${err.message || err}`));
+      console.warn('Google Connect error:', err);
+      const formatted = formatDriveError(err);
+      if (formatted) {
+        setDriveError(`Connection failed: ${formatted}`);
+      }
     } finally {
       setIsDriveLoading(false);
     }
@@ -893,7 +914,10 @@ export default function Settings({
       setDriveBackups([]);
       setDriveSuccess('Successfully signed out of Google Drive.');
     } catch (err: any) {
-      setDriveError(formatDriveError(`Disconnection failed: ${err.message || err}`));
+      const formatted = formatDriveError(err);
+      if (formatted) {
+        setDriveError(`Disconnection failed: ${formatted}`);
+      }
     } finally {
       setIsDriveLoading(false);
     }

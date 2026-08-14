@@ -15,6 +15,7 @@ export interface ContactPerson {
   name: string;
   email: string;
   phone: string;
+  designation?: string;
 }
 
 export interface ThirdPartySupport {
@@ -80,7 +81,7 @@ export interface Client {
   facility_group_name?: string;
   branches?: BranchLocation[];
   
-  // Risk Review Committee / Authorized Personnel Contacts
+  // Facility Committee Signatory Controls
   auth_representative?: ContactPerson;
   clinic_manager?: ContactPerson;
   medical_director?: ContactPerson;

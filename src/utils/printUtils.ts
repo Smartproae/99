@@ -77,7 +77,18 @@ export function printDocument(
       overflow: visible !important;
     }
     .no-print, .print\\:hidden, .print-hidden, [data-no-print], button, nav { display: none !important; }
-    #printable-frame-wrapper, #printable-control-sheet, #printable-report-document, #printable-pdf-content, #hr-a4-preview-page, #print-document-container {
+    .a4-page-sheet {
+      page-break-after: always !important;
+      break-after: page !important;
+      margin-bottom: 0 !important;
+      border: none !important;
+      box-shadow: none !important;
+    }
+    .a4-page-sheet:last-child {
+      page-break-after: auto !important;
+      break-after: auto !important;
+    }
+    #printable-frame-wrapper, #printable-control-sheet, #printable-report-document, #printable-pdf-content, #hr-a4-preview-page, #print-document-container, #central-printable-document {
       width: 100% !important;
       max-width: 100% !important;
       margin: 0 auto !important;

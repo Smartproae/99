@@ -962,7 +962,7 @@ ${clientRisks.map(r => `[${r.risk_id}] - ${r.asset_name}: ${r.risk_title} (Inher
     pdf.text(`${currentClient?.doc_version || '1.0'} - LIVE AUDITED`, card4X + 3, cardY + 35);
     pdf.text(`Ref: ${currentClient?.doc_ref || 'ZZP-IT-PE-05/2021'}`, card4X + cardWidth - 3, cardY + 35, { align: 'right' });
 
-    // --- NEW ELEMENT: Risk Review Committee & Support Channels Box (placed on cover page where matrices were) ---
+    // --- NEW ELEMENT: Facility Committee Signatory Controls & Support Channels Box (placed on cover page where matrices were) ---
     const rawContacts = [
       {
         role: "Authorized Representative",
@@ -1031,7 +1031,7 @@ ${clientRisks.map(r => `[${r.risk_id}] - ${r.asset_name}: ${r.risk_title} (Inher
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8.5);
       pdf.setTextColor(30, 27, 75); // indigo-950
-      pdf.text("RISK REVIEW COMMITTEE / AUTHORIZED PERSONNEL & THIRD-PARTY SUPPORT", 18, committeeY + 7);
+      pdf.text("FACILITY COMMITTEE SIGNATORY CONTROLS & THIRD-PARTY SUPPORT", 18, committeeY + 7);
       
       pdf.setDrawColor(241, 245, 249); // slate-100 divider
       pdf.line(14, committeeY + 9.5, 406, committeeY + 9.5);
@@ -3211,7 +3211,7 @@ ${clientRisks.map(r => `[${r.risk_id}] - ${r.asset_name}: ${r.risk_title} (Inher
                     <div className="bg-white p-3.5 rounded-lg border border-slate-200 col-span-1 sm:col-span-2 lg:col-span-4 flex flex-col justify-between text-left text-[9px] leading-tight">
                       <div>
                         <span className="text-[8px] font-black text-indigo-950 uppercase tracking-wider block border-b border-slate-200 pb-1 mb-2">
-                          Risk Review Committee / Authorized Personnel & Third-Party Support
+                          Facility Committee Signatory Controls & Third-Party Support
                         </span>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           {/* Col 1: Authorized Contacts */}
@@ -3867,7 +3867,7 @@ ${clientRisks.map(r => `[${r.risk_id}] - ${r.asset_name}: ${r.risk_title} (Inher
                           <div className="bg-white p-3.5 rounded-lg border border-slate-200 col-span-4 flex flex-col justify-between text-left text-[9px] leading-tight">
                             <div>
                               <span className="text-[8px] font-black text-indigo-950 uppercase tracking-wider block border-b border-slate-200 pb-1 mb-2">
-                                Risk Review Committee / Authorized Personnel & Third-Party Support
+                                Facility Committee Signatory Controls & Third-Party Support
                               </span>
                               <div className="grid grid-cols-3 gap-4">
                                 {/* Col 1: Authorized Contacts */}

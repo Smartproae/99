@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import JSZip from 'jszip';
-import { DocumentItem, Client } from '../types';
+import { DocumentItem, Client, Policy } from '../types';
 import QuickMasterSetup from './QuickMasterSetup';
 import {
   Search,
@@ -36,6 +36,9 @@ interface DocumentRepositoryProps {
   logAuditTrail?: (module: string, action: string, payload: any) => void;
   allClients?: Client[];
   onSelectClient?: (clientId: string) => void;
+  policies?: Policy[];
+  onUpdatePolicy?: (policy: Policy) => void;
+  onAddPolicy?: (policy: Policy) => void;
 }
 
 // Sample fallback repository items if prop list is initial
@@ -511,6 +514,9 @@ CONFIDENTIALITY NOTICE: ${doc.classification || 'RESTRICTED'} DOCUMENT
           logAuditTrail={logAuditTrail}
           allClients={allClients}
           onSelectClient={onSelectClient}
+          policies={policies}
+          onUpdatePolicy={onUpdatePolicy}
+          onAddPolicy={onAddPolicy}
         />
       )}
     </div>

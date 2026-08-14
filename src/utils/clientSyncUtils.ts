@@ -18,15 +18,16 @@ export function getSyncedAuthorizedRepresentative(client?: Client): SyncedAuthRe
   const name = client?.auth_representative?.name || client?.owner_name || 'Authorized Representative';
   const email = client?.auth_representative?.email || client?.owner_email || '';
   const phone = client?.auth_representative?.phone || client?.phone || '';
+  const designation = client?.auth_representative?.designation || (email ? `Authorized Person • ${email}` : 'Authorized Person • Facility Security Director');
   const signature = client?.auth_rep_signature || client?.facility_stamp;
 
   return {
     name,
     email,
     phone,
-    title: 'Authorized Representative & Compliance Lead',
-    designation: email ? `Authorized Person • ${email}` : 'Authorized Person • Facility Security Director',
-    keyCustodianTitle: 'Authorized Person • Facility Security Director & Key Custodian',
+    title: client?.auth_representative?.designation || 'Authorized Representative & Compliance Lead',
+    designation,
+    keyCustodianTitle: client?.auth_representative?.designation ? `${client.auth_representative.designation} & Key Custodian` : 'Authorized Person • Facility Security Director & Key Custodian',
     signature,
   };
 }
@@ -40,6 +41,7 @@ export function syncClientProfileAuthRep(client: Client): Client {
   const authRepName = client.auth_representative?.name || client.owner_name || '';
   const authRepEmail = client.auth_representative?.email || client.owner_email || '';
   const authRepPhone = client.auth_representative?.phone || client.phone || '';
+  const authRepDesignation = client.auth_representative?.designation || 'Authorized Representative';
 
   return {
     ...client,
@@ -51,6 +53,7 @@ export function syncClientProfileAuthRep(client: Client): Client {
       name: authRepName,
       email: authRepEmail,
       phone: authRepPhone,
+      designation: authRepDesignation,
     },
     updated_at: new Date().toISOString(),
   };

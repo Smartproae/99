@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Building, 
   UserCheck, 
@@ -47,7 +47,7 @@ import {
   Database,
   Link2
 } from 'lucide-react';
-import { Client } from '../types';
+import { Client, Policy } from '../types';
 import MetadataMappingModal, { MasterMetadataSource } from './MetadataMappingModal';
 import { exportToSinglePagePDF } from '../utils/pdfExport';
 import BTATierSelector from './BTATierSelector';
@@ -135,6 +135,9 @@ interface QuickMasterSetupProps {
   logAuditTrail?: (module: string, action: string, payload: any) => void;
   allClients?: Client[];
   onSelectClient?: (clientId: string) => void;
+  policies?: Policy[];
+  onUpdatePolicy?: (updatedPolicy: Policy) => void;
+  onAddPolicy?: (newPolicy: Policy) => void;
 }
 
 const STANDARD_DOCUMENT_NAMES = [
@@ -165,7 +168,10 @@ export default function QuickMasterSetup({
   onNavigateTab,
   logAuditTrail,
   allClients = [],
-  onSelectClient
+  onSelectClient,
+  policies,
+  onUpdatePolicy,
+  onAddPolicy
 }: QuickMasterSetupProps) {
   // Quick Setup wizard states
   const [isQuickSetupOpen, setIsQuickSetupOpen] = useState(false);

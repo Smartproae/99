@@ -4,11 +4,12 @@
  */
 
 import React, { useState } from 'react';
-import { Client, User, DocumentStorageProvider } from '../types';
-import { Plus, Edit2, Search, Building2, CheckCircle2, XCircle, MapPin, Globe, Phone, Mail, Trash2, Upload, Shield, Award, Send, Key, RefreshCw, Zap, Activity, ShieldCheck, Database, Copy } from 'lucide-react';
+import { Client, User, DocumentStorageProvider, Employee } from '../types';
+import { Plus, Edit2, Search, Building2, CheckCircle2, XCircle, MapPin, Globe, Phone, Mail, Trash2, Upload, Shield, Award, Send, Key, RefreshCw, Zap, Activity, ShieldCheck, Database, Copy, UserCheck, Users, Sparkles } from 'lucide-react';
 import { syncClientProfileAuthRep } from '../utils/clientSyncUtils';
 import FrameworkGroupModal from './FrameworkGroupModal';
 import { FrameworkGroupTier } from '../utils/frameworkGroupUtils';
+import { INITIAL_EMPLOYEES } from '../initialData';
 
 const PRESET_LOGOS = [
   { name: 'Medical Shield', value: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>' },
@@ -26,6 +27,7 @@ const PRESET_STAMPS = [
 interface ClientManagementProps {
   clients: Client[];
   users?: User[];
+  employees?: Employee[];
   onAddClient: (client: Client) => void;
   onUpdateClient: (client: Client) => void;
   onDeleteClient: (id: string) => void;
@@ -39,6 +41,7 @@ interface ClientManagementProps {
 export default function ClientManagement({
   clients,
   users = [],
+  employees = [],
   onAddClient,
   onUpdateClient,
   onDeleteClient,
@@ -51,6 +54,35 @@ export default function ClientManagement({
   const [searchTerm, setSearchTerm] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+
+  // Source of truth for Employee & Operator Management roster
+  const effectiveEmployees = React.useMemo(() => {
+    if (employees && employees.length > 0) return employees;
+    try {
+      const saved = localStorage.getItem('sh_employees');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.warn('Could not parse sh_employees', e);
+    }
+    return INITIAL_EMPLOYEES;
+  }, [employees]);
+
+  const getStaffEmail = (emp: Employee, domain?: string) => {
+    if ((emp as any).email) return (emp as any).email;
+    if ((emp as any).work_email) return (emp as any).work_email;
+    const cleanName = emp.employee_name.toLowerCase().replace(/[^a-z0-9]/g, '.');
+    const d = domain ? domain.replace(/^https?:\/\//, '').replace(/\/.*$/, '') : 'facility.ae';
+    return `${cleanName}@${d}`;
+  };
+
+  const getStaffPhone = (emp: Employee) => {
+    if ((emp as any).phone) return (emp as any).phone;
+    if ((emp as any).mobile) return (emp as any).mobile;
+    return '+971 2 600 ' + Math.floor(1000 + Math.random() * 9000);
+  };
 
   // Framework Tier Groups State (Basic, Transmission, Advance)
   const [frameworkModalOpen, setFrameworkModalOpen] = useState(false);
@@ -262,26 +294,31 @@ export default function ClientManagement({
     { id: 'b1', name: 'Main Center', license_no: 'DHA-2024-009' }
   ]);
 
-  // Risk Review Committee / Authorized Personnel Contacts
+  // Facility Committee Signatory Controls
   const [authRepName, setAuthRepName] = useState('');
   const [authRepEmail, setAuthRepEmail] = useState('');
   const [authRepPhone, setAuthRepPhone] = useState('');
+  const [authRepDesignation, setAuthRepDesignation] = useState('Authorized Representative');
 
   const [clinicMgrName, setClinicMgrName] = useState('');
   const [clinicMgrEmail, setClinicMgrEmail] = useState('');
   const [clinicMgrPhone, setClinicMgrPhone] = useState('');
+  const [clinicMgrDesignation, setClinicMgrDesignation] = useState('Clinic Manager');
 
   const [medDirName, setMedDirName] = useState('');
   const [medDirEmail, setMedDirEmail] = useState('');
   const [medDirPhone, setMedDirPhone] = useState('');
+  const [medDirDesignation, setMedDirDesignation] = useState('Medical Director');
 
   const [itAdminName, setItAdminName] = useState('');
   const [itAdminEmail, setItAdminEmail] = useState('');
   const [itAdminPhone, setItAdminPhone] = useState('');
+  const [itAdminDesignation, setItAdminDesignation] = useState('IT Manager / Admin');
 
   const [hrMgrName, setHrMgrName] = useState('');
   const [hrMgrEmail, setHrMgrEmail] = useState('');
   const [hrMgrPhone, setHrMgrPhone] = useState('');
+  const [hrMgrDesignation, setHrMgrDesignation] = useState('HR Manager');
 
   // Third-Party Support Channels
   const [itSupportName, setItSupportName] = useState('Apex Security Solutions');
@@ -529,11 +566,11 @@ export default function ClientManagement({
       facility_group_name: facilityGroupName,
       branches: structureClassification === 'GROUP' ? branches : [],
 
-      auth_representative: { name: authRepName, email: authRepEmail, phone: authRepPhone },
-      clinic_manager: { name: clinicMgrName, email: clinicMgrEmail, phone: clinicMgrPhone },
-      medical_director: { name: medDirName, email: medDirEmail, phone: medDirPhone },
-      it_manager: { name: itAdminName, email: itAdminEmail, phone: itAdminPhone },
-      hr_manager: { name: hrMgrName, email: hrMgrEmail, phone: hrMgrPhone },
+      auth_representative: { name: authRepName, email: authRepEmail, phone: authRepPhone, designation: authRepDesignation },
+      clinic_manager: { name: clinicMgrName, email: clinicMgrEmail, phone: clinicMgrPhone, designation: clinicMgrDesignation },
+      medical_director: { name: medDirName, email: medDirEmail, phone: medDirPhone, designation: medDirDesignation },
+      it_manager: { name: itAdminName, email: itAdminEmail, phone: itAdminPhone, designation: itAdminDesignation },
+      hr_manager: { name: hrMgrName, email: hrMgrEmail, phone: hrMgrPhone, designation: hrMgrDesignation },
 
       it_support: { team_name: itSupportName, email: itSupportEmail, phone: itSupportPhone },
       emr_support: { team_name: emrSupportName, email: emrSupportEmail, phone: emrSupportPhone },
@@ -612,22 +649,27 @@ export default function ClientManagement({
     setAuthRepName('');
     setAuthRepEmail('');
     setAuthRepPhone('');
+    setAuthRepDesignation('Authorized Representative');
     
     setClinicMgrName('');
     setClinicMgrEmail('');
     setClinicMgrPhone('');
+    setClinicMgrDesignation('Clinic Manager');
     
     setMedDirName('');
     setMedDirEmail('');
     setMedDirPhone('');
+    setMedDirDesignation('Medical Director');
     
     setItAdminName('');
     setItAdminEmail('');
     setItAdminPhone('');
+    setItAdminDesignation('IT Manager / Admin');
     
     setHrMgrName('');
     setHrMgrEmail('');
     setHrMgrPhone('');
+    setHrMgrDesignation('HR Manager');
 
     setItSupportName('Apex Security Solutions');
     setItSupportEmail('support@partner.ae');
@@ -648,11 +690,11 @@ export default function ClientManagement({
       ...client,
       structure_classification: client.structure_classification || (client.is_group ? 'GROUP' : 'SINGLE'),
       branches: client.branches || [],
-      auth_representative: client.auth_representative || { name: '', email: '', phone: '' },
-      clinic_manager: client.clinic_manager || { name: '', email: '', phone: '' },
-      medical_director: client.medical_director || { name: '', email: '', phone: '' },
-      it_manager: client.it_manager || { name: '', email: '', phone: '' },
-      hr_manager: client.hr_manager || { name: '', email: '', phone: '' },
+      auth_representative: client.auth_representative ? { ...client.auth_representative, designation: client.auth_representative.designation || 'Authorized Representative' } : { name: '', email: '', phone: '', designation: 'Authorized Representative' },
+      clinic_manager: client.clinic_manager ? { ...client.clinic_manager, designation: client.clinic_manager.designation || 'Clinic Manager' } : { name: '', email: '', phone: '', designation: 'Clinic Manager' },
+      medical_director: client.medical_director ? { ...client.medical_director, designation: client.medical_director.designation || 'Medical Director' } : { name: '', email: '', phone: '', designation: 'Medical Director' },
+      it_manager: client.it_manager ? { ...client.it_manager, designation: client.it_manager.designation || 'IT Manager / Admin' } : { name: '', email: '', phone: '', designation: 'IT Manager / Admin' },
+      hr_manager: client.hr_manager ? { ...client.hr_manager, designation: client.hr_manager.designation || 'HR Manager' } : { name: '', email: '', phone: '', designation: 'HR Manager' },
       it_support: client.it_support || { team_name: 'Apex Security Solutions', email: 'support@partner.ae', phone: '+971...' },
       emr_support: client.emr_support || { team_name: 'CureMD Regional Support', email: 'emr@curemd.ae', phone: '+971...' }
     });
@@ -1064,140 +1106,350 @@ export default function ClientManagement({
             </div>
           </div>
 
-          {/* Section 4: Risk Review Committee Contacts */}
-          <div className="p-4 bg-emerald-50/10 rounded-xl border border-emerald-500/10 space-y-4">
-            <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-200/60 pb-1.5">
-              <span>👥</span> Risk Review Committee / Authorized Personnel Contacts
-            </h4>
+          {/* Section 4: Facility Committee Signatory Controls */}
+          <div className="p-4 bg-emerald-50/20 rounded-xl border border-emerald-500/20 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-500/20 pb-2.5">
+              <div>
+                <h4 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-emerald-600" /> Facility Committee Signatory Controls
+                </h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Assign key facility personnel directly from your <strong className="text-emerald-700">Employee &amp; Operator Management</strong> roster or type manually.
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2.5 py-1 rounded-full border border-emerald-300/60 self-start sm:self-auto">
+                <UserCheck className="w-3 h-3 text-emerald-600" /> {effectiveEmployees.length} Staff Available
+              </span>
+            </div>
             
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               {/* Authorized Representative */}
-              <div className="p-3 bg-white rounded-xl border border-slate-150 shadow-xs space-y-2">
-                <span className="text-[11px] font-bold text-slate-800 block border-b border-slate-100 pb-1">Authorized Representative</span>
+              <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                  <span className="text-[11px] font-bold text-slate-800">Authorized Representative</span>
+                  {authRepDesignation && (
+                    <span className="text-[9px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 truncate max-w-[110px]" title={authRepDesignation}>
+                      {authRepDesignation}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-emerald-700 block mb-0.5">Select from Staff Roster:</label>
+                  <select
+                    defaultValue=""
+                    onChange={e => {
+                      const emp = effectiveEmployees.find(x => x.id === e.target.value);
+                      if (emp) {
+                        setAuthRepName(emp.employee_name);
+                        setAuthRepEmail(getStaffEmail(emp, website));
+                        setAuthRepPhone(getStaffPhone(emp));
+                        setAuthRepDesignation(emp.position || emp.department || 'Authorized Representative');
+                      }
+                    }}
+                    className="w-full text-[10.5px] p-1.5 rounded border border-emerald-200 bg-emerald-50/40 text-slate-700 font-medium focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                  >
+                    <option value="" disabled>-- Pick from Employee Roster --</option>
+                    {effectiveEmployees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.employee_name} ({emp.position || emp.department || 'Staff'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-slate-500 block mb-0.5">Designation / Role Title:</label>
+                  <input
+                    type="text"
+                    value={authRepDesignation}
+                    onChange={e => setAuthRepDesignation(e.target.value)}
+                    placeholder="Designation / Position"
+                    className="w-full text-[11px] p-2 rounded border border-slate-200 bg-slate-50/50 font-medium text-slate-700 focus:border-emerald-500"
+                  />
+                </div>
                 <input
                   type="text"
                   value={authRepName}
                   onChange={e => setAuthRepName(e.target.value)}
-                  placeholder="Name"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Full Legal Name"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="email"
                   value={authRepEmail}
                   onChange={e => setAuthRepEmail(e.target.value)}
-                  placeholder="Email"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Official Email"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="text"
                   value={authRepPhone}
                   onChange={e => setAuthRepPhone(e.target.value)}
-                  placeholder="Phone"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Contact Phone"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
               </div>
 
               {/* Clinic Manager */}
-              <div className="p-3 bg-white rounded-xl border border-slate-150 shadow-xs space-y-2">
-                <span className="text-[11px] font-bold text-slate-800 block border-b border-slate-100 pb-1">Clinic Manager</span>
+              <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                  <span className="text-[11px] font-bold text-slate-800">Clinic Manager</span>
+                  {clinicMgrDesignation && (
+                    <span className="text-[9px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 truncate max-w-[110px]" title={clinicMgrDesignation}>
+                      {clinicMgrDesignation}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-emerald-700 block mb-0.5">Select from Staff Roster:</label>
+                  <select
+                    defaultValue=""
+                    onChange={e => {
+                      const emp = effectiveEmployees.find(x => x.id === e.target.value);
+                      if (emp) {
+                        setClinicMgrName(emp.employee_name);
+                        setClinicMgrEmail(getStaffEmail(emp, website));
+                        setClinicMgrPhone(getStaffPhone(emp));
+                        setClinicMgrDesignation(emp.position || emp.department || 'Clinic Manager');
+                      }
+                    }}
+                    className="w-full text-[10.5px] p-1.5 rounded border border-emerald-200 bg-emerald-50/40 text-slate-700 font-medium focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                  >
+                    <option value="" disabled>-- Pick from Employee Roster --</option>
+                    {effectiveEmployees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.employee_name} ({emp.position || emp.department || 'Staff'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-slate-500 block mb-0.5">Designation / Role Title:</label>
+                  <input
+                    type="text"
+                    value={clinicMgrDesignation}
+                    onChange={e => setClinicMgrDesignation(e.target.value)}
+                    placeholder="Designation / Position"
+                    className="w-full text-[11px] p-2 rounded border border-slate-200 bg-slate-50/50 font-medium text-slate-700 focus:border-emerald-500"
+                  />
+                </div>
                 <input
                   type="text"
                   value={clinicMgrName}
                   onChange={e => setClinicMgrName(e.target.value)}
-                  placeholder="Name"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Full Legal Name"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="email"
                   value={clinicMgrEmail}
                   onChange={e => setClinicMgrEmail(e.target.value)}
-                  placeholder="Email"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Official Email"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="text"
                   value={clinicMgrPhone}
                   onChange={e => setClinicMgrPhone(e.target.value)}
-                  placeholder="Phone"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Contact Phone"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
               </div>
 
               {/* Medical Director */}
-              <div className="p-3 bg-white rounded-xl border border-slate-150 shadow-xs space-y-2">
-                <span className="text-[11px] font-bold text-slate-800 block border-b border-slate-100 pb-1">Medical Director</span>
+              <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                  <span className="text-[11px] font-bold text-slate-800">Medical Director</span>
+                  {medDirDesignation && (
+                    <span className="text-[9px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 truncate max-w-[110px]" title={medDirDesignation}>
+                      {medDirDesignation}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-emerald-700 block mb-0.5">Select from Staff Roster:</label>
+                  <select
+                    defaultValue=""
+                    onChange={e => {
+                      const emp = effectiveEmployees.find(x => x.id === e.target.value);
+                      if (emp) {
+                        setMedDirName(emp.employee_name);
+                        setMedDirEmail(getStaffEmail(emp, website));
+                        setMedDirPhone(getStaffPhone(emp));
+                        setMedDirDesignation(emp.position || emp.department || 'Medical Director');
+                      }
+                    }}
+                    className="w-full text-[10.5px] p-1.5 rounded border border-emerald-200 bg-emerald-50/40 text-slate-700 font-medium focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                  >
+                    <option value="" disabled>-- Pick from Employee Roster --</option>
+                    {effectiveEmployees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.employee_name} ({emp.position || emp.department || 'Staff'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-slate-500 block mb-0.5">Designation / Role Title:</label>
+                  <input
+                    type="text"
+                    value={medDirDesignation}
+                    onChange={e => setMedDirDesignation(e.target.value)}
+                    placeholder="Designation / Position"
+                    className="w-full text-[11px] p-2 rounded border border-slate-200 bg-slate-50/50 font-medium text-slate-700 focus:border-emerald-500"
+                  />
+                </div>
                 <input
                   type="text"
                   value={medDirName}
                   onChange={e => setMedDirName(e.target.value)}
-                  placeholder="Name"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Full Legal Name"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="email"
                   value={medDirEmail}
                   onChange={e => setMedDirEmail(e.target.value)}
-                  placeholder="Email"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Official Email"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="text"
                   value={medDirPhone}
                   onChange={e => setMedDirPhone(e.target.value)}
-                  placeholder="Phone"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Contact Phone"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
               </div>
 
               {/* IT Manager */}
-              <div className="p-3 bg-white rounded-xl border border-slate-150 shadow-xs space-y-2">
-                <span className="text-[11px] font-bold text-slate-800 block border-b border-slate-100 pb-1">IT Manager / Admin</span>
+              <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                  <span className="text-[11px] font-bold text-slate-800">IT Manager / Admin</span>
+                  {itAdminDesignation && (
+                    <span className="text-[9px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 truncate max-w-[110px]" title={itAdminDesignation}>
+                      {itAdminDesignation}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-emerald-700 block mb-0.5">Select from Staff Roster:</label>
+                  <select
+                    defaultValue=""
+                    onChange={e => {
+                      const emp = effectiveEmployees.find(x => x.id === e.target.value);
+                      if (emp) {
+                        setItAdminName(emp.employee_name);
+                        setItAdminEmail(getStaffEmail(emp, website));
+                        setItAdminPhone(getStaffPhone(emp));
+                        setItAdminDesignation(emp.position || emp.department || 'IT Manager / Admin');
+                      }
+                    }}
+                    className="w-full text-[10.5px] p-1.5 rounded border border-emerald-200 bg-emerald-50/40 text-slate-700 font-medium focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                  >
+                    <option value="" disabled>-- Pick from Employee Roster --</option>
+                    {effectiveEmployees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.employee_name} ({emp.position || emp.department || 'Staff'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-slate-500 block mb-0.5">Designation / Role Title:</label>
+                  <input
+                    type="text"
+                    value={itAdminDesignation}
+                    onChange={e => setItAdminDesignation(e.target.value)}
+                    placeholder="Designation / Position"
+                    className="w-full text-[11px] p-2 rounded border border-slate-200 bg-slate-50/50 font-medium text-slate-700 focus:border-emerald-500"
+                  />
+                </div>
                 <input
                   type="text"
                   value={itAdminName}
                   onChange={e => setItAdminName(e.target.value)}
-                  placeholder="Name"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Full Legal Name"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="email"
                   value={itAdminEmail}
                   onChange={e => setItAdminEmail(e.target.value)}
-                  placeholder="Email"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Official Email"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="text"
                   value={itAdminPhone}
                   onChange={e => setItAdminPhone(e.target.value)}
-                  placeholder="Phone"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Contact Phone"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
               </div>
 
               {/* HR Manager */}
-              <div className="p-3 bg-white rounded-xl border border-slate-150 shadow-xs space-y-2">
-                <span className="text-[11px] font-bold text-slate-800 block border-b border-slate-100 pb-1">HR Manager</span>
+              <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                  <span className="text-[11px] font-bold text-slate-800">HR Manager</span>
+                  {hrMgrDesignation && (
+                    <span className="text-[9px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 truncate max-w-[110px]" title={hrMgrDesignation}>
+                      {hrMgrDesignation}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-emerald-700 block mb-0.5">Select from Staff Roster:</label>
+                  <select
+                    defaultValue=""
+                    onChange={e => {
+                      const emp = effectiveEmployees.find(x => x.id === e.target.value);
+                      if (emp) {
+                        setHrMgrName(emp.employee_name);
+                        setHrMgrEmail(getStaffEmail(emp, website));
+                        setHrMgrPhone(getStaffPhone(emp));
+                        setHrMgrDesignation(emp.position || emp.department || 'HR Manager');
+                      }
+                    }}
+                    className="w-full text-[10.5px] p-1.5 rounded border border-emerald-200 bg-emerald-50/40 text-slate-700 font-medium focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                  >
+                    <option value="" disabled>-- Pick from Employee Roster --</option>
+                    {effectiveEmployees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.employee_name} ({emp.position || emp.department || 'Staff'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-slate-500 block mb-0.5">Designation / Role Title:</label>
+                  <input
+                    type="text"
+                    value={hrMgrDesignation}
+                    onChange={e => setHrMgrDesignation(e.target.value)}
+                    placeholder="Designation / Position"
+                    className="w-full text-[11px] p-2 rounded border border-slate-200 bg-slate-50/50 font-medium text-slate-700 focus:border-emerald-500"
+                  />
+                </div>
                 <input
                   type="text"
                   value={hrMgrName}
                   onChange={e => setHrMgrName(e.target.value)}
-                  placeholder="Name"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Full Legal Name"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="email"
                   value={hrMgrEmail}
                   onChange={e => setHrMgrEmail(e.target.value)}
-                  placeholder="Email"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Official Email"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="text"
                   value={hrMgrPhone}
                   onChange={e => setHrMgrPhone(e.target.value)}
-                  placeholder="Phone"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Contact Phone"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
               </div>
             </div>
@@ -2136,16 +2388,74 @@ export default function ClientManagement({
             </div>
           </div>
 
-          {/* Section 4: Risk Review Committee Contacts */}
-          <div className="p-4 bg-emerald-50/10 rounded-xl border border-emerald-500/10 space-y-4">
-            <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-200/60 pb-1.5">
-              <span>👥</span> Risk Review Committee / Authorized Personnel Contacts
-            </h4>
+          {/* Section 4: Facility Committee Signatory Controls */}
+          <div className="p-4 bg-emerald-50/20 rounded-xl border border-emerald-500/20 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-500/20 pb-2.5">
+              <div>
+                <h4 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-emerald-600" /> Facility Committee Signatory Controls
+                </h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Select and update committee contacts directly from your <strong className="text-emerald-700">Employee &amp; Operator Management</strong> roster or edit freely below.
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2.5 py-1 rounded-full border border-emerald-300/60 self-start sm:self-auto">
+                <UserCheck className="w-3 h-3 text-emerald-600" /> {effectiveEmployees.length} Staff Available
+              </span>
+            </div>
             
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               {/* Authorized Representative */}
-              <div className="p-3 bg-white rounded-xl border border-slate-150 shadow-xs space-y-2">
-                <span className="text-[11px] font-bold text-slate-800 block border-b border-slate-100 pb-1">Authorized Representative</span>
+              <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                  <span className="text-[11px] font-bold text-slate-800">Authorized Representative</span>
+                  {editingClient.auth_representative?.designation && (
+                    <span className="text-[9px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 truncate max-w-[110px]" title={editingClient.auth_representative.designation}>
+                      {editingClient.auth_representative.designation}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-emerald-700 block mb-0.5">Select from Staff Roster:</label>
+                  <select
+                    defaultValue=""
+                    onChange={e => {
+                      const emp = effectiveEmployees.find(x => x.id === e.target.value);
+                      if (emp) {
+                        setEditingClient({
+                          ...editingClient,
+                          auth_representative: {
+                            name: emp.employee_name,
+                            email: getStaffEmail(emp, editingClient.domain),
+                            phone: getStaffPhone(emp),
+                            designation: emp.position || emp.department || 'Authorized Representative'
+                          }
+                        });
+                      }
+                    }}
+                    className="w-full text-[10.5px] p-1.5 rounded border border-emerald-200 bg-emerald-50/40 text-slate-700 font-medium focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                  >
+                    <option value="" disabled>-- Pick from Employee Roster --</option>
+                    {effectiveEmployees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.employee_name} ({emp.position || emp.department || 'Staff'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-slate-500 block mb-0.5">Designation / Role Title:</label>
+                  <input
+                    type="text"
+                    value={editingClient.auth_representative?.designation || ''}
+                    onChange={e => setEditingClient({
+                      ...editingClient,
+                      auth_representative: { ...(editingClient.auth_representative || { name: '', email: '', phone: '' }), designation: e.target.value }
+                    })}
+                    placeholder="Designation / Position"
+                    className="w-full text-[11px] p-2 rounded border border-slate-200 bg-slate-50/50 font-medium text-slate-700 focus:border-emerald-500"
+                  />
+                </div>
                 <input
                   type="text"
                   value={editingClient.auth_representative?.name || ''}
@@ -2153,8 +2463,8 @@ export default function ClientManagement({
                     ...editingClient,
                     auth_representative: { ...(editingClient.auth_representative || { name: '', email: '', phone: '' }), name: e.target.value }
                   })}
-                  placeholder="Name"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Full Legal Name"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="email"
@@ -2163,8 +2473,8 @@ export default function ClientManagement({
                     ...editingClient,
                     auth_representative: { ...(editingClient.auth_representative || { name: '', email: '', phone: '' }), email: e.target.value }
                   })}
-                  placeholder="Email"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Official Email"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="text"
@@ -2173,14 +2483,62 @@ export default function ClientManagement({
                     ...editingClient,
                     auth_representative: { ...(editingClient.auth_representative || { name: '', email: '', phone: '' }), phone: e.target.value }
                   })}
-                  placeholder="Phone"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Contact Phone"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
               </div>
 
               {/* Clinic Manager */}
-              <div className="p-3 bg-white rounded-xl border border-slate-150 shadow-xs space-y-2">
-                <span className="text-[11px] font-bold text-slate-800 block border-b border-slate-100 pb-1">Clinic Manager</span>
+              <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                  <span className="text-[11px] font-bold text-slate-800">Clinic Manager</span>
+                  {editingClient.clinic_manager?.designation && (
+                    <span className="text-[9px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 truncate max-w-[110px]" title={editingClient.clinic_manager.designation}>
+                      {editingClient.clinic_manager.designation}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-emerald-700 block mb-0.5">Select from Staff Roster:</label>
+                  <select
+                    defaultValue=""
+                    onChange={e => {
+                      const emp = effectiveEmployees.find(x => x.id === e.target.value);
+                      if (emp) {
+                        setEditingClient({
+                          ...editingClient,
+                          clinic_manager: {
+                            name: emp.employee_name,
+                            email: getStaffEmail(emp, editingClient.domain),
+                            phone: getStaffPhone(emp),
+                            designation: emp.position || emp.department || 'Clinic Manager'
+                          }
+                        });
+                      }
+                    }}
+                    className="w-full text-[10.5px] p-1.5 rounded border border-emerald-200 bg-emerald-50/40 text-slate-700 font-medium focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                  >
+                    <option value="" disabled>-- Pick from Employee Roster --</option>
+                    {effectiveEmployees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.employee_name} ({emp.position || emp.department || 'Staff'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-slate-500 block mb-0.5">Designation / Role Title:</label>
+                  <input
+                    type="text"
+                    value={editingClient.clinic_manager?.designation || ''}
+                    onChange={e => setEditingClient({
+                      ...editingClient,
+                      clinic_manager: { ...(editingClient.clinic_manager || { name: '', email: '', phone: '' }), designation: e.target.value }
+                    })}
+                    placeholder="Designation / Position"
+                    className="w-full text-[11px] p-2 rounded border border-slate-200 bg-slate-50/50 font-medium text-slate-700 focus:border-emerald-500"
+                  />
+                </div>
                 <input
                   type="text"
                   value={editingClient.clinic_manager?.name || ''}
@@ -2188,8 +2546,8 @@ export default function ClientManagement({
                     ...editingClient,
                     clinic_manager: { ...(editingClient.clinic_manager || { name: '', email: '', phone: '' }), name: e.target.value }
                   })}
-                  placeholder="Name"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Full Legal Name"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="email"
@@ -2198,8 +2556,8 @@ export default function ClientManagement({
                     ...editingClient,
                     clinic_manager: { ...(editingClient.clinic_manager || { name: '', email: '', phone: '' }), email: e.target.value }
                   })}
-                  placeholder="Email"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Official Email"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="text"
@@ -2208,14 +2566,62 @@ export default function ClientManagement({
                     ...editingClient,
                     clinic_manager: { ...(editingClient.clinic_manager || { name: '', email: '', phone: '' }), phone: e.target.value }
                   })}
-                  placeholder="Phone"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Contact Phone"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
               </div>
 
               {/* Medical Director */}
-              <div className="p-3 bg-white rounded-xl border border-slate-150 shadow-xs space-y-2">
-                <span className="text-[11px] font-bold text-slate-800 block border-b border-slate-100 pb-1">Medical Director</span>
+              <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                  <span className="text-[11px] font-bold text-slate-800">Medical Director</span>
+                  {editingClient.medical_director?.designation && (
+                    <span className="text-[9px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 truncate max-w-[110px]" title={editingClient.medical_director.designation}>
+                      {editingClient.medical_director.designation}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-emerald-700 block mb-0.5">Select from Staff Roster:</label>
+                  <select
+                    defaultValue=""
+                    onChange={e => {
+                      const emp = effectiveEmployees.find(x => x.id === e.target.value);
+                      if (emp) {
+                        setEditingClient({
+                          ...editingClient,
+                          medical_director: {
+                            name: emp.employee_name,
+                            email: getStaffEmail(emp, editingClient.domain),
+                            phone: getStaffPhone(emp),
+                            designation: emp.position || emp.department || 'Medical Director'
+                          }
+                        });
+                      }
+                    }}
+                    className="w-full text-[10.5px] p-1.5 rounded border border-emerald-200 bg-emerald-50/40 text-slate-700 font-medium focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                  >
+                    <option value="" disabled>-- Pick from Employee Roster --</option>
+                    {effectiveEmployees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.employee_name} ({emp.position || emp.department || 'Staff'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-slate-500 block mb-0.5">Designation / Role Title:</label>
+                  <input
+                    type="text"
+                    value={editingClient.medical_director?.designation || ''}
+                    onChange={e => setEditingClient({
+                      ...editingClient,
+                      medical_director: { ...(editingClient.medical_director || { name: '', email: '', phone: '' }), designation: e.target.value }
+                    })}
+                    placeholder="Designation / Position"
+                    className="w-full text-[11px] p-2 rounded border border-slate-200 bg-slate-50/50 font-medium text-slate-700 focus:border-emerald-500"
+                  />
+                </div>
                 <input
                   type="text"
                   value={editingClient.medical_director?.name || ''}
@@ -2223,8 +2629,8 @@ export default function ClientManagement({
                     ...editingClient,
                     medical_director: { ...(editingClient.medical_director || { name: '', email: '', phone: '' }), name: e.target.value }
                   })}
-                  placeholder="Name"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Full Legal Name"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="email"
@@ -2233,8 +2639,8 @@ export default function ClientManagement({
                     ...editingClient,
                     medical_director: { ...(editingClient.medical_director || { name: '', email: '', phone: '' }), email: e.target.value }
                   })}
-                  placeholder="Email"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Official Email"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="text"
@@ -2243,14 +2649,62 @@ export default function ClientManagement({
                     ...editingClient,
                     medical_director: { ...(editingClient.medical_director || { name: '', email: '', phone: '' }), phone: e.target.value }
                   })}
-                  placeholder="Phone"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Contact Phone"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
               </div>
 
               {/* IT Manager */}
-              <div className="p-3 bg-white rounded-xl border border-slate-150 shadow-xs space-y-2">
-                <span className="text-[11px] font-bold text-slate-800 block border-b border-slate-100 pb-1">IT Manager / Admin</span>
+              <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                  <span className="text-[11px] font-bold text-slate-800">IT Manager / Admin</span>
+                  {editingClient.it_manager?.designation && (
+                    <span className="text-[9px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 truncate max-w-[110px]" title={editingClient.it_manager.designation}>
+                      {editingClient.it_manager.designation}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-emerald-700 block mb-0.5">Select from Staff Roster:</label>
+                  <select
+                    defaultValue=""
+                    onChange={e => {
+                      const emp = effectiveEmployees.find(x => x.id === e.target.value);
+                      if (emp) {
+                        setEditingClient({
+                          ...editingClient,
+                          it_manager: {
+                            name: emp.employee_name,
+                            email: getStaffEmail(emp, editingClient.domain),
+                            phone: getStaffPhone(emp),
+                            designation: emp.position || emp.department || 'IT Manager / Admin'
+                          }
+                        });
+                      }
+                    }}
+                    className="w-full text-[10.5px] p-1.5 rounded border border-emerald-200 bg-emerald-50/40 text-slate-700 font-medium focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                  >
+                    <option value="" disabled>-- Pick from Employee Roster --</option>
+                    {effectiveEmployees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.employee_name} ({emp.position || emp.department || 'Staff'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-slate-500 block mb-0.5">Designation / Role Title:</label>
+                  <input
+                    type="text"
+                    value={editingClient.it_manager?.designation || ''}
+                    onChange={e => setEditingClient({
+                      ...editingClient,
+                      it_manager: { ...(editingClient.it_manager || { name: '', email: '', phone: '' }), designation: e.target.value }
+                    })}
+                    placeholder="Designation / Position"
+                    className="w-full text-[11px] p-2 rounded border border-slate-200 bg-slate-50/50 font-medium text-slate-700 focus:border-emerald-500"
+                  />
+                </div>
                 <input
                   type="text"
                   value={editingClient.it_manager?.name || ''}
@@ -2258,8 +2712,8 @@ export default function ClientManagement({
                     ...editingClient,
                     it_manager: { ...(editingClient.it_manager || { name: '', email: '', phone: '' }), name: e.target.value }
                   })}
-                  placeholder="Name"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Full Legal Name"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="email"
@@ -2268,8 +2722,8 @@ export default function ClientManagement({
                     ...editingClient,
                     it_manager: { ...(editingClient.it_manager || { name: '', email: '', phone: '' }), email: e.target.value }
                   })}
-                  placeholder="Email"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Official Email"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="text"
@@ -2278,14 +2732,62 @@ export default function ClientManagement({
                     ...editingClient,
                     it_manager: { ...(editingClient.it_manager || { name: '', email: '', phone: '' }), phone: e.target.value }
                   })}
-                  placeholder="Phone"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Contact Phone"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
               </div>
 
               {/* HR Manager */}
-              <div className="p-3 bg-white rounded-xl border border-slate-150 shadow-xs space-y-2">
-                <span className="text-[11px] font-bold text-slate-800 block border-b border-slate-100 pb-1">HR Manager</span>
+              <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                  <span className="text-[11px] font-bold text-slate-800">HR Manager</span>
+                  {editingClient.hr_manager?.designation && (
+                    <span className="text-[9px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 truncate max-w-[110px]" title={editingClient.hr_manager.designation}>
+                      {editingClient.hr_manager.designation}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-emerald-700 block mb-0.5">Select from Staff Roster:</label>
+                  <select
+                    defaultValue=""
+                    onChange={e => {
+                      const emp = effectiveEmployees.find(x => x.id === e.target.value);
+                      if (emp) {
+                        setEditingClient({
+                          ...editingClient,
+                          hr_manager: {
+                            name: emp.employee_name,
+                            email: getStaffEmail(emp, editingClient.domain),
+                            phone: getStaffPhone(emp),
+                            designation: emp.position || emp.department || 'HR Manager'
+                          }
+                        });
+                      }
+                    }}
+                    className="w-full text-[10.5px] p-1.5 rounded border border-emerald-200 bg-emerald-50/40 text-slate-700 font-medium focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                  >
+                    <option value="" disabled>-- Pick from Employee Roster --</option>
+                    {effectiveEmployees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.employee_name} ({emp.position || emp.department || 'Staff'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-semibold text-slate-500 block mb-0.5">Designation / Role Title:</label>
+                  <input
+                    type="text"
+                    value={editingClient.hr_manager?.designation || ''}
+                    onChange={e => setEditingClient({
+                      ...editingClient,
+                      hr_manager: { ...(editingClient.hr_manager || { name: '', email: '', phone: '' }), designation: e.target.value }
+                    })}
+                    placeholder="Designation / Position"
+                    className="w-full text-[11px] p-2 rounded border border-slate-200 bg-slate-50/50 font-medium text-slate-700 focus:border-emerald-500"
+                  />
+                </div>
                 <input
                   type="text"
                   value={editingClient.hr_manager?.name || ''}
@@ -2293,8 +2795,8 @@ export default function ClientManagement({
                     ...editingClient,
                     hr_manager: { ...(editingClient.hr_manager || { name: '', email: '', phone: '' }), name: e.target.value }
                   })}
-                  placeholder="Name"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Full Legal Name"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="email"
@@ -2303,8 +2805,8 @@ export default function ClientManagement({
                     ...editingClient,
                     hr_manager: { ...(editingClient.hr_manager || { name: '', email: '', phone: '' }), email: e.target.value }
                   })}
-                  placeholder="Email"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Official Email"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
                 <input
                   type="text"
@@ -2313,8 +2815,8 @@ export default function ClientManagement({
                     ...editingClient,
                     hr_manager: { ...(editingClient.hr_manager || { name: '', email: '', phone: '' }), phone: e.target.value }
                   })}
-                  placeholder="Phone"
-                  className="w-full text-[11px] p-2 rounded border border-slate-200"
+                  placeholder="Contact Phone"
+                  className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
               </div>
             </div>

@@ -457,4 +457,132 @@ export async function exportToSinglePagePDF(
   }
 }
 
+/**
+ * Multi-page PDF generator that detects all individual A4 page sheets in a document 
+ * and exports each as a separate, perfectly sized A4 page in a single unified PDF file.
+ */
+export async function exportToMultiPagePDF(
+  containerOrId: HTMLElement | string,
+  options: PDFExportOptions = {}
+): Promise<boolean> {
+  const generate = async (): Promise<boolean> => {
+    let container: HTMLElement | null = null;
+    if (typeof containerOrId === 'string') {
+      const rawId = containerOrId.startsWith('#') ? containerOrId.slice(1) : containerOrId;
+      container = document.getElementById(rawId) || document.querySelector<HTMLElement>(containerOrId);
+    } else {
+      container = containerOrId;
+    }
+
+    if (!container) {
+      console.error(`Container "${containerOrId}" not found for multi-page PDF generation`);
+      return false;
+    }
+
+    // Find all page sheets inside container
+    const pageElements = Array.from(
+      container.querySelectorAll<HTMLElement>('.a4-page-sheet, .printable-a4-page, .a4-sheet, [data-page-sheet]')
+    );
+
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+    });
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+
+    // If no distinct page sheets found, fall back to single/continuous export
+    if (pageElements.length === 0) {
+      return exportToSinglePagePDF(container, options);
+    }
+
+    const originalParentGetComputedStyle = window.getComputedStyle;
+    let didOverrideParent = false;
+    try {
+      window.getComputedStyle = function (el: Element, pseudo?: string) {
+        const styles = originalParentGetComputedStyle.call(window, el, pseudo);
+        return new Proxy(styles, {
+          get(target, prop) {
+            if (typeof prop === 'string') {
+              if (prop === 'getPropertyValue') {
+                return function (propertyName: string) {
+                  const val = target.getPropertyValue(propertyName);
+                  if (typeof val === 'string' && (val.includes('oklch') || val.includes('oklab') || val.includes('color-mix') || val.includes('light-dark'))) {
+                    return resolveModernColorsInString(val);
+                  }
+                  return val;
+                };
+              }
+            }
+            const val = target[prop as keyof typeof target];
+            if (typeof val === 'string' && (val.includes('oklch') || val.includes('oklab') || val.includes('color-mix') || val.includes('light-dark'))) {
+              return resolveModernColorsInString(val);
+            }
+            if (typeof val === 'function') {
+              return (val as Function).bind(target);
+            }
+            return val;
+          }
+        }) as CSSStyleDeclaration;
+      };
+      didOverrideParent = true;
+    } catch {
+      // ignore
+    }
+
+    try {
+      for (let i = 0; i < pageElements.length; i++) {
+        const pageEl = pageElements[i];
+        const canvas = await html2canvas(pageEl, {
+          scale: options.scale || 2.5,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          imageTimeout: 15000,
+          onclone: (_clonedDoc: Document) => {
+            const nonPrintEls = _clonedDoc.querySelectorAll('.no-print, .print\\:hidden, .print-hidden, [data-no-print], button');
+            nonPrintEls.forEach((el) => {
+              if (el instanceof HTMLElement) {
+                el.style.setProperty('display', 'none', 'important');
+              }
+            });
+          }
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', options.quality || 0.98);
+        if (i > 0) {
+          pdf.addPage();
+        }
+        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight, undefined, 'SLOW');
+      }
+
+      pdf.save(options.filename || 'document.pdf');
+      return true;
+    } catch (err) {
+      console.error('Multi-page PDF generation error:', err);
+      return false;
+    } finally {
+      if (didOverrideParent) {
+        window.getComputedStyle = originalParentGetComputedStyle;
+      }
+    }
+  };
+
+  const timeoutPromise = new Promise<boolean>((resolve) => {
+    setTimeout(() => {
+      console.warn('Multi-page PDF export timed out (15s safety limit)');
+      resolve(false);
+    }, 15000);
+  });
+
+  try {
+    return await Promise.race([generate(), timeoutPromise]);
+  } catch {
+    return false;
+  }
+}
+
+
 

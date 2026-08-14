@@ -90,7 +90,7 @@ export function getMasterSmartProRisks(): RiskItem[] {
     risk_rating: c.rating,
     risk_owner: c.owner,
     status: 'OPEN',
-    mitigation_status: 'In Progress',
+    mitigation_status: 'In progress',
     record_status: 'Active',
     treatment_option: 'Reduction',
     treatment_plan: 'Execute mitigation plan under ISO 27001 / ADHICS standards.',

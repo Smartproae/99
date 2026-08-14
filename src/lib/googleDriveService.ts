@@ -27,6 +27,13 @@ provider.setCustomParameters({
 let isSigningIn = false;
 let cachedAccessToken: string | null = sessionStorage.getItem('sh_gdrive_access_token');
 
+export class GoogleDriveAuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GoogleDriveAuthError';
+  }
+}
+
 // Auth state listener initializer
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
@@ -38,6 +45,8 @@ export const initAuth = (
       cachedAccessToken = token;
       if (onAuthSuccess) onAuthSuccess(user, token);
     } else {
+      cachedAccessToken = null;
+      sessionStorage.removeItem('sh_gdrive_access_token');
       if (onAuthFailure) onAuthFailure();
     }
   });
@@ -50,7 +59,7 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
-      throw new Error('Failed to extract Google Access Token from Firebase auth credential.');
+      throw new GoogleDriveAuthError('Failed to extract Google Access Token from Firebase auth credential.');
     }
 
     cachedAccessToken = credential.accessToken;
@@ -66,7 +75,11 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 
 // Log out of Firebase and clear token
 export const googleSignOut = async () => {
-  await signOut(auth);
+  try {
+    await signOut(auth);
+  } catch (e) {
+    console.warn('Error signing out of Firebase:', e);
+  }
   cachedAccessToken = null;
   sessionStorage.removeItem('sh_gdrive_access_token');
 };
@@ -103,7 +116,7 @@ export const backupToGoogleDrive = async (
 ): Promise<BackupDriveFile> => {
   const token = getAccessToken();
   if (!token) {
-    throw new Error('No active Google session found. Please click "Connect Google Account" to authorize.');
+    throw new GoogleDriveAuthError('Google Drive session expired or unauthenticated. Please click "Connect Google Account" to sign in again.');
   }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -141,7 +154,7 @@ export const backupToGoogleDrive = async (
     const errorText = await response.text();
     if (response.status === 401 || response.status === 403 || errorText.includes('UNAUTHENTICATED') || errorText.includes('Invalid Credentials')) {
       clearAccessToken();
-      throw new Error('Google Drive session expired or unauthenticated. Please click "Connect Google Account" to sign in again.');
+      throw new GoogleDriveAuthError('Google Drive session expired or unauthenticated. Please click "Connect Google Account" to sign in again.');
     }
     throw new Error(`Google Drive upload failed: ${response.statusText}. Details: ${errorText}`);
   }
@@ -160,7 +173,7 @@ export const backupToGoogleDrive = async (
 export const listBackupsFromGoogleDrive = async (): Promise<BackupDriveFile[]> => {
   const token = getAccessToken();
   if (!token) {
-    throw new Error('No active Google session found. Please click "Connect Google Account" to authorize.');
+    throw new GoogleDriveAuthError('Google Drive session expired or unauthenticated. Please click "Connect Google Account" to sign in again.');
   }
 
   const query = encodeURIComponent("name contains 'smarthub_compliance_backup' and trashed = false");
@@ -177,7 +190,7 @@ export const listBackupsFromGoogleDrive = async (): Promise<BackupDriveFile[]> =
     const errorText = await response.text();
     if (response.status === 401 || response.status === 403 || errorText.includes('UNAUTHENTICATED') || errorText.includes('Invalid Credentials')) {
       clearAccessToken();
-      throw new Error('Google Drive session expired or unauthenticated. Please click "Connect Google Account" to sign in again.');
+      throw new GoogleDriveAuthError('Google Drive session expired or unauthenticated. Please click "Connect Google Account" to sign in again.');
     }
     throw new Error(`Failed to retrieve backups from Google Drive: ${response.statusText}. Details: ${errorText}`);
   }

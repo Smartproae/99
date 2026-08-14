@@ -1402,18 +1402,18 @@ export default function MasterIndexModule({
       updated_at: new Date().toISOString()
     });
 
-    // 4.6 Risk Review Committee & Authorized Personnel Contacts Register
+    // 4.6 Facility Committee Signatory Controls Register
     list.push({
       id: `reg-rrc-${activeClientId}`,
       client_id: activeClientId,
       document_id: 'REG-RRC-001',
       document_number: 'REG-RRC-001',
-      document_name: 'Risk Review Committee / Authorized Personnel Contacts Register',
+      document_name: 'Facility Committee Signatory Controls Register',
       category: 'Registers',
       main_category: 'Facility Governance',
-      sub_category: 'Authorized Personnel Contacts',
+      sub_category: 'Facility Committee Signatory Controls',
       department: 'Quality / Administration',
-      owner: client?.owner_name || 'Risk Review Committee',
+      owner: client?.owner_name || 'Facility Committee Signatory Controls',
       version: 'V1.0',
       classification: 'Confidential',
       status: 'Published',
@@ -1430,7 +1430,7 @@ export default function MasterIndexModule({
       document_location: 'Facility Governance Hub',
       current_revision: '1.0',
       change_summary: `Auth Rep: ${client?.auth_representative?.name || 'N/A'}, Clinic Mgr: ${client?.clinic_manager?.name || 'N/A'}, Med Dir: ${client?.medical_director?.name || 'N/A'}, IT Admin: ${client?.it_manager?.name || 'N/A'}, HR Mgr: ${client?.hr_manager?.name || 'N/A'}`,
-      remarks: 'Live Facility Governance & Authorized Personnel Contacts Register',
+      remarks: 'Live Facility Governance & Facility Committee Signatory Controls Register',
       source_type: 'FACILITY_CONTACTS',
       version_history: [
         {
@@ -1438,7 +1438,7 @@ export default function MasterIndexModule({
           version_number: 'V1.0',
           revision_date: new Date().toISOString().split('T')[0],
           changed_by: client?.auth_representative?.name || 'Quality Lead',
-          change_description: 'Risk Review Committee & Key Authorized Contacts Registry'
+          change_description: 'Facility Committee Signatory Controls Registry'
         }
       ],
       created_at: new Date().toISOString(),
@@ -3763,6 +3763,9 @@ export default function MasterIndexModule({
           onUpdateClient={onUpdateClient}
           onNavigateTab={onNavigateTab}
           logAuditTrail={logAuditTrail}
+          policies={policies}
+          onUpdatePolicy={onUpdatePolicy}
+          onAddPolicy={onAddPolicy}
         />
       )}
 
@@ -4567,13 +4570,13 @@ export default function MasterIndexModule({
             {/* Custom Register / Facility Contacts & Risk Management Detail Section */}
             {(viewingDoc.document_id === 'REG-RSK-001' || viewingDoc.document_id === 'REG-RRC-001' || viewingDoc.source_type === 'FACILITY_CONTACTS') && (
               <div className="space-y-3">
-                {/* 1. Authorized Personnel Contacts */}
+                {/* 1. Facility Committee Signatory Controls */}
                 <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-xl space-y-3 text-xs">
                   <div className="flex items-center justify-between border-b border-amber-200 pb-2">
                     <div className="flex items-center gap-2">
                       <ShieldCheck className="w-4 h-4 text-amber-700" />
                       <span className="font-extrabold text-amber-950 uppercase tracking-wider text-[11px]">
-                        Risk Review Committee / Authorized Personnel Contacts
+                        Facility Committee Signatory Controls
                       </span>
                     </div>
                   </div>

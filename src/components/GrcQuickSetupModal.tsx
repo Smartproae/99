@@ -323,11 +323,11 @@ export default function GrcQuickSetupModal({ isOpen, onClose, client, onSaveClie
             </div>
           </div>
 
-          {/* Section 1: Authorized Personnel Contacts */}
+          {/* Section 1: Facility Committee Signatory Controls */}
           <div className="space-y-3">
             <div className="flex items-center gap-1.5 border-b border-slate-100 pb-2">
               <Users className="w-4 h-4 text-emerald-600" />
-              <h3 className="text-xs font-bold text-slate-900">Risk Review Committee / Authorized Personnel Contacts</h3>
+              <h3 className="text-xs font-bold text-slate-900">Facility Committee Signatory Controls</h3>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               
