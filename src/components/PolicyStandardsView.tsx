@@ -78,7 +78,7 @@ export default function PolicyStandardsView() {
         
         {/* Governance & Responsibilities Section */}
         {activeTab === 'governance' && (
-          <div className="space-y-6 animate-fade-in">
+          <div className="space-y-6">
             <div className="border-b border-slate-100 pb-4">
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 font-mono bg-emerald-50 px-2.5 py-0.5 rounded-full">Section 1.0</span>
               <h2 className="text-lg font-extrabold text-slate-900 mt-2">Governance & Responsibilities</h2>
@@ -87,7 +87,7 @@ export default function PolicyStandardsView() {
 
             <div className="space-y-4">
               {/* IT Manager */}
-              <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors space-y-2">
+              <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 space-y-2">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-bold text-slate-900 flex items-center gap-2">
                     <span className="w-1.5 h-3 bg-emerald-600 rounded-full" />
@@ -97,14 +97,13 @@ export default function PolicyStandardsView() {
                 </div>
                 <ul className="list-disc pl-4 text-xs text-slate-600 space-y-1 font-medium">
                   <li>Develops, maintains, and enforces this Risk Management Policy.</li>
-                  <li>Facilitates risk assessments and supports implementation of risk treatment plans.</li>
                   <li>Ensures alignment with ISO standards and regulatory requirements.</li>
                   <li>Conducts risk management and information security awareness programs.</li>
                 </ul>
               </div>
 
               {/* Managing Director / Manager */}
-              <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors space-y-2">
+              <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 space-y-2">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-bold text-slate-900 flex items-center gap-2">
                     <span className="w-1.5 h-3 bg-emerald-600 rounded-full" />

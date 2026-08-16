@@ -15,6 +15,9 @@ import {
   Building2,
   Users,
   Lock,
+  Unlock,
+  Key,
+  KeyRound,
   Settings,
   Sparkles,
   RefreshCw,
@@ -23,6 +26,7 @@ import {
   Paperclip,
   Printer,
   Eye,
+  EyeOff,
   Trash2,
   FolderOpen,
   Link,
@@ -39,7 +43,13 @@ import {
   Pencil,
   Sliders,
   CheckSquare,
-  Square
+  Square,
+  History,
+  Layers,
+  FolderCheck,
+  FolderX,
+  Folder,
+  XCircle
 } from 'lucide-react';
 import { Policy, User, Client, Employee } from '../types';
 import { DocRefLoopSelector, DocRefLoopData } from './DocRefLoopSelector';
@@ -48,6 +58,7 @@ import { printDocument, printCurrentView } from '../utils/printUtils';
 interface PolicyFrameworksSetupProps {
   policies: Policy[];
   users: User[];
+  currentUser?: User;
   employees?: Employee[];
   onAddPolicy: (policy: Policy) => void;
   onDeletePolicy?: (id: string | string[]) => void;
@@ -57,11 +68,13 @@ interface PolicyFrameworksSetupProps {
   client?: Client | null;
   clients?: Client[];
   onSelectClient?: (id: string) => void;
+  onUpdateClient?: (updatedClient: Client) => void;
 }
 
 export default function PolicyFrameworksSetup({
   policies,
   users,
+  currentUser,
   employees = [],
   onAddPolicy,
   onDeletePolicy,
@@ -70,10 +83,74 @@ export default function PolicyFrameworksSetup({
   activeClientId,
   client,
   clients = [],
-  onSelectClient
+  onSelectClient,
+  onUpdateClient
 }: PolicyFrameworksSetupProps) {
   // Navigation Tabs: 'vault' | 'upload' | 'export' | 'create'
   const [activeTab, setActiveTab] = useState<'vault' | 'upload' | 'export' | 'create'>('vault');
+
+  // Master Client & SuperAdmin Role Detection
+  const isMasterClient =
+    client?.id === 'c0' ||
+    activeClientId === 'c0' ||
+    client?.client_code === 'MASTER' ||
+    (client?.company_name || '').toLowerCase().includes('smartpro');
+
+  const isSuperAdmin =
+    !currentUser ||
+    currentUser.role === 'SUPER_ADMIN' ||
+    (currentUser.role as string)?.toLowerCase() === 'superadmin' ||
+    (currentUser.role as string)?.toLowerCase() === 'super_admin';
+
+  // Master Security Protection Key & Unlock State (Password: 663385)
+  const MASTER_SECURITY_PIN = '663385';
+  const [isProtectedUnlocked, setIsProtectedUnlocked] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem('smarthub_master_unlock_663385') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [showSecurityUnlockModal, setShowSecurityUnlockModal] = useState<boolean>(false);
+  const [securityPinInput, setSecurityPinInput] = useState<string>('');
+  const [securityPinError, setSecurityPinError] = useState<string | null>(null);
+  const [showPinPassword, setShowPinPassword] = useState<boolean>(false);
+  const [pendingActionOnUnlock, setPendingActionOnUnlock] = useState<(() => void) | null>(null);
+
+  const handleVerifySecurityPin = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (securityPinInput.trim() === MASTER_SECURITY_PIN) {
+      setIsProtectedUnlocked(true);
+      try {
+        sessionStorage.setItem('smarthub_master_unlock_663385', 'true');
+      } catch {}
+      setShowSecurityUnlockModal(false);
+      setSecurityPinInput('');
+      setSecurityPinError(null);
+      showToast('🔓 Security Key Verified! Master Protection is now UNLOCKED.');
+      if (pendingActionOnUnlock) {
+        const action = pendingActionOnUnlock;
+        setPendingActionOnUnlock(null);
+        action();
+      }
+    } else {
+      setSecurityPinError('❌ Invalid Security PIN. Please enter the authorized Master Security Key.');
+    }
+  };
+
+  const handleToggleProtectedLock = () => {
+    if (isProtectedUnlocked) {
+      setIsProtectedUnlocked(false);
+      try {
+        sessionStorage.removeItem('smarthub_master_unlock_663385');
+      } catch {}
+      showToast('🔒 Master Protection RE-LOCKED. Security PIN required for protected actions.');
+    } else {
+      setSecurityPinError(null);
+      setSecurityPinInput('');
+      setShowSecurityUnlockModal(true);
+    }
+  };
 
   // Mode Switcher: 'edit' vs 'preview' (Live Print Preview Mode Toggle)
   const [policyViewMode, setPolicyViewMode] = useState<'edit' | 'preview'>('edit');
@@ -107,7 +184,195 @@ export default function PolicyFrameworksSetup({
   const [targetClientIdToCopy, setTargetClientIdToCopy] = useState<string>('');
   const [customClientNameInput, setCustomClientNameInput] = useState<string>('');
 
+  // HTML Script Modal & Generator State
+  const [htmlScriptModalPolicy, setHtmlScriptModalPolicy] = useState<Policy | null>(null);
+  const [htmlScriptActiveTab, setHtmlScriptActiveTab] = useState<'preview' | 'code'>('preview');
+
+  // Policy Version History & Revision Control State
+  const [showAddVersionForm, setShowAddVersionForm] = useState<boolean>(false);
+  const [newVersionNum, setNewVersionNum] = useState<string>('v1.1');
+  const [newVersionDate, setNewVersionDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [newVersionAuthor, setNewVersionAuthor] = useState<string>('');
+  const [newVersionChanges, setNewVersionChanges] = useState<string>('');
+
+  // Editing existing version record state
+  const [editingVersionIndex, setEditingVersionIndex] = useState<number | null>(null);
+  const [editVersionNum, setEditVersionNum] = useState<string>('v1.0');
+  const [editVersionDate, setEditVersionDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [editVersionAuthor, setEditVersionAuthor] = useState<string>('');
+  const [editVersionChanges, setEditVersionChanges] = useState<string>('');
+
+  // Extract or fallback version history records
+  const getPolicyVersionRecords = (p?: Policy | null) => {
+    if (!p) return [];
+    if (p.version_history && Array.isArray(p.version_history) && p.version_history.length > 0) {
+      return p.version_history;
+    }
+    return [
+      {
+        version: p.version || 'v1.0',
+        date: p.effective_date || p.approval_date || p.created_at?.split('T')[0] || '2026-08-14',
+        author: p.prepared_by || 'Aseef Sulaiman',
+        changes: 'Initial Document Baseline Creation & Governance Approval'
+      }
+    ];
+  };
+
+  const handleStartEditVersionRecord = (targetPolicy: Policy, idx: number) => {
+    const records = getPolicyVersionRecords(targetPolicy);
+    const rec = records[idx];
+    if (!rec) return;
+    setEditingVersionIndex(idx);
+    setEditVersionNum(rec.version || 'v1.0');
+    setEditVersionDate(rec.date || new Date().toISOString().split('T')[0]);
+    setEditVersionAuthor(rec.author || targetPolicy.prepared_by || 'Aseef Sulaiman');
+    setEditVersionChanges(rec.changes || '');
+    setShowAddVersionForm(false);
+  };
+
+  const handleSaveEditVersionRecord = (targetPolicy: Policy) => {
+    if (editingVersionIndex === null) return;
+    if (!editVersionNum.trim()) {
+      showToast('❌ Please specify a valid version number (e.g., v1.0, v1.1, v2.0)');
+      return;
+    }
+
+    const currentRecords = getPolicyVersionRecords(targetPolicy);
+    const updatedHistory = currentRecords.map((r, i) => {
+      if (i === editingVersionIndex) {
+        return {
+          version: editVersionNum.trim(),
+          date: editVersionDate || new Date().toISOString().split('T')[0],
+          author: editVersionAuthor.trim() || targetPolicy.prepared_by || 'Aseef Sulaiman',
+          changes: editVersionChanges.trim() || 'Document review and governance update.'
+        };
+      }
+      return r;
+    });
+
+    const latestRec = updatedHistory[updatedHistory.length - 1];
+    const isLatestOrActive = editingVersionIndex === updatedHistory.length - 1 || targetPolicy.version === currentRecords[editingVersionIndex]?.version;
+
+    const updatedPolicy: Policy = {
+      ...targetPolicy,
+      version: isLatestOrActive ? editVersionNum.trim() : (latestRec ? latestRec.version : targetPolicy.version),
+      version_history: updatedHistory,
+      review_date: editVersionDate || targetPolicy.review_date || new Date().toISOString().split('T')[0],
+      updated_at: new Date().toISOString()
+    };
+
+    if (onUpdatePolicy) {
+      onUpdatePolicy(updatedPolicy);
+    }
+
+    // Direct synchronous local persistence update
+    try {
+      const saved = localStorage.getItem('sh_policies');
+      if (saved) {
+        const list: Policy[] = JSON.parse(saved);
+        const updatedList = list.map(p => (p.id === targetPolicy.id ? updatedPolicy : p));
+        localStorage.setItem('sh_policies', JSON.stringify(updatedList));
+      }
+    } catch (err) {
+      console.error('Error persisting version history', err);
+    }
+
+    if (selectedPolicy && selectedPolicy.id === targetPolicy.id) {
+      setSelectedPolicy(updatedPolicy);
+    }
+    if (htmlScriptModalPolicy && htmlScriptModalPolicy.id === targetPolicy.id) {
+      setHtmlScriptModalPolicy(updatedPolicy);
+    }
+
+    setEditingVersionIndex(null);
+    showToast(`✓ Version record [${editVersionNum.trim()}] successfully updated!`);
+  };
+
+  const handleSaveNewVersionRecord = (targetPolicy: Policy) => {
+    if (!newVersionNum.trim()) {
+      showToast('❌ Please specify a valid version number (e.g., v1.1, v2.0)');
+      return;
+    }
+
+    const currentRecords = getPolicyVersionRecords(targetPolicy);
+    const newRecord = {
+      version: newVersionNum.trim(),
+      date: newVersionDate || new Date().toISOString().split('T')[0],
+      author: newVersionAuthor.trim() || targetPolicy.prepared_by || 'Aseef Sulaiman',
+      changes: newVersionChanges.trim() || 'Document review, regulatory compliance alignment, and clause updates.'
+    };
+
+    const updatedHistory = [...currentRecords, newRecord];
+    const updatedPolicy: Policy = {
+      ...targetPolicy,
+      version: newVersionNum.trim(),
+      version_history: updatedHistory,
+      review_date: newVersionDate || new Date().toISOString().split('T')[0],
+      updated_at: new Date().toISOString()
+    };
+
+    if (onUpdatePolicy) {
+      onUpdatePolicy(updatedPolicy);
+    }
+
+    // Direct synchronous local persistence update
+    try {
+      const saved = localStorage.getItem('sh_policies');
+      if (saved) {
+        const list: Policy[] = JSON.parse(saved);
+        const updatedList = list.map(p => (p.id === targetPolicy.id ? updatedPolicy : p));
+        localStorage.setItem('sh_policies', JSON.stringify(updatedList));
+      }
+    } catch (err) {
+      console.error('Error persisting version history', err);
+    }
+
+    if (selectedPolicy && selectedPolicy.id === targetPolicy.id) {
+      setSelectedPolicy(updatedPolicy);
+    }
+    if (htmlScriptModalPolicy && htmlScriptModalPolicy.id === targetPolicy.id) {
+      setHtmlScriptModalPolicy(updatedPolicy);
+    }
+
+    setShowAddVersionForm(false);
+    setNewVersionChanges('');
+    showToast(`✓ Version record [${newVersionNum.trim()}] successfully saved to Policy Version History!`);
+  };
+
+  const handleDeleteVersionRecord = (targetPolicy: Policy, indexToDelete: number) => {
+    const currentRecords = getPolicyVersionRecords(targetPolicy);
+    if (currentRecords.length <= 1) {
+      showToast('⚠️ Cannot delete baseline version record.');
+      return;
+    }
+    const updatedHistory = currentRecords.filter((_, idx) => idx !== indexToDelete);
+    const latestRecord = updatedHistory[updatedHistory.length - 1];
+    const updatedPolicy: Policy = {
+      ...targetPolicy,
+      version: latestRecord ? latestRecord.version : targetPolicy.version,
+      version_history: updatedHistory,
+      updated_at: new Date().toISOString()
+    };
+
+    if (onUpdatePolicy) {
+      onUpdatePolicy(updatedPolicy);
+    }
+
+    if (selectedPolicy && selectedPolicy.id === targetPolicy.id) {
+      setSelectedPolicy(updatedPolicy);
+    }
+    if (htmlScriptModalPolicy && htmlScriptModalPolicy.id === targetPolicy.id) {
+      setHtmlScriptModalPolicy(updatedPolicy);
+    }
+
+    showToast('✓ Version record removed.');
+  };
+
   const handleOpenCopyModalForSingle = (p: Policy) => {
+    if (!isSuperAdmin) {
+      showToast('⛔ Permission Restricted: Only SuperAdmin accounts are authorized to copy Master Policy Frameworks to clients.');
+      return;
+    }
     setPoliciesToCopy([p]);
     const initialTargetId = clients[0]?.id || activeClientId || '';
     setTargetClientIdToCopy(initialTargetId);
@@ -117,6 +382,10 @@ export default function PolicyFrameworksSetup({
   };
 
   const handleOpenCopyModalForSelected = () => {
+    if (!isSuperAdmin) {
+      showToast('⛔ Permission Restricted: Only SuperAdmin accounts are authorized to copy Master Policy Frameworks to clients.');
+      return;
+    }
     let selectedDocs = selectedPolicyIds.length > 0
       ? filteredPolicies.filter(p => selectedPolicyIds.includes(p.id))
       : filteredPolicies;
@@ -145,6 +414,10 @@ export default function PolicyFrameworksSetup({
   };
 
   const handleConfirmCopyToClient = () => {
+    if (!isSuperAdmin) {
+      showToast('⛔ Permission Restricted: Only SuperAdmin accounts are authorized to copy master documents.');
+      return;
+    }
     if (policiesToCopy.length === 0) return;
     const targetClientObj = clients.find(c => c.id === targetClientIdToCopy);
     const targetName = targetClientObj?.company_name || customClientNameInput.trim() || 'Client Entity';
@@ -193,14 +466,33 @@ export default function PolicyFrameworksSetup({
     const updated: Policy = {
       ...policy,
       is_frozen: newFrozenState,
-      status: newFrozenState ? 'FROZEN' : 'APPROVED'
+      status: newFrozenState ? 'FROZEN' : 'APPROVED',
+      updated_at: new Date().toISOString()
     };
 
     if (onUpdatePolicy) {
       onUpdatePolicy(updated);
     }
 
-    if (selectedPolicy && selectedPolicy.id === policy.id) {
+    // Direct synchronous local persistence update
+    try {
+      const saved = localStorage.getItem('sh_policies');
+      if (saved) {
+        const list: Policy[] = JSON.parse(saved);
+        const updatedList = list.map(p => {
+          if (p.id === policy.id) return updated;
+          if (p.policy_no === policy.policy_no && (p.client_id === policy.client_id || (!p.client_id && !policy.client_id))) {
+            return updated;
+          }
+          return p;
+        });
+        localStorage.setItem('sh_policies', JSON.stringify(updatedList));
+      }
+    } catch (err) {
+      console.error('Error persisting policy freeze toggle', err);
+    }
+
+    if (selectedPolicy && (selectedPolicy.id === policy.id || selectedPolicy.policy_no === policy.policy_no)) {
       setSelectedPolicy(updated);
     }
 
@@ -211,34 +503,69 @@ export default function PolicyFrameworksSetup({
     );
   };
 
-  // Freeze Selected Policies (or all filtered if none selected)
-  const handleFreezeSelectedPolicies = () => {
+  // Freeze / Unfreeze Selected Policies (or all filtered if none selected)
+  const handleFreezeSelectedPolicies = (forceUnfreeze = false) => {
     const targets = selectedPolicyIds.length > 0
       ? filteredPolicies.filter(p => selectedPolicyIds.includes(p.id))
       : filteredPolicies;
 
     if (targets.length === 0) {
-      showToast('⚠️ No policy records available to freeze.');
+      showToast('⚠️ No policy records available to freeze/unfreeze.');
       return;
     }
 
+    const allCurrentlyFrozen = targets.every(p => p.is_frozen || p.status === 'FROZEN');
+    const shouldFreeze = forceUnfreeze ? false : !allCurrentlyFrozen;
+
     let count = 0;
+    const targetMap = new Map<string, Policy>();
     targets.forEach(p => {
+      const updated: Policy = {
+        ...p,
+        is_frozen: shouldFreeze,
+        status: shouldFreeze ? 'FROZEN' : 'APPROVED',
+        updated_at: new Date().toISOString()
+      };
+      targetMap.set(p.id, updated);
       if (onUpdatePolicy) {
-        onUpdatePolicy({
-          ...p,
-          is_frozen: true,
-          status: 'FROZEN'
-        });
-        count++;
+        onUpdatePolicy(updated);
       }
+      count++;
     });
 
-    showToast(`🔒 Successfully FROZE ${count} policy record(s) against modifications!`);
+    // Synchronous direct local storage sync for all targets
+    try {
+      const saved = localStorage.getItem('sh_policies');
+      if (saved) {
+        const list: Policy[] = JSON.parse(saved);
+        const updatedList = list.map(p => targetMap.get(p.id) || p);
+        localStorage.setItem('sh_policies', JSON.stringify(updatedList));
+      }
+    } catch (err) {
+      console.error('Error persisting batch policy freeze', err);
+    }
+
+    showToast(
+      shouldFreeze
+        ? `🔒 Successfully FROZE ${count} policy record(s) against modifications!`
+        : `🔓 Successfully UNFROZE ${count} policy record(s) for editing!`
+    );
   };
 
   // Group Delete Selected Policies (triggers In-App Batch Deletion Modal)
   const handleGroupDeleteSelected = () => {
+    if (isMasterClient && !isProtectedUnlocked) {
+      setSecurityPinError(null);
+      setSecurityPinInput('');
+      setPendingActionOnUnlock(() => () => {
+        const targets = selectedPolicyIds.length > 0
+          ? filteredPolicies.filter(p => selectedPolicyIds.includes(p.id))
+          : [];
+        if (targets.length > 0) setConfirmBatchDeletePolicies(targets);
+      });
+      setShowSecurityUnlockModal(true);
+      return;
+    }
     const targets = selectedPolicyIds.length > 0
       ? filteredPolicies.filter(p => selectedPolicyIds.includes(p.id))
       : [];
@@ -351,6 +678,33 @@ export default function PolicyFrameworksSetup({
     return sanitizePolicyTitle(title, companyNameOverride);
   };
 
+  // Normalize and clean pasted policy text into bullet points without losing any substantive text
+  const formatContentToBulletsAndClean = (rawText: string): string => {
+    if (!rawText) return '';
+    let text = rawText;
+
+    // Convert HTML <ol> ... </ol> blocks to <ul> with bullets
+    text = text.replace(/<ol\b[^>]*>([\s\S]*?)<\/ol>/gi, (_match, inner) => {
+      const cleanedInner = inner.replace(/<li\b[^>]*>([\s\S]*?)<\/li>/gi, '<li class="my-0.5">$1</li>');
+      return `<ul class="list-disc pl-5 my-2 space-y-0.5">\n${cleanedInner}\n</ul>`;
+    });
+
+    // Convert line-based numbered items (1., 2), (1), 1 -, 1.1, a., i., etc.) to bullet points •
+    const lines = text.split('\n');
+    const processedLines = lines.map(line => {
+      const trimmed = line.trim();
+      // Match numbered list starters: 1. , 1) , (1) , 1 - , a. , b) , i. , 1.1 , etc.
+      if (/^(?:\(?\d+(?:\.\d+)*[\.\)\-:]|\([a-zA-Z0-9]+\)|[a-zA-Z][\.\)]|[ivxlcdmIVXLCDM]+[\.\)])\s+/.test(trimmed)) {
+        const rest = trimmed.replace(/^(?:\(?\d+(?:\.\d+)*[\.\)\-:]|\([a-zA-Z0-9]+\)|[a-zA-Z][\.\)]|[ivxlcdmIVXLCDM]+[\.\)])\s+/, '');
+        const leadingSpace = line.match(/^\s*/)?.[0] || '';
+        return `${leadingSpace}• ${rest}`;
+      }
+      return line;
+    });
+
+    return processedLines.join('\n');
+  };
+
   // Convert Markdown syntax (headers, lists, bolding, and tables) to compact HTML
   const convertMarkdownToHtml = (markdown: string, breakSections: string[] = []): string => {
     if (!markdown) return '';
@@ -369,14 +723,14 @@ export default function PolicyFrameworksSetup({
     const flushTable = () => {
       if (!inTable) return;
       if (tableHeader.length > 0 || tableRows.length > 0) {
-        let html = `<div class="my-2 overflow-x-auto border border-slate-300 rounded-xs bg-white shadow-2xs">`;
-        html += `<table class="w-full text-left border-collapse text-[10px] font-sans">`;
+        let html = `<div class="my-2.5 overflow-x-auto border border-slate-300 rounded bg-white shadow-2xs">`;
+        html += `<table class="w-full text-left border-collapse text-[9.5px] font-sans">`;
         
         if (tableHeader.length > 0) {
-          html += `<thead class="bg-[#0f172a] text-white font-bold text-[9.5px] uppercase tracking-wider"><tr>`;
+          html += `<thead class="bg-[#0f172a] text-white font-bold text-[9px] uppercase tracking-wider"><tr>`;
           tableHeader.forEach((h, idx) => {
             const widthClass = idx === 0 ? 'w-3/12' : idx === 1 ? 'w-6/12' : 'w-3/12 text-center';
-            html += `<th class="py-1 px-2.5 border-r border-slate-700 ${widthClass}">${h.trim()}</th>`;
+            html += `<th class="py-1.5 px-2.5 border-r border-slate-700 ${widthClass}">${h.trim()}</th>`;
           });
           html += `</tr></thead>`;
         }
@@ -389,8 +743,8 @@ export default function PolicyFrameworksSetup({
             if (idx === 2 || trimmed.toLowerCase() === 'applicable' || trimmed.toLowerCase() === 'not applicable') {
               const isApplicable = trimmed.toLowerCase() === 'applicable';
               const badge = isApplicable
-                ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">✓ Applicable</span>`
-                : `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-700 border border-slate-300">Not applicable</span>`;
+                ? `<span class="inline-flex items-center px-2 py-0.5 rounded text-[8.5px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-300">✓ Applicable</span>`
+                : `<span class="inline-flex items-center px-2 py-0.5 rounded text-[8.5px] font-extrabold bg-slate-100 text-slate-700 border border-slate-300">Not applicable</span>`;
               html += `<td class="py-1 px-2.5 text-center align-top border-r border-slate-200">${badge}</td>`;
             } else if (idx === 0) {
               html += `<td class="py-1 px-2.5 font-bold text-[#0f172a] align-top border-r border-slate-200">${trimmed}</td>`;
@@ -461,7 +815,7 @@ export default function PolicyFrameworksSetup({
       if (/<[a-z][\s\S]*>/i.test(line)) {
         flushPara();
         let cleanHtmlLine = rawLine
-          .replace(/<ol([^>]*)>/gi, '<ul$1 class="list-disc pl-5 my-1">')
+          .replace(/<ol([^>]*)>/gi, '<ul$1 class="list-disc pl-5 my-1.5 space-y-0.5">')
           .replace(/<\/ol>/gi, '</ul>')
           .replace(/<p>\s*,\s*<\/strong>\s*<\/p>/gi, '')
           .replace(/<p>\s*,\s*<\/p>/gi, '')
@@ -475,15 +829,16 @@ export default function PolicyFrameworksSetup({
         continue;
       }
 
-      // Process Headings - standardize all headings to h2 size with Navy border
+      // Process Headings - standardize all headings with Corporate Navy Color & clean border
       if (line.startsWith('### ') || line.startsWith('## ') || line.startsWith('# ')) {
         flushPara();
         const headingText = line.replace(/^#+\s*/, '').trim();
         const breakClass = checkPageBreak(headingText) ? 'page-break-before ' : '';
-        resultLines.push(`<h2 class="${breakClass}text-xs font-bold uppercase tracking-wider text-[#0f172a] mt-2.5 mb-1 border-b border-slate-300 pb-0.5">${headingText}</h2>`);
-      } else if (line.startsWith('• ') || line.startsWith('- ') || /^\d+[\.\)]\s/.test(line)) {
+        resultLines.push(`<h2 class="${breakClass}text-xs font-bold uppercase tracking-wider text-[#0f172a] mt-3 mb-1 border-b border-slate-300 pb-0.5">${headingText}</h2>`);
+      } else if (line.startsWith('• ') || line.startsWith('- ') || line.startsWith('* ') || /^(?:\(?\d+(?:\.\d+)*[\.\)\-:]|\([a-zA-Z0-9]+\)|[a-zA-Z][\.\)]|[ivxlcdmIVXLCDM]+[\.\)])\s+/.test(line)) {
+        // Automatically convert all list items, numbered items (1., 2), 1 -) to elegant bullet points
         flushPara();
-        const itemContent = line.replace(/^(?:•|-|\d+[\.\)])\s*/, '');
+        const itemContent = line.replace(/^(?:•|-|\*|\(?\d+(?:\.\d+)*[\.\)\-:]|\([a-zA-Z0-9]+\)|[a-zA-Z][\.\)]|[ivxlcdmIVXLCDM]+[\.\)])\s*/i, '');
         const breakClass = checkPageBreak(itemContent) ? 'page-break-before ' : '';
         resultLines.push(`<li class="${breakClass}ml-4 list-disc text-slate-800 my-0.5 text-xs font-sans font-normal text-justify" style="text-align: justify; text-justify: inter-word; hyphens: auto; word-break: normal; white-space: normal;">${itemContent}</li>`);
       } else if (line === '') {
@@ -501,7 +856,7 @@ export default function PolicyFrameworksSetup({
     return resultLines.join('\n');
   };
 
-  // Clean & Format Policy Statement Text
+  // Clean & Format Policy Statement Text (preserves user content without destructive truncation)
   const formatCleanPolicyStatement = (content: string, policyName: string, companyName: string, breakSections: string[] = []): string => {
     if (!content) return '<p class="text-justify" style="text-align: justify; text-justify: inter-word;">No specific policy clause content available.</p>';
 
@@ -536,7 +891,7 @@ export default function PolicyFrameworksSetup({
     cleaned = cleaned.replace(/<\/?(?:html|body|head)[^>]*>/gi, '');
 
     // 2. Convert <ol> tags to <ul> tags to enforce bullet points
-    cleaned = cleaned.replace(/<ol([^>]*)>/gi, '<ul$1 class="list-disc pl-5 my-2">').replace(/<\/ol>/gi, '</ul>');
+    cleaned = cleaned.replace(/<ol([^>]*)>/gi, '<ul$1 class="list-disc pl-5 my-2 space-y-0.5">').replace(/<\/ol>/gi, '</ul>');
 
     // 3. Strip duplicate top header/logo blocks
     cleaned = cleaned.replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '');
@@ -551,22 +906,35 @@ export default function PolicyFrameworksSetup({
       cleaned = cleaned.replace(new RegExp(`^\\s*<h[1-6][^>]*>\\s*(?:<strong>|<b>)?\\s*${escapedTitle}\\s*(?:<\\/strong>|<\\/b>)?\\s*<\\/h[1-6]>`, 'gi'), '');
     }
 
-    // 6. Replace company placeholders and strip bold wrappers around entity names
+    // 6. Replace company placeholders and match client name across all sentences and clauses
+    const clientNameBadge = `<strong class="font-bold text-[#0f172a]">${actualCompanyName}</strong>`;
     cleaned = cleaned
-      .replace(/<strong>\s*\(\s*client\.company_name\s*\)\s*<\/strong>/gi, actualCompanyName)
-      .replace(/<b>\s*\(\s*client\.company_name\s*\)\s*<\/b>/gi, actualCompanyName)
-      .replace(/<strong>\s*\[\s*Entity\s+Name\s*\]\s*<\/strong>/gi, actualCompanyName)
-      .replace(/<b>\s*\[\s*Entity\s+Name\s*\]\s*<\/b>/gi, actualCompanyName)
+      .replace(/<strong>\s*\(\s*(?:selectedPolicy\.company_name\s*\/\s*)?client\.company_name\s*\)\s*<\/strong>/gi, clientNameBadge)
+      .replace(/<b>\s*\(\s*(?:selectedPolicy\.company_name\s*\/\s*)?client\.company_name\s*\)\s*<\/b>/gi, clientNameBadge)
+      .replace(/<strong>\s*\[\s*(?:Entity|Facility|Client|Company)\s+Name\s*\]\s*<\/strong>/gi, clientNameBadge)
+      .replace(/<b>\s*\[\s*(?:Entity|Facility|Client|Company)\s+Name\s*\]\s*<\/b>/gi, clientNameBadge)
       .replace(/SmartPro Public Relations Consultancy & Cyber Risk Management Services/gi, actualCompanyName)
       .replace(/SmartPro Consultancy & Facility Services/gi, actualCompanyName)
+      .replace(/SmartPro Medical Complex/gi, actualCompanyName)
+      .replace(/SmartPro Clinic/gi, actualCompanyName)
+      .replace(/SmartPro Healthcare/gi, actualCompanyName)
+      .replace(/\(\s*selectedPolicy\.company_name\s*\/\s*client\.company_name\s*\)/gi, actualCompanyName)
+      .replace(/\(\s*selectedPolicy\.company_name\s*\)/gi, actualCompanyName)
       .replace(/\(\s*client\.company_name\s*\)\s*/gi, `${actualCompanyName} `)
       .replace(/\(\s*client\.company_name\s*\)/gi, actualCompanyName)
       .replace(/client\.company_name/gi, actualCompanyName)
       .replace(/\[\s*Entity\s+Name\s*\]/gi, actualCompanyName)
-      .replace(/\[\s*Facility\s+Name\s*\]/gi, actualCompanyName);
+      .replace(/\[\s*Facility\s+Name\s*\]/gi, actualCompanyName)
+      .replace(/\[\s*Client\s+Name\s*\]/gi, actualCompanyName)
+      .replace(/\[\s*Company\s+Name\s*\]/gi, actualCompanyName)
+      .replace(/\[\s*Facility\/Company\s+Name\s*\]/gi, actualCompanyName)
+      .replace(/\[\s*Healthcare\s+Facility\s*\]/gi, actualCompanyName);
 
     // 7. Sanitize tag gaps and punctuation artifacts
     cleaned = cleaned
+      .replace(/<li>\s*Facilitates risk assessments and supports implementation of risk treatment plans\.?\s*<\/li>/gi, '')
+      .replace(/[•\-\*]\s*Facilitates risk assessments and supports implementation of risk treatment plans\.?\s*\n?/gi, '')
+      .replace(/Facilitates risk assessments and supports implementation of risk treatment plans\.?\s*\n?/gi, '')
       .replace(/<p>\s*,\s*<\/strong>\s*<\/p>/gi, '')
       .replace(/<p>\s*,\s*<\/p>/gi, '')
       .replace(/<strong>\s*,\s*<\/strong>/gi, '')
@@ -575,14 +943,19 @@ export default function PolicyFrameworksSetup({
       .replace(/<strong>\s*,\s*/gi, '<strong>')
       .replace(/<p>\s*<\/p>/gi, '');
 
-    // 7.5 Automatically insert Risk Assessment Framework Chart before "RISK TREATMENT Risk treatment options include:" for Risk Management Policies
-    const isRiskPolicy = (policyName && /risk management/i.test(policyName)) || (policyName && /m-policy-004/i.test(policyName)) || /RISK TREATMENT/i.test(cleaned);
+    // 7.5 Automatically insert Risk Assessment Framework Chart before "RISK TREATMENT" for Risk Management Policies
+    const isRiskPolicy = (policyName && /risk management/i.test(policyName)) || 
+      (policyName && /m-policy-004|m-p004|m-p4|pol-sec-024/i.test(policyName)) || 
+      /Risk acceptance must align with the organization’s Risk Appetite/i.test(cleaned) ||
+      /RISK TREATMENT/i.test(cleaned);
     if (isRiskPolicy) {
-      // First strip any existing risk_matrix_chart block to avoid duplicate/misplaced images
+      // First strip any existing risk_matrix_chart or risk framework image block to avoid duplicate/misplaced images
       cleaned = cleaned.replace(/<div class="my-4 flex flex-col items-center justify-center w-full text-center">[\s\S]*?<\/div>/gi, '');
-      const imgHtml = `\n\n<div class="my-4 flex flex-col items-center justify-center w-full text-center"><img src="/risk_matrix_chart.jpg" alt="Healthcare Cybersecurity Risk Assessment Framework" class="max-w-full h-auto rounded-lg border border-slate-300 shadow-md object-contain max-h-[420px] mx-auto" /><p class="text-[10px] text-slate-500 font-bold italic mt-1.5 text-center">Figure 1: Healthcare Cybersecurity Risk Assessment Framework &amp; Criteria</p></div>\n\n`;
+      const imgHtml = `\n\n<div class="my-4 flex flex-col items-center justify-center w-full text-center"><img src="https://lh3.googleusercontent.com/d/1IGYItCxnI4Ky7DQXuIUxsesmkzK-V4uj" onerror="this.onerror=null; this.src='https://drive.google.com/uc?export=view&id=1IGYItCxnI4Ky7DQXuIUxsesmkzK-V4uj';" alt="Healthcare Cybersecurity Risk Assessment Framework" referrerpolicy="no-referrer" class="max-w-full h-auto rounded-lg border border-slate-300 shadow-md object-contain max-h-[420px] mx-auto" /><p class="text-[10px] text-slate-500 font-bold italic mt-1.5 text-center">Figure 1: Healthcare Cybersecurity Risk Assessment Framework &amp; Criteria</p></div>\n\n`;
       
-      if (/<h[23][^>]*>\s*RISK TREATMENT\s*<\/h[23]>/i.test(cleaned)) {
+      if (/Risk acceptance must align with the organization’s Risk Appetite and be formally approved and documented\./i.test(cleaned)) {
+        cleaned = cleaned.replace(/(Risk acceptance must align with the organization’s Risk Appetite and be formally approved and documented\.)/i, `$1${imgHtml}`);
+      } else if (/<h[23][^>]*>\s*RISK TREATMENT\s*<\/h[23]>/i.test(cleaned)) {
         cleaned = cleaned.replace(/(<h[23][^>]*>\s*RISK TREATMENT\s*<\/h[23]>)/i, `${imgHtml}$1`);
       } else if (/###\s*RISK TREATMENT/i.test(cleaned)) {
         cleaned = cleaned.replace(/(###\s*RISK TREATMENT)/i, `${imgHtml}$1`);
@@ -603,6 +976,43 @@ export default function PolicyFrameworksSetup({
     return cleaned.trim();
   };
 
+  // Helper to extract committee signatory names, roles, and signatures
+  const getResolvedSignatories = (policy: Policy) => {
+    const preparedName = policy.prepared_by || client?.it_manager?.name || client?.hr_manager?.name || 'Aseef Sulaiman';
+    const preparedRole = client?.it_manager?.designation || (client?.it_manager?.name ? 'IT Manager / Admin' : 'HR & Compliance Desk');
+    const preparedSig = client?.it_manager?.signature_image || client?.hr_manager?.signature_image;
+
+    const reviewedName = (selectedPolicy && selectedPolicy.id === policy.id ? previewReviewedBy : null) || policy.reviewed_by || client?.clinic_manager?.name || (client as any)?.compliance_officer_name || client?.auth_representative?.name || 'Compliance Officer';
+    const reviewedRole = client?.clinic_manager?.designation || 'Compliance Officer';
+    const reviewedSig = client?.clinic_manager?.signature_image;
+
+    const approvedName = policy.approved_by || client?.medical_director?.name || client?.auth_representative?.name || 'Medical Director / CEO';
+    const approvedRole = client?.medical_director?.designation || client?.auth_representative?.designation || 'Medical Director / Authorized Representative';
+    const approvedSig = client?.medical_director?.signature_image || client?.auth_representative?.signature_image || client?.auth_rep_signature;
+
+    // Check if Reviewed By should be shown (respect toggle from modal/form or policy attribute)
+    const isReviewedIncluded = policy.show_reviewed_by !== undefined
+      ? Boolean(policy.show_reviewed_by)
+      : (selectedPolicy && selectedPolicy.id === policy.id
+          ? Boolean(previewShowReviewedBy)
+          : (htmlScriptModalPolicy && htmlScriptModalPolicy.id === policy.id
+              ? Boolean(showReviewedBy)
+              : true));
+
+    return {
+      preparedName,
+      preparedRole,
+      preparedSig,
+      reviewedName,
+      reviewedRole,
+      reviewedSig,
+      approvedName,
+      approvedRole,
+      approvedSig,
+      isReviewedIncluded,
+    };
+  };
+
   // Generate Complete, Standalone, Self-Contained HTML File for Policy Document
   const generateStandardizedPolicyHtml = (policy: Policy, preservePlaceholders: boolean = false, orientation: 'portrait' | 'landscape' = printOrientation): string => {
     const rawFacility = policy.company_name || client?.company_name || '(client.company_name)';
@@ -616,9 +1026,21 @@ export default function PolicyFrameworksSetup({
     const nextDueDate = policy.next_due_date || '2027-08-01';
     const version = policy.version || 'v1.0';
 
-    const preparedBy = policy.prepared_by || 'HR & Compliance Desk';
-    const reviewedBy = policy.reviewed_by || 'Compliance Officer';
-    const approvedBy = policy.approved_by || 'Medical Director / CEO';
+    const {
+      preparedName,
+      preparedRole,
+      preparedSig,
+      reviewedName,
+      reviewedRole,
+      reviewedSig,
+      approvedName,
+      approvedRole,
+      approvedSig,
+      isReviewedIncluded,
+    } = getResolvedSignatories(policy);
+
+    const facilityLogo = client?.facility_logo || (client as any)?.logo_url;
+    const facilityStamp = client?.facility_stamp;
 
     let rawBody = policy.policy_statement || policy.full_content || '<p>No policy content provided.</p>';
     let cleanBodyHtml = formatCleanPolicyStatement(rawBody, resolvedTitle, facilityName, pageBreakSections);
@@ -874,22 +1296,30 @@ export default function PolicyFrameworksSetup({
     }
 
     /* Signatories Footer */
-    .signatory-container {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
+    .signatory-wrapper {
+      position: relative;
       margin-top: auto;
       padding-top: 10px;
       border-top: 2px solid #0f172a;
       page-break-inside: avoid;
       break-inside: avoid;
     }
+    .signatory-container {
+      display: grid;
+      grid-template-columns: repeat(${isReviewedIncluded ? 3 : 2}, 1fr);
+      gap: 12px;
+    }
     .signatory-box {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
       border-radius: 4px;
-      padding: 6px 8px;
+      padding: 8px 10px;
       text-align: center;
+      min-height: 84px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
     }
     .signatory-role {
       font-size: 8.5px;
@@ -906,12 +1336,46 @@ export default function PolicyFrameworksSetup({
       margin-top: 2px;
       display: block;
     }
+    .signatory-title {
+      font-size: 8.5px;
+      color: #64748b;
+      display: block;
+      margin-top: 1px;
+    }
+    .signatory-sig-img {
+      max-height: 32px;
+      max-width: 120px;
+      height: 28px;
+      object-fit: contain;
+      margin: 4px auto 0;
+      display: block;
+    }
     .signatory-sig {
       font-size: 8.5px;
       font-family: ui-monospace, SFMono-Regular, monospace;
       color: #15803d;
-      margin-top: 4px;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 3px;
+      padding: 2px 6px;
+      margin: 4px auto 0;
+      display: inline-block;
       font-style: italic;
+      font-weight: 600;
+    }
+    .facility-stamp-seal {
+      position: absolute;
+      right: 15px;
+      bottom: 8px;
+      width: 4.5cm;
+      height: 4.5cm;
+      max-height: 4.5cm;
+      max-width: 4.5cm;
+      object-fit: contain;
+      opacity: 0.88;
+      transform: rotate(-4deg);
+      pointer-events: none;
+      z-index: 10;
     }
 
     /* Media Print Overrides */
@@ -934,12 +1398,18 @@ export default function PolicyFrameworksSetup({
 <body>
   <div class="a4-document print-compact-gap">
     <div>
-      <!-- Facility Header -->
+      <!-- Facility Header with Logo -->
       <div class="header-bar">
-        <div>
-          <h2 class="facility-name">${facilityName}</h2>
-          <p class="facility-subtext">${client?.address || 'Abu Dhabi'}, ${client?.city || 'United Arab Emirates'}</p>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          ${facilityLogo ? `
+            <img src="${facilityLogo}" alt="Facility Logo" style="height: 45px; max-width: 130px; object-fit: contain; border-radius: 4px;" />
+          ` : ''}
+          <div>
+            <h2 class="facility-name">${facilityName}</h2>
+            <p class="facility-subtext">${client?.address || 'Abu Dhabi'}, ${client?.city || 'United Arab Emirates'}</p>
+          </div>
         </div>
+        <div class="ref-code-box">${policyNo}</div>
       </div>
 
       <!-- Policy Title & Client Display on Same Line -->
@@ -984,24 +1454,80 @@ export default function PolicyFrameworksSetup({
       <div class="policy-body">
         ${cleanBodyHtml}
       </div>
+
+      <!-- Policy Version History & Document Control Audit Revision Log -->
+      <div style="margin: 12px 0; border: 1px solid #cbd5e1; border-radius: 4px; overflow: hidden; page-break-inside: avoid; break-inside: avoid;">
+        <div style="background: #0f172a; color: #ffffff; padding: 4px 8px; display: flex; justify-content: space-between; align-items: center; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">
+          <span>Policy Version History • Document Control &amp; Audit Revision Log</span>
+          <span style="font-family: monospace; color: #7dd3fc; background: #1e293b; padding: 1px 5px; border-radius: 3px;">Active: ${version}</span>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 8px; margin: 0;">
+          <thead>
+            <tr style="background: #f1f5f9; border-bottom: 1px solid #cbd5e1; color: #1e293b; font-weight: 800; text-transform: uppercase;">
+              <th style="padding: 4px 6px; text-align: left; border-right: 1px solid #cbd5e1; width: 65px;">Version</th>
+              <th style="padding: 4px 6px; text-align: left; border-right: 1px solid #cbd5e1; width: 80px;">Date</th>
+              <th style="padding: 4px 6px; text-align: left; border-right: 1px solid #cbd5e1; width: 140px;">Author / Reviewer</th>
+              <th style="padding: 4px 6px; text-align: left;">Summary of Changes / Remarks</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${getPolicyVersionRecords(policy).map((rec, idx) => `
+              <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'}; border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 4px 6px; font-family: monospace; font-weight: bold; color: #3730a3; border-right: 1px solid #e2e8f0;">${rec.version}</td>
+                <td style="padding: 4px 6px; border-right: 1px solid #e2e8f0; color: #334155;">${rec.date}</td>
+                <td style="padding: 4px 6px; font-weight: 600; border-right: 1px solid #e2e8f0; color: #0f172a;">${rec.author}</td>
+                <td style="padding: 4px 6px; color: #334155; line-height: 1.35;">${rec.changes}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
     </div>
 
-    <!-- Signatories Footer -->
-    <div class="signatory-container">
-      <div class="signatory-box">
-        <span class="signatory-role">Prepared By</span>
-        <strong class="signatory-name">${preparedBy}</strong>
-        <div class="signatory-sig">✓ Digital Sign: ${preparedBy}</div>
-      </div>
-      <div class="signatory-box">
-        <span class="signatory-role">Reviewed By</span>
-        <strong class="signatory-name">${reviewedBy}</strong>
-        <div class="signatory-sig">✓ Digital Sign: ${reviewedBy}</div>
-      </div>
-      <div class="signatory-box">
-        <span class="signatory-role">Approved By</span>
-        <strong class="signatory-name">${approvedBy}</strong>
-        <div class="signatory-sig">✓ Digital Sign: Approved</div>
+    <!-- Signatories Footer with Signatures and Official Facility Stamp / Seal (size 4.5cm) -->
+    <div class="signatory-wrapper">
+      ${facilityStamp ? `
+        <img src="${facilityStamp}" alt="Official Facility Stamp / Seal" class="facility-stamp-seal" />
+      ` : ''}
+      <div class="signatory-container">
+        <div class="signatory-box">
+          <div>
+            <span class="signatory-role">Prepared By</span>
+            <strong class="signatory-name">${preparedName}</strong>
+            <span class="signatory-title">${preparedRole}</span>
+          </div>
+          ${preparedSig ? `
+            <img src="${preparedSig}" alt="Signature" class="signatory-sig-img" />
+          ` : `
+            <div class="signatory-sig">✓ Digital Sign: ${preparedName}</div>
+          `}
+        </div>
+        ${isReviewedIncluded ? `
+        <div class="signatory-box">
+          <div>
+            <span class="signatory-role">Reviewed By</span>
+            <strong class="signatory-name">${reviewedName}</strong>
+            <span class="signatory-title">${reviewedRole}</span>
+          </div>
+          ${reviewedSig ? `
+            <img src="${reviewedSig}" alt="Signature" class="signatory-sig-img" />
+          ` : `
+            <div class="signatory-sig">✓ Digital Sign: ${reviewedName}</div>
+          `}
+        </div>
+        ` : ''}
+        <div class="signatory-box">
+          <div>
+            <span class="signatory-role">Approved By</span>
+            <strong class="signatory-name">${approvedName}</strong>
+            <span class="signatory-title">${approvedRole}</span>
+          </div>
+          ${approvedSig ? `
+            <img src="${approvedSig}" alt="Signature" class="signatory-sig-img" />
+          ` : `
+            <div class="signatory-sig">✓ Digital Sign: Approved</div>
+          `}
+        </div>
       </div>
     </div>
   </div>
@@ -1266,55 +1792,122 @@ export default function PolicyFrameworksSetup({
     });
 
     // Footer Signatories & Stamp
-    if (yPos > 235) {
+    if (yPos > 230) {
       doc.addPage();
       yPos = 20;
     } else {
-      yPos = Math.max(yPos + 8, 235);
+      yPos = Math.max(yPos + 8, 230);
     }
+
+    const {
+      preparedName,
+      preparedRole,
+      preparedSig,
+      reviewedName,
+      reviewedRole,
+      reviewedSig,
+      approvedName,
+      approvedRole,
+      approvedSig,
+      isReviewedIncluded,
+    } = getResolvedSignatories(policy);
 
     doc.setDrawColor(203, 213, 225);
     doc.line(15, yPos, pageWidth - 15, yPos);
 
     yPos += 6;
-    doc.setFontSize(7.5);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(51, 65, 85);
-
-    const colWidth = (pageWidth - 75) / 3;
+    const numCols = isReviewedIncluded ? 3 : 2;
+    const colWidth = (pageWidth - 75) / numCols;
     
     // Prepared By
-    doc.text(`Prepared By:`, 17, yPos);
-    doc.setFont('helvetica', 'normal');
-    doc.text(policy.prepared_by || 'HR & Compliance Desk', 17, yPos + 4);
-
-    // Reviewed By
+    doc.setFontSize(7.5);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(51, 65, 85);
-    doc.text(`Reviewed By:`, 17 + colWidth, yPos);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`PREPARED BY`, 17, yPos);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 23, 42);
+    doc.setFontSize(8.5);
+    doc.text(preparedName, 17, yPos + 4.5);
     doc.setFont('helvetica', 'normal');
-    doc.text(policy.reviewed_by || 'Quality Lead', 17 + colWidth, yPos + 4);
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    doc.text(preparedRole, 17, yPos + 8.5);
+
+    if (preparedSig) {
+      try {
+        doc.addImage(preparedSig, 'PNG', 17, yPos + 10, 26, 10);
+      } catch (e) {}
+    } else {
+      doc.setFontSize(6.5);
+      doc.setTextColor(21, 128, 61);
+      doc.text(`✓ Digital Sign: ${preparedName}`, 17, yPos + 13);
+    }
+
+    if (isReviewedIncluded) {
+      // Reviewed By
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(100, 116, 139);
+      doc.text(`REVIEWED BY`, 17 + colWidth, yPos);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(15, 23, 42);
+      doc.setFontSize(8.5);
+      doc.text(reviewedName, 17 + colWidth, yPos + 4.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(100, 116, 139);
+      doc.text(reviewedRole, 17 + colWidth, yPos + 8.5);
+
+      if (reviewedSig) {
+        try {
+          doc.addImage(reviewedSig, 'PNG', 17 + colWidth, yPos + 10, 26, 10);
+        } catch (e) {}
+      } else {
+        doc.setFontSize(6.5);
+        doc.setTextColor(21, 128, 61);
+        doc.text(`✓ Digital Sign: ${reviewedName}`, 17 + colWidth, yPos + 13);
+      }
+    }
 
     // Approved By
+    const approvedX = 17 + (isReviewedIncluded ? colWidth * 2 : colWidth);
+    doc.setFontSize(7.5);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(51, 65, 85);
-    doc.text(`Approved By:`, 17 + (colWidth * 2), yPos);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`APPROVED BY`, approvedX, yPos);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 23, 42);
+    doc.setFontSize(8.5);
+    doc.text(approvedName, approvedX, yPos + 4.5);
     doc.setFont('helvetica', 'normal');
-    doc.text(policy.approved_by || 'Medical Director / CEO', 17 + (colWidth * 2), yPos + 4);
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    doc.text(approvedRole, approvedX, yPos + 8.5);
+
+    if (approvedSig) {
+      try {
+        doc.addImage(approvedSig, 'PNG', approvedX, yPos + 10, 26, 10);
+      } catch (e) {}
+    } else {
+      doc.setFontSize(6.5);
+      doc.setTextColor(21, 128, 61);
+      doc.text(`✓ Digital Sign: Approved`, approvedX, yPos + 13);
+    }
 
     // Below Approved Date
     doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
     doc.setTextColor(15, 23, 42);
     const appDate = policy.approval_date || policy.effective_date || new Date().toISOString().split('T')[0];
-    doc.text(`Approved Date: ${appDate}`, 17, yPos + 16);
+    doc.text(`Approval / Effective Date: ${appDate}`, 17, yPos + 22);
 
-    // Add PNG Seal Image
-    const sealPng = generateFacilitySealPng(policy.company_name || client?.company_name || 'Facility', policy.policy_no || 'POL-2026');
-    if (sealPng) {
+    // Add Facility Stamp / Official Seal (4.5cm / 45mm size)
+    const effectiveStamp = client?.facility_stamp || generateFacilitySealPng(policy.company_name || client?.company_name || 'Facility', policy.policy_no || 'POL-2026');
+    if (effectiveStamp) {
       try {
-        doc.addImage(sealPng, 'PNG', pageWidth - 48, yPos - 4, 30, 30);
+        doc.addImage(effectiveStamp, 'PNG', pageWidth - 55, yPos - 5, 45, 45);
       } catch (e) {
-        console.warn('Seal PNG embed note:', e);
+        console.warn('Facility Seal/Stamp PNG embed note:', e);
       }
     }
 
@@ -1545,8 +2138,154 @@ export default function PolicyFrameworksSetup({
     return deduplicated;
   }, [policies, activeClientId, client]);
 
+  // Vault Folder View State: 'applicable' (default) | 'not_applicable' | 'all'
+  const [vaultFolder, setVaultFolder] = useState<'applicable' | 'not_applicable' | 'all'>('applicable');
+
+  // Client-scoped Policy Applicability Checker
+  const isPolicyNotApplicable = (p?: Policy | null): boolean => {
+    if (!p) return false;
+    const effClientId = activeClientId || client?.id || '';
+    if (!effClientId) return false;
+
+    // 1. Check client's not_applicable_policy_ids
+    if (client?.not_applicable_policy_ids && Array.isArray(client.not_applicable_policy_ids)) {
+      if (client.not_applicable_policy_ids.includes(p.id) || client.not_applicable_policy_ids.includes(p.policy_no)) {
+        return true;
+      }
+    }
+
+    // 2. Check policy's not_applicable_clients
+    if (p.not_applicable_clients && Array.isArray(p.not_applicable_clients)) {
+      if (p.not_applicable_clients.includes(effClientId)) {
+        return true;
+      }
+    }
+
+    // 3. Direct policy field if scoped to this client
+    if (p.client_id === effClientId && p.is_applicable === false) {
+      return true;
+    }
+
+    // 4. LocalStorage persistence for this client
+    try {
+      const stored = localStorage.getItem(`sh_client_not_applicable_${effClientId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && (parsed.includes(p.id) || parsed.includes(p.policy_no))) {
+          return true;
+        }
+      }
+    } catch (e) {}
+
+    return false;
+  };
+
+  // Toggle Policy Applicability for the Current Selected Client Only
+  const handleTogglePolicyApplicability = (targetPolicy: Policy, shouldBeApplicable?: boolean) => {
+    const effClientId = activeClientId || client?.id || '';
+    if (!effClientId) {
+      showToast('⚠️ Please select an active client account first.');
+      return;
+    }
+
+    const currentlyExcluded = isPolicyNotApplicable(targetPolicy);
+    const targetApplicable = shouldBeApplicable !== undefined ? shouldBeApplicable : currentlyExcluded;
+
+    // 1. Update localStorage list for this specific client
+    let clientExclusions: string[] = [];
+    try {
+      const stored = localStorage.getItem(`sh_client_not_applicable_${effClientId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) clientExclusions = parsed;
+      }
+    } catch (e) {}
+
+    if (targetApplicable) {
+      clientExclusions = clientExclusions.filter(id => id !== targetPolicy.id && id !== targetPolicy.policy_no);
+    } else {
+      if (!clientExclusions.includes(targetPolicy.id)) clientExclusions.push(targetPolicy.id);
+      if (targetPolicy.policy_no && !clientExclusions.includes(targetPolicy.policy_no)) clientExclusions.push(targetPolicy.policy_no);
+    }
+
+    try {
+      localStorage.setItem(`sh_client_not_applicable_${effClientId}`, JSON.stringify(clientExclusions));
+    } catch (e) {}
+
+    // 2. Update Client object
+    if (client && onUpdateClient) {
+      const updatedClient: Client = {
+        ...client,
+        not_applicable_policy_ids: clientExclusions,
+      };
+      onUpdateClient(updatedClient);
+    }
+
+    // 3. Update Policy object
+    let updatedNotAppClients = [...(targetPolicy.not_applicable_clients || [])];
+    if (targetApplicable) {
+      updatedNotAppClients = updatedNotAppClients.filter(cId => cId !== effClientId);
+    } else {
+      if (!updatedNotAppClients.includes(effClientId)) updatedNotAppClients.push(effClientId);
+    }
+
+    const updatedPolicy: Policy = {
+      ...targetPolicy,
+      not_applicable_clients: updatedNotAppClients,
+      is_applicable: targetApplicable,
+    };
+
+    if (onUpdatePolicy) {
+      onUpdatePolicy(updatedPolicy);
+    }
+
+    if (selectedPolicy && (selectedPolicy.id === targetPolicy.id || selectedPolicy.policy_no === targetPolicy.policy_no)) {
+      setSelectedPolicy(updatedPolicy);
+    }
+
+    const clientName = client?.company_name || 'selected client';
+    showToast(
+      targetApplicable
+        ? `✓ Policy "${targetPolicy.policy_no}" marked as APPLICABLE for ${clientName}`
+        : `📁 Policy "${targetPolicy.policy_no}" moved to NON-APPLICABLE folder for ${clientName}`
+    );
+  };
+
+  // Bulk toggle applicability for selected items
+  const handleBulkToggleApplicability = (targetApplicable: boolean) => {
+    if (selectedPolicyIds.length === 0) {
+      showToast('⚠️ Please select one or more policies first.');
+      return;
+    }
+    const effClientId = activeClientId || client?.id || '';
+    if (!effClientId) return;
+
+    const targetList = facilityPolicies.filter(p => selectedPolicyIds.includes(p.id));
+    targetList.forEach(p => {
+      handleTogglePolicyApplicability(p, targetApplicable);
+    });
+
+    const clientName = client?.company_name || 'selected client';
+    showToast(
+      targetApplicable
+        ? `✓ Restored ${targetList.length} policies to APPLICABLE folder for ${clientName}`
+        : `📁 Moved ${targetList.length} policies to NON-APPLICABLE folder for ${clientName}`
+    );
+    setSelectedPolicyIds([]);
+  };
+
+  // Separate policies into Applicable vs Non-Applicable for this client
+  const applicablePolicies = facilityPolicies.filter(p => !isPolicyNotApplicable(p));
+  const notApplicablePolicies = facilityPolicies.filter(p => isPolicyNotApplicable(p));
+
+  // Determine active folder list based on selected folder tab
+  const activeFolderPolicies = 
+    vaultFolder === 'applicable' ? applicablePolicies :
+    vaultFolder === 'not_applicable' ? notApplicablePolicies :
+    facilityPolicies;
+
   // Filtered Vault list
-  const filteredPolicies = facilityPolicies.filter(p => {
+  const filteredPolicies = activeFolderPolicies.filter(p => {
     const search = searchTerm.toLowerCase();
     const matchSearch =
       !search ||
@@ -2044,36 +2783,70 @@ export default function PolicyFrameworksSetup({
                     }}
                   />
                 </div>
+
+                {/* Policy Version History & Document Control Revision Log */}
+                <div className="my-4 border border-slate-300 rounded-lg overflow-hidden bg-white mx-2 sm:mx-4 shadow-xs">
+                  <div className="bg-slate-900 text-white px-3 py-1.5 flex justify-between items-center text-[10px] font-bold uppercase tracking-wider">
+                    <span className="flex items-center gap-1.5">
+                      <History className="w-3.5 h-3.5 text-sky-400" /> Policy Version History • Document Control Log
+                    </span>
+                    <span className="font-mono text-[9px] bg-slate-800 px-2 py-0.5 rounded text-sky-300 border border-slate-700">Active: v1.0</span>
+                  </div>
+                  <table className="w-full border-collapse text-[9.5px]">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-300 font-bold text-slate-800 uppercase text-[8.5px]">
+                        <th className="p-1.5 text-left border-r border-slate-300 w-16">Version</th>
+                        <th className="p-1.5 text-left border-r border-slate-300 w-24">Date</th>
+                        <th className="p-1.5 text-left border-r border-slate-300 w-44">Author / Reviewer</th>
+                        <th className="p-1.5 text-left">Summary of Changes / Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="bg-white">
+                        <td className="p-1.5 font-mono font-bold text-indigo-700 border-r border-slate-200">v1.0</td>
+                        <td className="p-1.5 text-slate-700 border-r border-slate-200">{new Date().toISOString().split('T')[0]}</td>
+                        <td className="p-1.5 font-semibold text-slate-800 border-r border-slate-200">{preparedBy || 'HR Director'}</td>
+                        <td className="p-1.5 text-slate-700">Initial Document Baseline Creation & Governance Approval</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               {/* Document Signatory Footer */}
               <div className="mt-8 pt-4 border-t-2 border-slate-900 w-full px-2 sm:px-4">
                 <div className={`grid ${showReviewedBy ? 'grid-cols-3' : 'grid-cols-2'} gap-4 text-[10px] w-full`}>
-                  <div className="p-3 border border-slate-300 rounded bg-slate-50 text-center">
-                    <span className="block font-bold text-slate-500 uppercase tracking-wider text-[9px]">Prepared By</span>
-                    <strong className="block text-slate-900 mt-1 font-extrabold text-[11px]">{preparedBy || 'HR Director'}</strong>
-                    <span className="text-[9.5px] text-slate-600 block">HR Director</span>
-                    <div className="mt-2 text-[9px] text-emerald-700 font-mono italic">
-                      ✓ Digital Sign: {preparedBy || 'HR Director'}
+                  <div className="p-3 border border-slate-300 rounded-lg bg-white text-center shadow-xs flex flex-col justify-between min-h-[84px]">
+                    <div>
+                      <span className="block font-extrabold text-slate-500 uppercase tracking-wider text-[8.5px]">Prepared By</span>
+                      <strong className="block text-slate-900 mt-1 font-extrabold text-[11px]">{preparedBy || 'Aseef Sulaiman'}</strong>
+                      <span className="text-[8.5px] text-slate-600 block">IT Manager / Admin</span>
+                    </div>
+                    <div className="mt-2 text-[8.5px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded font-mono italic inline-block font-semibold">
+                      ✓ Digital Sign: {preparedBy || 'Aseef Sulaiman'}
                     </div>
                   </div>
 
                   {showReviewedBy && (
-                    <div className="p-3 border border-slate-300 rounded bg-slate-50 text-center">
-                      <span className="block font-bold text-slate-500 uppercase tracking-wider text-[9px]">Reviewed By</span>
-                      <strong className="block text-slate-900 mt-1 font-extrabold text-[11px]">{reviewedBy || 'Compliance Officer'}</strong>
-                      <span className="text-[9.5px] text-slate-600 block">Compliance Officer</span>
-                      <div className="mt-2 text-[9px] text-emerald-700 font-mono italic">
-                        ✓ Digital Sign: {reviewedBy || 'Reviewed'}
+                    <div className="p-3 border border-slate-300 rounded-lg bg-white text-center shadow-xs flex flex-col justify-between min-h-[84px]">
+                      <div>
+                        <span className="block font-extrabold text-slate-500 uppercase tracking-wider text-[8.5px]">Reviewed By</span>
+                        <strong className="block text-slate-900 mt-1 font-extrabold text-[11px]">{reviewedBy || 'HR & Compliance Director'}</strong>
+                        <span className="text-[8.5px] text-slate-600 block">Operations Manager</span>
+                      </div>
+                      <div className="mt-2 text-[8.5px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded font-mono italic inline-block font-semibold">
+                        ✓ Digital Sign: {reviewedBy || 'HR & Compliance Director'}
                       </div>
                     </div>
                   )}
 
-                  <div className="p-3 border border-slate-300 rounded bg-slate-50 text-center">
-                    <span className="block font-bold text-slate-500 uppercase tracking-wider text-[9px]">Approved By</span>
-                    <strong className="block text-slate-900 mt-1 font-extrabold text-[11px]">{approvedBy || 'Risk Lead'}</strong>
-                    <span className="text-[9.5px] text-slate-600 block">Risk Lead</span>
-                    <div className="mt-2 text-[9px] text-emerald-700 font-mono italic">
+                  <div className="p-3 border border-slate-300 rounded-lg bg-white text-center shadow-xs flex flex-col justify-between min-h-[84px]">
+                    <div>
+                      <span className="block font-extrabold text-slate-500 uppercase tracking-wider text-[8.5px]">Approved By</span>
+                      <strong className="block text-slate-900 mt-1 font-extrabold text-[11px]">{approvedBy || 'Medical Director / CEO'}</strong>
+                      <span className="text-[8.5px] text-slate-600 block">Compliance Officer</span>
+                    </div>
+                    <div className="mt-2 text-[8.5px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded font-mono italic inline-block font-semibold">
                       ✓ Digital Sign: Approved
                     </div>
                   </div>
@@ -2091,6 +2864,88 @@ export default function PolicyFrameworksSetup({
       {/* SUB-TAB 1: VAULT REPOSITORY */}
       {activeTab === 'vault' && (
         <div className="space-y-4">
+          {/* MASTER CLIENT PROTECTION BANNER */}
+          {isMasterClient && (
+            <div className="p-3 bg-amber-50 border border-amber-300 rounded-2xl text-amber-900 text-xs font-bold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-xs">
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-amber-700 shrink-0" />
+                <span>👑 <strong>Compliance Consultant Master Repository (SmartPro)</strong>: Gold Standard Master Policies & Procedures. Documents are protected from deletion. Copying to client entities is restricted to SuperAdmin accounts.</span>
+              </div>
+              <span className="px-2.5 py-1 bg-amber-200/80 text-amber-950 rounded-xl text-[10px] uppercase tracking-wider font-black shrink-0 border border-amber-300">
+                Gold Master Store
+              </span>
+            </div>
+          )}
+
+          {/* FOLDER NAVIGATION (APPLICABLE POLICIES vs NON-APPLICABLE vs ALL) */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setVaultFolder('applicable')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all inline-flex items-center gap-2 cursor-pointer border ${
+                  vaultFolder === 'applicable'
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+                title={`Show policies applicable to ${client?.company_name || 'selected client'}`}
+              >
+                <CheckCircle2 className={`w-4 h-4 ${vaultFolder === 'applicable' ? 'text-emerald-300' : 'text-emerald-600'}`} />
+                <span>Applicable Policies</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-black ${
+                  vaultFolder === 'applicable' ? 'bg-indigo-800 text-white' : 'bg-slate-200 text-slate-800'
+                }`}>
+                  {applicablePolicies.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setVaultFolder('not_applicable')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all inline-flex items-center gap-2 cursor-pointer border ${
+                  vaultFolder === 'not_applicable'
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+                title={`Show policies marked as NOT applicable for ${client?.company_name || 'selected client'}`}
+              >
+                <XCircle className={`w-4 h-4 ${vaultFolder === 'not_applicable' ? 'text-rose-200' : 'text-rose-600'}`} />
+                <span>Not Applicable Policies</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-black ${
+                  vaultFolder === 'not_applicable' ? 'bg-rose-800 text-white' : 'bg-slate-200 text-slate-800'
+                }`}>
+                  {notApplicablePolicies.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setVaultFolder('all')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all inline-flex items-center gap-2 cursor-pointer border ${
+                  vaultFolder === 'all'
+                    ? 'bg-slate-800 text-white border-slate-800 shadow-sm'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+                title="View all repository records regardless of client applicability status"
+              >
+                <Layers className="w-4 h-4 text-slate-400" />
+                <span>All Repository Records</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-black ${
+                  vaultFolder === 'all' ? 'bg-slate-950 text-white' : 'bg-slate-200 text-slate-800'
+                }`}>
+                  {facilityPolicies.length}
+                </span>
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5 ml-auto">
+              <span>Scoped Client:</span>
+              <span className="px-2.5 py-1 bg-indigo-50 text-indigo-900 border border-indigo-200/80 rounded-lg font-black">
+                {client?.company_name || 'Selected Client'}
+              </span>
+            </div>
+          </div>
+
           {/* SEARCH & FILTERS BAR */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3">
             <div className="relative w-full md:w-96">
@@ -2138,16 +2993,80 @@ export default function PolicyFrameworksSetup({
               <div className="flex items-center gap-2">
                 <FileCheck className="w-4 h-4 text-indigo-600" />
                 <h3 className="font-extrabold text-xs text-slate-900 uppercase tracking-wider">
-                  Policy Frameworks Repository ({filteredPolicies.length} Active Records)
+                  {vaultFolder === 'applicable' && `Policy Frameworks Repository (${applicablePolicies.length} Active Records)`}
+                  {vaultFolder === 'not_applicable' && `Non-Applicable & Excluded Policies (${notApplicablePolicies.length} Excluded Records)`}
+                  {vaultFolder === 'all' && `All Policy Frameworks Repository (${facilityPolicies.length} Total Records)`}
                 </h3>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
+                {/* BULK APPLICABILITY ACTIONS */}
+                {vaultFolder !== 'not_applicable' && (
+                  <button
+                    type="button"
+                    onClick={() => handleBulkToggleApplicability(false)}
+                    className="px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-2xs"
+                    title={`Mark selected policies as Not Applicable for ${client?.company_name || 'selected client'}`}
+                  >
+                    <XCircle className="w-3.5 h-3.5 text-rose-600" /> Mark as Not Applicable
+                    {selectedPolicyIds.length > 0 && (
+                      <span className="ml-1 px-1.5 py-0.2 bg-rose-700 text-white text-[10px] rounded-full">
+                        {selectedPolicyIds.length}
+                      </span>
+                    )}
+                  </button>
+                )}
+                {vaultFolder !== 'applicable' && (
+                  <button
+                    type="button"
+                    onClick={() => handleBulkToggleApplicability(true)}
+                    className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-2xs"
+                    title={`Restore selected policies as Applicable for ${client?.company_name || 'selected client'}`}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Mark as Applicable
+                    {selectedPolicyIds.length > 0 && (
+                      <span className="ml-1 px-1.5 py-0.2 bg-emerald-700 text-white text-[10px] rounded-full">
+                        {selectedPolicyIds.length}
+                      </span>
+                    )}
+                  </button>
+                )}
+
+                {/* PROTECTED / UNLOCKED SECURITY TOGGLE BUTTON */}
                 <button
-                  onClick={handleOpenCopyModalForSelected}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-sm"
-                  title="Copy selected policies to a client facility"
+                  type="button"
+                  onClick={handleToggleProtectedLock}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-extrabold cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-sm border ${
+                    isProtectedUnlocked
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500'
+                      : 'bg-amber-100 hover:bg-amber-200 text-amber-950 border-amber-300'
+                  }`}
+                  title={isProtectedUnlocked ? "Master Protection UNLOCKED - Click to Re-lock" : "Protected Master Repository - Click to unlock with Security PIN"}
                 >
-                  <Copy className="w-3.5 h-3.5" /> Copy to Client
+                  {isProtectedUnlocked ? (
+                    <>
+                      <Unlock className="w-3.5 h-3.5 text-emerald-200" />
+                      <span>Unlocked (Protected Mode)</span>
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Protected</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleOpenCopyModalForSelected}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-sm ${
+                    isSuperAdmin
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                  }`}
+                  title={isSuperAdmin ? "Copy selected policies to a client facility" : "Copy to Client (SuperAdmin Only)"}
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  {isSuperAdmin ? 'Copy to Client' : 'Copy to Client (SuperAdmin)'}
                   {selectedPolicyIds.length > 0 && (
                     <span className="ml-1 px-1.5 py-0.2 bg-emerald-800 text-white text-[10px] rounded-full">
                       {selectedPolicyIds.length}
@@ -2168,18 +3087,21 @@ export default function PolicyFrameworksSetup({
                 </button>
                 <button
                   type="button"
-                  onClick={handleFreezeSelectedPolicies}
+                  onClick={() => handleFreezeSelectedPolicies()}
                   className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-sm"
-                  title="Freeze / Lock selected policy documents against modifications"
+                  title="Freeze / Lock or Unfreeze selected policy documents against modifications"
                 >
-                  <Lock className="w-3.5 h-3.5" /> Freeze Selected
+                  <Lock className="w-3.5 h-3.5" />
+                  {selectedPolicyIds.length > 0 && filteredPolicies.filter(p => selectedPolicyIds.includes(p.id)).every(p => p.is_frozen || p.status === 'FROZEN')
+                    ? 'Unfreeze Selected'
+                    : 'Freeze Selected'}
                   {selectedPolicyIds.length > 0 && (
                     <span className="ml-1 px-1.5 py-0.2 bg-cyan-900 text-white text-[10px] rounded-full">
                       {selectedPolicyIds.length}
                     </span>
                   )}
                 </button>
-                {onDeletePolicy && (
+                {onDeletePolicy && !isMasterClient && (
                   <button
                     type="button"
                     onClick={handleGroupDeleteSelected}
@@ -2218,6 +3140,7 @@ export default function PolicyFrameworksSetup({
                     <th className="p-3.5">Category</th>
                     <th className="p-3.5">Department</th>
                     <th className="p-3.5">Classification</th>
+                    <th className="p-3.5">Scope</th>
                     <th className="p-3.5">Status</th>
                     <th className="p-3.5 text-right">Actions</th>
                   </tr>
@@ -2225,8 +3148,10 @@ export default function PolicyFrameworksSetup({
                 <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
                   {filteredPolicies.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="p-8 text-center text-slate-400">
-                        No policy or procedure documents found matching your criteria.
+                      <td colSpan={9} className="p-8 text-center text-slate-400">
+                        {vaultFolder === 'not_applicable'
+                          ? 'No non-applicable policies found for this client facility.'
+                          : 'No policy or procedure documents found matching your criteria.'}
                       </td>
                     </tr>
                   ) : (
@@ -2258,6 +3183,17 @@ export default function PolicyFrameworksSetup({
                           </span>
                         </td>
                         <td className="p-3.5">
+                          {isPolicyNotApplicable(p) ? (
+                            <span className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-800 border border-rose-200 text-[10.5px] font-extrabold inline-flex items-center gap-1">
+                              <XCircle className="w-3 h-3 text-rose-600" /> Not Applicable
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10.5px] font-extrabold inline-flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Applicable
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3.5">
                           {(p.is_frozen || p.status === 'FROZEN') ? (
                             <span className="px-2 py-0.5 rounded bg-cyan-100 text-cyan-900 font-extrabold text-[10px] inline-flex items-center gap-1 border border-cyan-300">
                               <Lock className="w-3 h-3 text-cyan-700" /> FROZEN
@@ -2270,6 +3206,27 @@ export default function PolicyFrameworksSetup({
                         </td>
                         <td className="p-3.5 text-right">
                           <div className="flex flex-wrap items-center justify-end gap-1.5">
+                            {/* SCOPE APPLICABILITY TOGGLE BUTTON */}
+                            {isPolicyNotApplicable(p) ? (
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePolicyApplicability(p, true)}
+                                className="px-2.5 py-1 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 rounded-lg text-xs font-black cursor-pointer transition-all inline-flex items-center gap-1 shadow-2xs"
+                                title={`Restore policy to APPLICABLE repository for ${client?.company_name || 'selected client'}`}
+                              >
+                                <Check className="w-3.5 h-3.5 text-emerald-600" /> Mark Applicable
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePolicyApplicability(p, false)}
+                                className="px-2.5 py-1 bg-slate-100 text-slate-600 hover:bg-rose-50 hover:text-rose-800 hover:border-rose-300 border border-slate-200 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1 shadow-2xs"
+                                title={`Mark policy as NOT APPLICABLE / Exclude for ${client?.company_name || 'selected client'}`}
+                              >
+                                <XCircle className="w-3.5 h-3.5 text-slate-500 hover:text-rose-600" /> Not Applicable
+                              </button>
+                            )}
+
                             <button
                               type="button"
                               onClick={() => {
@@ -2301,8 +3258,8 @@ export default function PolicyFrameworksSetup({
                               onClick={() => handleToggleFreezePolicy(p)}
                               className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1 border ${
                                 (p.is_frozen || p.status === 'FROZEN')
-                                  ? 'bg-cyan-100 text-cyan-900 border-cyan-300 font-extrabold hover:bg-cyan-200'
-                                  : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                                  ? 'bg-cyan-100 text-cyan-900 border-cyan-300 font-extrabold hover:bg-cyan-200 shadow-xs'
+                                  : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 shadow-xs'
                               }`}
                               title={(p.is_frozen || p.status === 'FROZEN') ? 'Unfreeze Document to Allow Edits' : 'Freeze / Lock Document Record'}
                             >
@@ -2312,18 +3269,41 @@ export default function PolicyFrameworksSetup({
                             <button
                               type="button"
                               onClick={() => handleOpenCopyModalForSingle(p)}
-                              className="px-2.5 py-1 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200/60 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1"
-                              title="Copy policy master document to client"
+                              className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1 border ${
+                                isSuperAdmin
+                                  ? 'bg-purple-50 text-purple-700 hover:bg-purple-100 border-purple-200/60'
+                                  : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+                              }`}
+                              title={isSuperAdmin ? "Copy policy master document to client" : "Copy to Client (SuperAdmin Only)"}
                             >
-                              <Copy className="w-3.5 h-3.5" /> Copy to Client
+                              <Copy className="w-3.5 h-3.5" /> {isSuperAdmin ? 'Copy to Client' : 'Copy (SuperAdmin)'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setHtmlScriptModalPolicy(p);
+                                setHtmlScriptActiveTab('preview');
+                              }}
+                              className="px-2.5 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/60 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1"
+                              title="Prepare, View & Copy Complete HTML Script for Document"
+                            >
+                              <FileCode className="w-3.5 h-3.5" /> HTML Script
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handlePrintPolicyPdf(p)}
+                              className="px-2.5 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/60 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1"
+                              title="Download & Export Policy as PDF Document (.pdf)"
+                            >
+                              <Printer className="w-3.5 h-3.5" /> PDF
                             </button>
                             <button
                               type="button"
                               onClick={() => handleDownloadSingleHtml(p)}
                               className="px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200/60 rounded-lg text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1"
-                              title="Download Standalone Standardized HTML Document"
+                              title="Download Standalone Standardized HTML Document (.html)"
                             >
-                              <FileCode className="w-3.5 h-3.5" /> HTML
+                              <Download className="w-3.5 h-3.5" /> HTML
                             </button>
                             <button
                               type="button"
@@ -2337,7 +3317,7 @@ export default function PolicyFrameworksSetup({
                             >
                               <Mail className="w-3.5 h-3.5" /> Send Email
                             </button>
-                            {onDeletePolicy && (
+                            {onDeletePolicy && (!isMasterClient || isProtectedUnlocked) && (
                               <button
                                 type="button"
                                 onClick={() => setConfirmDeletePolicy(p)}
@@ -2345,6 +3325,28 @@ export default function PolicyFrameworksSetup({
                                 title="Delete Policy Record"
                               >
                                 <Trash2 className="w-3.5 h-3.5" /> Delete
+                              </button>
+                            )}
+                            {isMasterClient && (
+                              <button
+                                type="button"
+                                onClick={handleToggleProtectedLock}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-extrabold cursor-pointer transition-all inline-flex items-center gap-1 border shadow-xs ${
+                                  isProtectedUnlocked
+                                    ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border-emerald-300'
+                                    : 'bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-300'
+                                }`}
+                                title={isProtectedUnlocked ? "Master Protection UNLOCKED - Click to Re-lock" : "Protected Master Document - Click to unlock with Security PIN"}
+                              >
+                                {isProtectedUnlocked ? (
+                                  <>
+                                    <Unlock className="w-3.5 h-3.5 text-emerald-700" /> Unlocked
+                                  </>
+                                ) : (
+                                  <>
+                                    <Shield className="w-3.5 h-3.5 text-amber-700" /> Protected
+                                  </>
+                                )}
                               </button>
                             )}
                           </div>
@@ -2642,8 +3644,8 @@ export default function PolicyFrameworksSetup({
               </div>
 
               {/* Copy / Paste Actions */}
-              <div className="flex items-center gap-2 text-xs">
-                <span className="font-bold text-slate-500 uppercase text-[10px]">Copy / Paste Actions:</span>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="font-bold text-slate-500 uppercase text-[10px]">Actions:</span>
                 <button
                   type="button"
                   onClick={handleCopyContent}
@@ -2664,6 +3666,48 @@ export default function PolicyFrameworksSetup({
                   className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold cursor-pointer inline-flex items-center gap-1"
                 >
                   <Plus className="w-3 h-3" /> Append Clipboard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDocContent(prev => formatContentToBulletsAndClean(prev));
+                    showToast('✓ Converted numbered lists to bullet points');
+                  }}
+                  className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded text-[11px] font-semibold cursor-pointer inline-flex items-center gap-1"
+                  title="Normalize numbered lists (1., 2), etc.) into bullet points without losing text"
+                >
+                  <Sparkles className="w-3 h-3 text-amber-600" /> Format to Bullets
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const tempPolicy: Policy = {
+                      id: 'temp_create',
+                      client_id: activeClientId || 'master',
+                      created_at: new Date().toISOString(),
+                      policy_no: docCode || 'POL-01',
+                      policy_name: docTitle || 'Custom Policy Document',
+                      category: docCategory,
+                      department: docDepartment,
+                      classification: docClassification,
+                      status: 'APPROVED',
+                      effective_date: new Date().toISOString().split('T')[0],
+                      review_date: '2027-08-06',
+                      next_due_date: '2027-08-01',
+                      version: 'v1.0',
+                      policy_statement: docContent,
+                      prepared_by: preparedBy,
+                      reviewed_by: reviewedBy,
+                      approved_by: approvedBy,
+                      show_reviewed_by: showReviewedBy
+                    };
+                    setHtmlScriptModalPolicy(tempPolicy);
+                    setHtmlScriptActiveTab('preview');
+                  }}
+                  className="px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-300 rounded text-[11px] font-semibold cursor-pointer inline-flex items-center gap-1"
+                  title="Prepare and view standard A4 HTML script for this document"
+                >
+                  <FileCode className="w-3 h-3 text-indigo-600" /> Prepare HTML Script
                 </button>
               </div>
 
@@ -2797,35 +3841,81 @@ export default function PolicyFrameworksSetup({
                   </button>
                 )}
 
-                <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-bold text-slate-200 cursor-pointer border border-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={previewShowReviewedBy}
-                    onChange={e => {
-                      setPreviewShowReviewedBy(e.target.checked);
-                      if (selectedPolicy) {
-                        selectedPolicy.show_reviewed_by = e.target.checked;
-                      }
-                    }}
-                    className="rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 w-3.5 h-3.5"
-                  />
-                  <span>Include Reviewed By</span>
-                </label>
+                {/* FACILITY POLICY SCOPE APPLICABILITY TOGGLE */}
+                <div className="flex items-center gap-1 bg-slate-800 p-1 rounded-xl border border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => handleTogglePolicyApplicability(selectedPolicy, true)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                      !isPolicyNotApplicable(selectedPolicy)
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                    title={`Mark as APPLICABLE for ${client?.company_name || 'selected client'}`}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Applicable
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTogglePolicyApplicability(selectedPolicy, false)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                      isPolicyNotApplicable(selectedPolicy)
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                    title={`Mark as NOT APPLICABLE / Exclude for ${client?.company_name || 'selected client'}`}
+                  >
+                    <XCircle className="w-3.5 h-3.5" /> Not Applicable
+                  </button>
+                </div>
 
-                {previewShowReviewedBy && (
-                  <input
-                    type="text"
-                    value={previewReviewedBy}
-                    onChange={e => {
-                      setPreviewReviewedBy(e.target.value);
-                      if (selectedPolicy) {
-                        selectedPolicy.reviewed_by = e.target.value;
-                      }
-                    }}
-                    placeholder="e.g. Compliance Officer"
-                    className="px-2.5 py-1 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-bold w-36 focus:outline-none focus:border-indigo-500"
-                  />
-                )}
+                <div className="flex items-center gap-1.5 bg-slate-800 p-1 rounded-xl border border-slate-700">
+                  <label className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-bold text-slate-200 cursor-pointer hover:bg-slate-700/60">
+                    <input
+                      type="checkbox"
+                      checked={previewShowReviewedBy}
+                      onChange={e => {
+                        const val = e.target.checked;
+                        setPreviewShowReviewedBy(val);
+                        if (selectedPolicy) {
+                          const updated = {
+                            ...selectedPolicy,
+                            show_reviewed_by: val,
+                          };
+                          setSelectedPolicy(updated);
+                          if (onUpdatePolicy && updated.id && !updated.id.startsWith('temp')) {
+                            onUpdatePolicy(updated);
+                          }
+                        }
+                      }}
+                      className="rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 w-3.5 h-3.5 cursor-pointer"
+                    />
+                    <span>Include Reviewed By</span>
+                  </label>
+
+                  {previewShowReviewedBy && (
+                    <input
+                      type="text"
+                      value={previewReviewedBy}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setPreviewReviewedBy(val);
+                        if (selectedPolicy) {
+                          const updated = {
+                            ...selectedPolicy,
+                            reviewed_by: val,
+                          };
+                          setSelectedPolicy(updated);
+                          if (onUpdatePolicy && updated.id && !updated.id.startsWith('temp')) {
+                            onUpdatePolicy(updated);
+                          }
+                        }
+                      }}
+                      placeholder="e.g. Compliance Officer"
+                      className="px-2 py-0.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white font-bold w-36 focus:outline-none focus:border-indigo-500"
+                    />
+                  )}
+                </div>
 
                 {/* Print Orientation UI Toggle */}
                 <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-700 shadow-inner">
@@ -2858,16 +3948,36 @@ export default function PolicyFrameworksSetup({
                 <button
                   onClick={() => handlePrintPolicyPdf(selectedPolicy)}
                   className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-md"
+                  title="Download / Save as PDF Document (.pdf)"
                 >
-                  <Printer className="w-3.5 h-3.5" /> Print PDF
+                  <Download className="w-3.5 h-3.5" /> Download PDF (.pdf)
                 </button>
 
                 <button
                   onClick={() => handleDownloadSingleHtml(selectedPolicy)}
                   className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-md"
-                  title="Download Standardized Self-Contained HTML File"
+                  title="Download Standalone Standardized HTML Document (.html)"
                 >
-                  <FileCode className="w-3.5 h-3.5" /> Download HTML (.html)
+                  <Download className="w-3.5 h-3.5" /> Download HTML (.html)
+                </button>
+
+                <button
+                  onClick={() => {
+                    setHtmlScriptModalPolicy(selectedPolicy);
+                    setHtmlScriptActiveTab('preview');
+                  }}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-md"
+                  title="Prepare, View & Copy Complete HTML Script for Document"
+                >
+                  <FileCode className="w-3.5 h-3.5" /> HTML Script
+                </button>
+
+                <button
+                  onClick={() => handlePrintPolicyPdf(selectedPolicy)}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5"
+                  title="Direct Print Layout"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Print A4
                 </button>
 
                 <button
@@ -2892,7 +4002,7 @@ export default function PolicyFrameworksSetup({
                   {(selectedPolicy.is_frozen || selectedPolicy.status === 'FROZEN') ? 'Unfreeze Document' : 'Freeze Document'}
                 </button>
 
-                {onDeletePolicy && (
+                {onDeletePolicy && !isMasterClient && (
                   <button
                     type="button"
                     onClick={() => setConfirmDeletePolicy(selectedPolicy)}
@@ -2901,6 +4011,14 @@ export default function PolicyFrameworksSetup({
                   >
                     <Trash2 className="w-3.5 h-3.5" /> Delete Record
                   </button>
+                )}
+                {isMasterClient && (
+                  <span
+                    className="px-3 py-1.5 bg-slate-800 text-slate-400 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 border border-slate-700 cursor-not-allowed select-none"
+                    title="Master template policy records are permanently protected from deletion"
+                  >
+                    <Shield className="w-3.5 h-3.5 text-indigo-400" /> Master Protected
+                  </span>
                 )}
 
                 <button
@@ -3074,9 +4192,39 @@ export default function PolicyFrameworksSetup({
                     </div>
 
                     <div>
-                      <div className="flex justify-between items-center mb-1">
+                      <div className="flex flex-wrap justify-between items-center gap-1 mb-1">
                         <label className="block font-bold text-slate-300 text-[11px]">Document Content & Statement (HTML / Markdown)</label>
-                        <span className="text-[9px] text-amber-300 font-mono">Supports HTML & Tables</span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (selectedPolicy) {
+                                const current = selectedPolicy.policy_statement || selectedPolicy.full_content || '';
+                                const cleaned = formatContentToBulletsAndClean(current);
+                                setSelectedPolicy({ ...selectedPolicy, policy_statement: cleaned, full_content: cleaned });
+                                showToast('✓ Converted numbered lists to bullet points');
+                              }
+                            }}
+                            className="px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded text-[10px] font-bold cursor-pointer inline-flex items-center gap-1"
+                            title="Convert numbered lists (1., 2), etc.) into bullet points without losing text"
+                          >
+                            <Sparkles className="w-3 h-3 text-amber-400" /> Convert to Bullets
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (selectedPolicy) {
+                                setHtmlScriptModalPolicy(selectedPolicy);
+                                setHtmlScriptActiveTab('preview');
+                              }
+                            }}
+                            className="px-2 py-0.5 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 border border-indigo-500/40 rounded text-[10px] font-bold cursor-pointer inline-flex items-center gap-1"
+                            title="Prepare, View & Copy Complete HTML Script"
+                          >
+                            <FileCode className="w-3 h-3 text-indigo-400" /> Prepare HTML Script
+                          </button>
+                          <span className="text-[9px] text-emerald-400 font-mono">Supports HTML & Tables</span>
+                        </div>
                       </div>
                       <textarea
                         rows={11}
@@ -3172,6 +4320,23 @@ export default function PolicyFrameworksSetup({
                     }
                   `}</style>
 
+                  {/* NON-APPLICABLE FACILITY SCOPE NOTICE */}
+                  {isPolicyNotApplicable(selectedPolicy) && (
+                    <div className="mb-3 p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center justify-between text-rose-900 text-xs font-bold no-print">
+                      <div className="flex items-center gap-2">
+                        <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                        <span>This policy is marked as <strong>NOT APPLICABLE</strong> for {client?.company_name || 'the selected facility'}.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleTogglePolicyApplicability(selectedPolicy, true)}
+                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-black cursor-pointer shadow-xs transition-colors"
+                      >
+                        Restore to Applicable
+                      </button>
+                    </div>
+                  )}
+
                   {/* TOP FACILITY HEADER */}
                   <div className="space-y-4">
                     <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
@@ -3259,43 +4424,327 @@ export default function PolicyFrameworksSetup({
                     </div>
                   </div>
 
-                  {/* SIGNATORIES & LEGAL SEAL FOOTER */}
-                  <div className="pt-6 border-t-2 border-slate-900 w-full px-1 sm:px-2 mt-auto">
-                    <div className={`grid ${previewShowReviewedBy ? 'grid-cols-3' : 'grid-cols-2'} gap-4 items-stretch w-full`}>
-                      
-                      {/* PREPARED BY */}
-                      <div className="space-y-1.5 p-3 bg-slate-50 border border-slate-200 rounded text-center">
-                        <span className="text-[9px] uppercase font-extrabold text-slate-500 block tracking-wider">Prepared By</span>
-                        <strong className="text-slate-900 font-bold block text-[11px]">{selectedPolicy.prepared_by || 'HR Director'}</strong>
-                        <span className="text-[9.5px] text-slate-600 block">HR Director</span>
-                        <div className="mt-2 text-[9px] text-emerald-700 font-mono italic">
-                          ✓ Digital Sign: {selectedPolicy.prepared_by || 'HR Director'}
+                  {/* POLICY VERSION HISTORY & DOCUMENT CONTROL REVISION LOG */}
+                  <div className="my-5 border border-slate-300 rounded-lg overflow-hidden bg-white shadow-xs px-0">
+                    <div className="bg-slate-900 text-white px-3.5 py-2 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <History className="w-4 h-4 text-sky-400" />
+                        <div>
+                          <h4 className="text-[11px] font-black uppercase tracking-wider text-white">Policy Version History</h4>
+                          <p className="text-[8.5px] text-slate-300 font-normal">Document Control &amp; Audit Revision Log</p>
                         </div>
                       </div>
-
-                      {/* REVIEWED BY */}
-                      {previewShowReviewedBy && (
-                        <div className="space-y-1.5 p-3 bg-slate-50 border border-slate-200 rounded text-center">
-                          <span className="text-[9px] uppercase font-extrabold text-slate-500 block tracking-wider">Reviewed By</span>
-                          <strong className="text-slate-900 font-bold block text-[11px]">{previewReviewedBy || selectedPolicy.reviewed_by || 'Compliance Officer'}</strong>
-                          <span className="text-[9.5px] text-slate-600 block">Compliance Officer</span>
-                          <div className="mt-2 text-[9px] text-emerald-700 font-mono italic">
-                            ✓ Digital Sign: {previewReviewedBy || selectedPolicy.reviewed_by || 'Reviewed'}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* APPROVED BY */}
-                      <div className="space-y-1.5 p-3 bg-slate-50 border border-slate-200 rounded text-center">
-                        <span className="text-[9px] uppercase font-extrabold text-slate-500 block tracking-wider">Approved By</span>
-                        <strong className="text-slate-900 font-bold block text-[11px]">{selectedPolicy.approved_by || 'Risk Lead'}</strong>
-                        <span className="text-[9.5px] text-slate-600 block">Risk Lead</span>
-                        <div className="mt-2 text-[9px] text-emerald-700 font-mono italic">
-                          ✓ Digital Sign: Approved
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9.5px] text-slate-300">
+                          Current Active Version: <strong className="font-mono text-sky-300 font-bold bg-slate-800 px-2 py-0.5 rounded border border-slate-700">{selectedPolicy.version || 'v1.0'}</strong>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingVersionIndex(null);
+                            setShowAddVersionForm(!showAddVersionForm);
+                            if (!showAddVersionForm) {
+                              const currentVer = selectedPolicy.version || 'v1.0';
+                              const num = parseFloat(currentVer.replace(/[^0-9.]/g, '')) || 1.0;
+                              setNewVersionNum(`v${(num + 0.1).toFixed(1)}`);
+                              setNewVersionDate(new Date().toISOString().split('T')[0]);
+                              setNewVersionAuthor(selectedPolicy.prepared_by || 'Aseef Sulaiman');
+                              setNewVersionChanges('Annual policy revision, governance audit review, and clause updates.');
+                            }
+                          }}
+                          className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-[10px] font-bold cursor-pointer transition-all inline-flex items-center gap-1 shadow-xs"
+                          title="Add new revision entry"
+                        >
+                          <Plus className="w-3 h-3" /> + Add Version Record
+                        </button>
                       </div>
                     </div>
+
+                    {/* Edit Version Record Entry Form */}
+                    {editingVersionIndex !== null && (
+                      <div className="p-3 bg-amber-50/90 border-b border-amber-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10.5px] font-bold text-amber-950 flex items-center gap-1.5">
+                            <Pencil className="w-3.5 h-3.5 text-amber-600" /> Edit Version Record Entry (Row #{editingVersionIndex + 1})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setEditingVersionIndex(null)}
+                            className="text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
+                          <div>
+                            <label className="block text-[9.5px] font-bold text-slate-700 mb-0.5">Version Number *</label>
+                            <input
+                              type="text"
+                              value={editVersionNum}
+                              onChange={e => setEditVersionNum(e.target.value)}
+                              placeholder="e.g. v1.0, v1.1"
+                              className="w-full p-1.5 bg-white border border-amber-300 rounded font-mono text-[10.5px] text-slate-900 font-bold focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9.5px] font-bold text-slate-700 mb-0.5">Date *</label>
+                            <input
+                              type="date"
+                              value={editVersionDate}
+                              onChange={e => setEditVersionDate(e.target.value)}
+                              className="w-full p-1.5 bg-white border border-amber-300 rounded text-[10.5px] text-slate-900 focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9.5px] font-bold text-slate-700 mb-0.5">Author / Reviewer *</label>
+                            <input
+                              type="text"
+                              value={editVersionAuthor}
+                              onChange={e => setEditVersionAuthor(e.target.value)}
+                              placeholder="e.g. Aseef Sulaiman"
+                              className="w-full p-1.5 bg-white border border-amber-300 rounded text-[10.5px] text-slate-900 focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                        <div className="mb-2">
+                          <label className="block text-[9.5px] font-bold text-slate-700 mb-0.5">Summary of Changes / Remarks *</label>
+                          <textarea
+                            rows={2}
+                            value={editVersionChanges}
+                            onChange={e => setEditVersionChanges(e.target.value)}
+                            placeholder="Detail the scope of changes, regulatory revisions, or compliance audit updates..."
+                            className="w-full p-1.5 bg-white border border-amber-300 rounded text-[10.5px] text-slate-900 focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditingVersionIndex(null)}
+                            className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded text-[10px] font-bold cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveEditVersionRecord(selectedPolicy)}
+                            className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-[10px] font-bold cursor-pointer inline-flex items-center gap-1 shadow-xs"
+                          >
+                            <Check className="w-3 h-3" /> Save Changes
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* New Version Record Entry Form */}
+                    {showAddVersionForm && (
+                      <div className="p-3 bg-indigo-50/80 border-b border-indigo-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10.5px] font-bold text-indigo-950 flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-indigo-600" /> New Version Record Entry
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowAddVersionForm(false)}
+                            className="text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
+                          <div>
+                            <label className="block text-[9.5px] font-bold text-slate-700 mb-0.5">Version Number *</label>
+                            <input
+                              type="text"
+                              value={newVersionNum}
+                              onChange={e => setNewVersionNum(e.target.value)}
+                              placeholder="e.g. v1.1, v2.0"
+                              className="w-full p-1.5 bg-white border border-slate-300 rounded font-mono text-[10.5px] text-slate-900 font-bold focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9.5px] font-bold text-slate-700 mb-0.5">Date *</label>
+                            <input
+                              type="date"
+                              value={newVersionDate}
+                              onChange={e => setNewVersionDate(e.target.value)}
+                              className="w-full p-1.5 bg-white border border-slate-300 rounded text-[10.5px] text-slate-900 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9.5px] font-bold text-slate-700 mb-0.5">Author / Reviewer *</label>
+                            <input
+                              type="text"
+                              value={newVersionAuthor}
+                              onChange={e => setNewVersionAuthor(e.target.value)}
+                              placeholder="e.g. Aseef Sulaiman"
+                              className="w-full p-1.5 bg-white border border-slate-300 rounded text-[10.5px] text-slate-900 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                        <div className="mb-2">
+                          <label className="block text-[9.5px] font-bold text-slate-700 mb-0.5">Summary of Changes / Remarks *</label>
+                          <textarea
+                            rows={2}
+                            value={newVersionChanges}
+                            onChange={e => setNewVersionChanges(e.target.value)}
+                            placeholder="Detail the scope of changes, regulatory revisions, or compliance audit updates..."
+                            className="w-full p-1.5 bg-white border border-slate-300 rounded text-[10.5px] text-slate-900 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowAddVersionForm(false)}
+                            className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded text-[10px] font-bold cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveNewVersionRecord(selectedPolicy)}
+                            className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[10px] font-bold cursor-pointer inline-flex items-center gap-1 shadow-xs"
+                          >
+                            <Check className="w-3 h-3" /> Save Version
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Version History Table */}
+                    <table className="w-full border-collapse text-[9.5px]">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-300 text-slate-800 font-bold uppercase tracking-wider text-[8.5px]">
+                          <th className="p-1.5 text-left border-r border-slate-300 w-20">Version</th>
+                          <th className="p-1.5 text-left border-r border-slate-300 w-24">Date</th>
+                          <th className="p-1.5 text-left border-r border-slate-300 w-44">Author / Reviewer</th>
+                          <th className="p-1.5 text-left">Summary of Changes / Remarks</th>
+                          <th className="p-1.5 text-center w-16">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {getPolicyVersionRecords(selectedPolicy).map((rec, idx) => {
+                          const isCurrentlyEditing = editingVersionIndex === idx;
+                          return (
+                            <tr
+                              key={idx}
+                              className={
+                                isCurrentlyEditing
+                                  ? 'bg-amber-50/70 border-y-2 border-amber-400'
+                                  : idx % 2 === 0
+                                  ? 'bg-white'
+                                  : 'bg-slate-50/60'
+                              }
+                            >
+                              <td className="p-1.5 font-mono font-bold text-indigo-700 border-r border-slate-200 whitespace-nowrap">
+                                {rec.version}
+                              </td>
+                              <td className="p-1.5 text-slate-700 border-r border-slate-200 whitespace-nowrap">
+                                {rec.date}
+                              </td>
+                              <td className="p-1.5 font-semibold text-slate-800 border-r border-slate-200">
+                                {rec.author}
+                              </td>
+                              <td className="p-1.5 text-slate-700 leading-tight">
+                                {rec.changes}
+                              </td>
+                              <td className="p-1.5 text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditVersionRecord(selectedPolicy, idx)}
+                                    className="text-slate-400 hover:text-indigo-600 p-0.5 rounded cursor-pointer transition-colors"
+                                    title="Edit this version record"
+                                  >
+                                    <Pencil className="w-3 h-3" />
+                                  </button>
+                                  {getPolicyVersionRecords(selectedPolicy).length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteVersionRecord(selectedPolicy, idx)}
+                                      className="text-slate-400 hover:text-rose-600 p-0.5 rounded cursor-pointer transition-colors"
+                                      title="Remove version record"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
+
+                  {/* SIGNATORIES & LEGAL SEAL FOOTER */}
+                  {(() => {
+                    const resolved = getResolvedSignatories(selectedPolicy);
+                    const currentFacilityStamp = client?.facility_stamp;
+                    return (
+                      <div className="pt-6 border-t-2 border-slate-900 w-full px-1 sm:px-2 mt-auto relative">
+                        {currentFacilityStamp && (
+                          <img
+                            src={currentFacilityStamp}
+                            alt="Official Facility Seal"
+                            style={{ width: '4.5cm', height: '4.5cm', maxWidth: '4.5cm', maxHeight: '4.5cm' }}
+                            className="facility-stamp-seal absolute right-2 bottom-1 object-contain opacity-90 pointer-events-none -rotate-3 z-10"
+                          />
+                        )}
+                        <div className={`grid ${previewShowReviewedBy ? 'grid-cols-3' : 'grid-cols-2'} gap-3 items-stretch w-full`}>
+                          
+                          {/* PREPARED BY */}
+                          <div className="space-y-1 p-3 bg-white border border-slate-300 rounded-lg text-center shadow-2xs flex flex-col justify-between min-h-[85px]">
+                            <div>
+                              <span className="text-[8.5px] uppercase font-extrabold text-slate-500 block tracking-wider">Prepared By</span>
+                              <strong className="text-slate-900 font-extrabold block text-[10.5px] mt-0.5">{resolved.preparedName}</strong>
+                              <span className="text-[8.5px] text-slate-600 block">{resolved.preparedRole}</span>
+                            </div>
+                            {resolved.preparedSig ? (
+                              <img src={resolved.preparedSig} alt="Signature" className="h-7 max-w-[110px] object-contain mx-auto mt-1" />
+                            ) : (
+                              <div className="mt-1 text-[8.5px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded font-mono italic inline-block font-semibold">
+                                ✓ Digital Sign: {resolved.preparedName}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* REVIEWED BY */}
+                          {previewShowReviewedBy && (
+                            <div className="space-y-1 p-3 bg-white border border-slate-300 rounded-lg text-center shadow-2xs flex flex-col justify-between min-h-[85px]">
+                              <div>
+                                <span className="text-[8.5px] uppercase font-extrabold text-slate-500 block tracking-wider">Reviewed By</span>
+                                <strong className="text-slate-900 font-extrabold block text-[10.5px] mt-0.5">{previewReviewedBy || resolved.reviewedName}</strong>
+                                <span className="text-[8.5px] text-slate-600 block">{resolved.reviewedRole}</span>
+                              </div>
+                              {resolved.reviewedSig ? (
+                                <img src={resolved.reviewedSig} alt="Signature" className="h-7 max-w-[110px] object-contain mx-auto mt-1" />
+                              ) : (
+                                <div className="mt-1 text-[8.5px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded font-mono italic inline-block font-semibold">
+                                  ✓ Digital Sign: {previewReviewedBy || resolved.reviewedName}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* APPROVED BY */}
+                          <div className="space-y-1 p-3 bg-white border border-slate-300 rounded-lg text-center shadow-2xs flex flex-col justify-between min-h-[85px]">
+                            <div>
+                              <span className="text-[8.5px] uppercase font-extrabold text-slate-500 block tracking-wider">Approved By</span>
+                              <strong className="text-slate-900 font-extrabold block text-[10.5px] mt-0.5">{resolved.approvedName}</strong>
+                              <span className="text-[8.5px] text-slate-600 block">{resolved.approvedRole}</span>
+                            </div>
+                            {resolved.approvedSig ? (
+                              <img src={resolved.approvedSig} alt="Signature" className="h-7 max-w-[110px] object-contain mx-auto mt-1" />
+                            ) : (
+                              <div className="mt-1 text-[8.5px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded font-mono italic inline-block font-semibold">
+                                ✓ Digital Sign: Approved
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
@@ -3620,6 +5069,104 @@ export default function PolicyFrameworksSetup({
           </div>
         </div>
       )}
+      {/* MASTER SECURITY UNLOCK MODAL (PASSWORD: 663385) */}
+      {showSecurityUnlockModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-xs p-4 animate-fadeIn font-sans">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 overflow-hidden text-left">
+            <div className="p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-500/20 text-amber-400 rounded-2xl border border-amber-500/30">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-white flex items-center gap-1.5">
+                    Master Protection Unlock
+                  </h3>
+                  <p className="text-[11px] text-slate-300">Protected Mode Security Key Verification</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowSecurityUnlockModal(false);
+                  setSecurityPinError(null);
+                  setSecurityPinInput('');
+                  setPendingActionOnUnlock(null);
+                }}
+                className="text-slate-400 hover:text-white p-1 rounded-full cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleVerifySecurityPin} className="p-6 space-y-4 text-xs text-slate-700">
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 text-xs space-y-1">
+                <div className="font-bold flex items-center gap-1.5">
+                  <Lock className="w-4 h-4 text-amber-700" />
+                  <span>Master Protection Key Required</span>
+                </div>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  Enter the Master Security PIN to unlock master template modifications, deletion rights, and protected governance controls.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-bold text-slate-800 text-xs">
+                  Authorization Security Key *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPinPassword ? "text" : "password"}
+                    autoFocus
+                    value={securityPinInput}
+                    onChange={e => {
+                      setSecurityPinInput(e.target.value);
+                      if (securityPinError) setSecurityPinError(null);
+                    }}
+                    placeholder="Enter Security PIN (e.g. 123456)..."
+                    className="w-full pl-3.5 pr-10 py-2.5 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white font-mono font-bold text-slate-900 text-sm tracking-wider focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPinPassword(prev => !prev)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    title={showPinPassword ? "Hide PIN" : "Show PIN"}
+                  >
+                    {showPinPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {securityPinError && (
+                  <p className="text-[11px] text-rose-600 font-bold flex items-center gap-1 pt-1">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    {securityPinError}
+                  </p>
+                )}
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSecurityUnlockModal(false);
+                    setSecurityPinError(null);
+                    setSecurityPinInput('');
+                    setPendingActionOnUnlock(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-xs text-slate-700 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-extrabold text-xs shadow-md cursor-pointer transition-all flex items-center gap-1.5"
+                >
+                  <Unlock className="w-4 h-4" /> Verify &amp; Unlock
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* COPY TO CLIENT MODAL */}
       {copyClientModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 overflow-y-auto animate-fadeIn font-sans">
@@ -3711,6 +5258,309 @@ export default function PolicyFrameworksSetup({
               >
                 <Copy className="w-4 h-4" /> Confirm &amp; Copy Policy
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HTML SCRIPT GENERATOR & STANDALONE LIVE PREVIEW MODAL */}
+      {htmlScriptModalPolicy && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto animate-fadeIn font-sans">
+          <div className="bg-slate-900 w-full max-w-5xl rounded-3xl shadow-2xl border border-slate-700 overflow-hidden flex flex-col max-h-[95vh]">
+            {/* Colored Header Banner */}
+            <div className="p-4 bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-950 text-white flex items-center justify-between border-b border-indigo-900/60">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-indigo-600/30 text-indigo-300 rounded-xl border border-indigo-500/40">
+                  <FileCode className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-indigo-300 font-bold bg-indigo-900/60 px-2 py-0.5 rounded border border-indigo-700/60">
+                      {htmlScriptModalPolicy.policy_no}
+                    </span>
+                    <h3 className="font-bold text-sm text-white truncate max-w-md sm:max-w-xl">
+                      {resolveDocTitle(htmlScriptModalPolicy.policy_name, htmlScriptModalPolicy.company_name || client?.company_name)}
+                    </h3>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Standard A4 Document Layout (210mm × 297mm) • Compact Dynamic Tables • Bulleted Lists • Corporate Colored Header
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setHtmlScriptModalPolicy(null)}
+                  className="text-slate-400 hover:text-white p-1.5 rounded-full hover:bg-slate-800 cursor-pointer transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Sub-Header Toolbar */}
+            <div className="px-4 py-2.5 bg-slate-950 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+              {/* Tab Selector */}
+              <div className="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setHtmlScriptActiveTab('preview')}
+                  className={`px-3 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    htmlScriptActiveTab === 'preview'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Eye className="w-3.5 h-3.5" /> A4 Live Document Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHtmlScriptActiveTab('code')}
+                  className={`px-3 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    htmlScriptActiveTab === 'code'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <FileCode className="w-3.5 h-3.5" /> Standalone HTML Script Code
+                </button>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const formatted = formatContentToBulletsAndClean(htmlScriptModalPolicy.policy_statement || htmlScriptModalPolicy.full_content || '');
+                    const updated = { ...htmlScriptModalPolicy, policy_statement: formatted, full_content: formatted };
+                    setHtmlScriptModalPolicy(updated);
+                    if (onUpdatePolicy && htmlScriptModalPolicy.id && !htmlScriptModalPolicy.id.startsWith('temp')) {
+                      onUpdatePolicy(updated);
+                    }
+                    showToast('✓ Converted numbered lists to bullet points & normalized table layout');
+                  }}
+                  className="px-3 py-1.5 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/40 rounded-xl font-bold text-xs cursor-pointer transition-all inline-flex items-center gap-1.5"
+                  title="Normalize numbered lists to bullet points and clean structure"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Convert to Bullets &amp; Clean
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handlePrintPolicyPdf(htmlScriptModalPolicy)}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-md"
+                  title="Download & Export Policy as PDF (.pdf)"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download .pdf
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleDownloadSingleHtml(htmlScriptModalPolicy)}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-md"
+                  title="Download HTML Document File (.html)"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download .html
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleCopyHtmlCode(htmlScriptModalPolicy)}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 rounded-xl font-bold text-xs cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-md"
+                  title="Copy Full Self-Contained HTML Script to Clipboard"
+                >
+                  <Copy className="w-3.5 h-3.5" /> Copy HTML Script
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handlePrintPolicyPdf(htmlScriptModalPolicy)}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-bold text-xs cursor-pointer transition-all inline-flex items-center gap-1.5 border border-slate-700"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Print A4
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 bg-slate-950 flex-1 overflow-y-auto custom-scrollbar">
+              {htmlScriptActiveTab === 'preview' ? (
+                <div className="flex justify-center items-center py-2">
+                  <div className="w-full max-w-[210mm] bg-white rounded shadow-2xl border border-slate-300 p-8 sm:px-[15mm] py-8 text-slate-900 text-xs">
+                    {/* Header Bar with Color Accent */}
+                    <div className="flex items-center justify-between border-b-2 border-slate-900 pb-3 mb-3">
+                      <div>
+                        <h2 className="text-sm font-black uppercase text-slate-900 tracking-tight">
+                          {htmlScriptModalPolicy.company_name || client?.company_name || 'Healthcare Facility'}
+                        </h2>
+                        <p className="text-[9.5px] text-slate-500">
+                          {client?.address || 'Abu Dhabi'}, {client?.city || 'United Arab Emirates'}
+                        </p>
+                      </div>
+                      <div className="font-mono text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded border border-indigo-200">
+                        {htmlScriptModalPolicy.policy_no}
+                      </div>
+                    </div>
+
+                    {/* Colored Title Banner */}
+                    <div className="bg-slate-900 text-white text-center py-2 px-3 rounded text-[12px] font-bold uppercase tracking-wider mb-3 shadow-xs">
+                      {resolveDocTitle(htmlScriptModalPolicy.policy_name, htmlScriptModalPolicy.company_name || client?.company_name)}
+                      {htmlScriptModalPolicy.company_name && !/smartpro/i.test(htmlScriptModalPolicy.company_name) && (
+                        <span className="text-sky-300 font-normal"> — {htmlScriptModalPolicy.company_name}</span>
+                      )}
+                    </div>
+
+                    {/* Document Control Information Log */}
+                    <table className="w-full border-collapse border border-slate-300 text-[6.5px] mb-3">
+                      <thead>
+                        <tr className="bg-slate-900 text-white font-bold uppercase tracking-wider">
+                          <th colSpan={4} className="py-1 px-2 text-center text-[6.5px]">Document Control Information Log</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b border-slate-200">
+                          <td className="p-1.5 font-bold bg-slate-100 text-slate-700 w-1/4 border-r border-slate-200">Reference Code</td>
+                          <td className="p-1.5 font-mono font-bold text-indigo-700 w-1/4 border-r border-slate-200">{htmlScriptModalPolicy.policy_no}</td>
+                          <td className="p-1.5 font-bold bg-slate-100 text-slate-700 w-1/4 border-r border-slate-200">Category</td>
+                          <td className="p-1.5 text-slate-800 font-semibold w-1/4">{htmlScriptModalPolicy.category}</td>
+                        </tr>
+                        <tr className="border-b border-slate-200">
+                          <td className="p-1.5 font-bold bg-slate-100 text-slate-700 border-r border-slate-200">Version</td>
+                          <td className="p-1.5 font-mono text-slate-800 border-r border-slate-200">{htmlScriptModalPolicy.version || 'v1.0'}</td>
+                          <td className="p-1.5 font-bold bg-slate-100 text-slate-700 border-r border-slate-200">Classification</td>
+                          <td className="p-1.5 font-bold text-rose-700">{htmlScriptModalPolicy.classification || 'CONFIDENTIAL'}</td>
+                        </tr>
+                        <tr className="border-b border-slate-200">
+                          <td className="p-1.5 font-bold bg-slate-100 text-slate-700 border-r border-slate-200">Issue / Effective Date</td>
+                          <td className="p-1.5 text-slate-800 border-r border-slate-200">{htmlScriptModalPolicy.effective_date || htmlScriptModalPolicy.approval_date || new Date().toISOString().split('T')[0]}</td>
+                          <td className="p-1.5 font-bold bg-slate-100 text-slate-700 border-r border-slate-200">Revision Date</td>
+                          <td className="p-1.5 text-slate-800">{htmlScriptModalPolicy.review_date || '2027-08-06'}</td>
+                        </tr>
+                        <tr className="bg-amber-50">
+                          <td className="p-1.5 font-bold text-amber-900 border-r border-slate-200" colSpan={2}>Next Due Revision Date</td>
+                          <td className="p-1.5 font-bold text-amber-900" colSpan={2}>{htmlScriptModalPolicy.next_due_date || '2027-08-01'}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+
+                    {/* Formatted Policy Body */}
+                    <div
+                      className="text-xs text-slate-800 leading-normal [&_ol]:list-disc [&_ul]:list-disc [&_ol]:pl-5 [&_ul]:pl-5 [&_li]:my-0.5 [&_p]:my-1.5 [&_p]:text-justify [&_li]:text-justify [&_h1]:text-xs [&_h1]:font-bold [&_h1]:uppercase [&_h1]:text-slate-900 [&_h1]:border-b [&_h1]:border-slate-300 [&_h1]:pb-0.5 [&_h1]:mt-2.5 [&_h1]:mb-1 [&_h2]:text-xs [&_h2]:font-bold [&_h2]:uppercase [&_h2]:text-slate-900 [&_h2]:border-b [&_h2]:border-slate-300 [&_h2]:pb-0.5 [&_h2]:mt-2.5 [&_h2]:mb-1 [&_h3]:text-xs [&_h3]:font-bold [&_h3]:uppercase [&_h3]:text-slate-900 [&_h3]:border-b [&_h3]:border-slate-300 [&_h3]:pb-0.5 [&_h3]:mt-2.5 [&_h3]:mb-1 [&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_table]:border [&_table]:border-slate-300 [&_th]:bg-slate-900 [&_th]:text-white [&_th]:p-1.5 [&_th]:font-bold [&_th]:text-[9.5px] [&_th]:uppercase [&_td]:border [&_td]:border-slate-200 [&_td]:p-1.5 [&_td]:text-justify"
+                      dangerouslySetInnerHTML={{
+                        __html: formatCleanPolicyStatement(
+                          htmlScriptModalPolicy.policy_statement || htmlScriptModalPolicy.full_content || '',
+                          htmlScriptModalPolicy.policy_name,
+                          htmlScriptModalPolicy.company_name || client?.company_name || '',
+                          pageBreakSections
+                        )
+                      }}
+                    />
+
+                    {/* Policy Version History & Document Control Revision Log */}
+                    <div className="my-4 border border-slate-300 rounded-lg overflow-hidden bg-white shadow-xs">
+                      <div className="bg-slate-900 text-white px-3 py-1.5 flex justify-between items-center text-[10px] font-bold uppercase tracking-wider">
+                        <span className="flex items-center gap-1.5">
+                          <History className="w-3.5 h-3.5 text-sky-400" /> Policy Version History • Document Control Log
+                        </span>
+                        <span className="font-mono text-[9px] bg-slate-800 px-2 py-0.5 rounded text-sky-300 border border-slate-700">
+                          Active: {htmlScriptModalPolicy.version || 'v1.0'}
+                        </span>
+                      </div>
+                      <table className="w-full border-collapse text-[9px]">
+                        <thead>
+                          <tr className="bg-slate-100 border-b border-slate-300 text-slate-800 font-bold uppercase text-[8px]">
+                            <th className="p-1.5 text-left border-r border-slate-300 w-16">Version</th>
+                            <th className="p-1.5 text-left border-r border-slate-300 w-24">Date</th>
+                            <th className="p-1.5 text-left border-r border-slate-300 w-44">Author / Reviewer</th>
+                            <th className="p-1.5 text-left">Summary of Changes / Remarks</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {getPolicyVersionRecords(htmlScriptModalPolicy).map((rec, idx) => (
+                            <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
+                              <td className="p-1.5 font-mono font-bold text-indigo-700 border-r border-slate-200">{rec.version}</td>
+                              <td className="p-1.5 text-slate-700 border-r border-slate-200">{rec.date}</td>
+                              <td className="p-1.5 font-semibold text-slate-800 border-r border-slate-200">{rec.author}</td>
+                              <td className="p-1.5 text-slate-700">{rec.changes}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Signatories Footer */}
+                    {(() => {
+                      const resSig = getResolvedSignatories(htmlScriptModalPolicy);
+                      return (
+                        <div className={`grid ${resSig.isReviewedIncluded ? 'grid-cols-3' : 'grid-cols-2'} gap-3 pt-6 border-t-2 border-slate-900 mt-6 text-center text-[10px]`}>
+                          <div className="p-3 bg-white border border-slate-300 rounded-lg shadow-2xs flex flex-col justify-between min-h-[85px]">
+                            <div>
+                              <span className="text-[8.5px] uppercase font-extrabold text-slate-500 block tracking-wider">Prepared By</span>
+                              <strong className="text-slate-900 block text-[10.5px] mt-0.5 font-extrabold">{resSig.preparedName}</strong>
+                              <span className="text-[8.5px] text-slate-600 block">{resSig.preparedRole}</span>
+                            </div>
+                            {resSig.preparedSig ? (
+                              <img src={resSig.preparedSig} alt="Signature" className="h-7 max-w-[110px] object-contain mx-auto mt-1" />
+                            ) : (
+                              <div className="text-[8.5px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded font-mono italic mt-1 inline-block font-semibold">
+                                ✓ Digital Sign: {resSig.preparedName}
+                              </div>
+                            )}
+                          </div>
+
+                          {resSig.isReviewedIncluded && (
+                            <div className="p-3 bg-white border border-slate-300 rounded-lg shadow-2xs flex flex-col justify-between min-h-[85px]">
+                              <div>
+                                <span className="text-[8.5px] uppercase font-extrabold text-slate-500 block tracking-wider">Reviewed By</span>
+                                <strong className="text-slate-900 block text-[10.5px] mt-0.5 font-extrabold">{resSig.reviewedName}</strong>
+                                <span className="text-[8.5px] text-slate-600 block">{resSig.reviewedRole}</span>
+                              </div>
+                              {resSig.reviewedSig ? (
+                                <img src={resSig.reviewedSig} alt="Signature" className="h-7 max-w-[110px] object-contain mx-auto mt-1" />
+                              ) : (
+                                <div className="text-[8.5px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded font-mono italic mt-1 inline-block font-semibold">
+                                  ✓ Digital Sign: {resSig.reviewedName}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="p-3 bg-white border border-slate-300 rounded-lg shadow-2xs flex flex-col justify-between min-h-[85px]">
+                            <div>
+                              <span className="text-[8.5px] uppercase font-extrabold text-slate-500 block tracking-wider">Approved By</span>
+                              <strong className="text-slate-900 block text-[10.5px] mt-0.5 font-extrabold">{resSig.approvedName}</strong>
+                              <span className="text-[8.5px] text-slate-600 block">{resSig.approvedRole}</span>
+                            </div>
+                            {resSig.approvedSig ? (
+                              <img src={resSig.approvedSig} alt="Signature" className="h-7 max-w-[110px] object-contain mx-auto mt-1" />
+                            ) : (
+                              <div className="text-[8.5px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded font-mono italic mt-1 inline-block font-semibold">
+                                ✓ Digital Sign: Approved
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              ) : (
+                <div className="relative">
+                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 text-xs text-slate-400">
+                    <span className="font-mono text-emerald-400">Standalone Self-Contained HTML Script Output</span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyHtmlCode(htmlScriptModalPolicy)}
+                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <Copy className="w-3 h-3" /> Copy Full HTML
+                    </button>
+                  </div>
+                  <pre className="p-4 bg-slate-900 text-emerald-300 font-mono text-[11px] rounded-xl border border-slate-800 overflow-x-auto whitespace-pre leading-relaxed select-all max-h-[600px]">
+                    {generateStandardizedPolicyHtml(htmlScriptModalPolicy)}
+                  </pre>
+                </div>
+              )}
             </div>
           </div>
         </div>

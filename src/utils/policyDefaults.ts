@@ -472,7 +472,7 @@ Access to all restricted and high-security zones must be actively managed and mo
     defaults.compliance_checks = `The Administration and IT team perform quarterly physical inspections, badge audits, and keyholder verification scans.`;
     defaults.compliance_exceptions = `Exceptions to zone restrictions require written, temporary authorization from both the IT Manager and the Managing Director.`;
 
-  } else if (normNo === 'POL-SEC-024' || normNo === 'M-POLICY-004' || normTitle.includes('risk management')) {
+  } else if (normNo === 'POL-SEC-024' || normNo === 'M-POLICY-004' || normNo === 'M-P004' || normNo === 'M-P4' || normNo === 'M-POLICY-04' || normTitle.includes('risk management')) {
     defaults.objective = `The purpose of this Risk Management Policy is to establish a structured and consistent approach to identifying, analyzing, evaluating, treating, and monitoring risks that may impact business operations, patient safety, regulatory compliance, and the Confidentiality, Integrity, and Availability (CIA) of information assets. This policy supports business continuity, regulatory compliance, and continual improvement, and is aligned with:
 •	ISO 27001:2022 – Information Security Risk Management
 •	ISO 31000 – Risk Management Principles and Framework
@@ -485,7 +485,6 @@ Managing Director / Manager / IT Manager / Risk Owners and Asset Owners / Employ
 The scope includes all organizational processes, IT systems, information assets, documentation, and services relevant to risk management within [Entity Name].`;
     
     defaults.resp_it_manager = `•	Develops, maintains, and enforces this Risk Management Policy.
-•	Facilitates risk assessments and supports implementation of risk treatment plans.
 •	Ensures alignment with ISO standards and regulatory requirements.
 •	Conducts risk management and information security awareness programs.`;
     
@@ -642,9 +641,9 @@ Inherent Risk Score = Asset Value × Impact (I) × Likelihood
 
 Risk acceptance must align with the organization’s Risk Appetite and be formally approved and documented.
 
-<div class="my-4 flex flex-col items-center justify-center w-full text-center">
-  <img src="/risk_matrix_chart.jpg" alt="Healthcare Cybersecurity Risk Assessment Framework" class="max-w-full h-auto rounded-lg border border-slate-300 shadow-md object-contain max-h-[420px] mx-auto" />
-  <p class="text-[10px] text-slate-500 font-bold italic mt-1.5 text-center">Figure 1: Healthcare Cybersecurity Risk Assessment Framework &amp; Criteria</p>
+<div class="figure-container my-3 flex flex-col items-center justify-center w-full text-center" style="max-width: 100%; margin: 8px auto; text-align: center; page-break-inside: avoid; break-inside: avoid;">
+  <img src="https://lh3.googleusercontent.com/d/1IGYItCxnI4Ky7DQXuIUxsesmkzK-V4uj" onerror="this.onerror=null; this.src='https://drive.google.com/uc?export=view&id=1IGYItCxnI4Ky7DQXuIUxsesmkzK-V4uj';" alt="Healthcare Cybersecurity Risk Assessment Framework" referrerpolicy="no-referrer" class="max-w-full h-auto rounded-lg border border-slate-300 shadow-sm object-contain max-h-[250px] mx-auto block" style="max-width: 100%; max-height: 250px; width: auto; height: auto; object-fit: contain; display: block; margin: 0 auto; border: 1px solid #cbd5e1; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);" />
+  <p class="text-[10px] text-slate-500 font-bold italic mt-1 text-center" style="font-size: 8pt; color: #64748b; font-style: italic; font-weight: 700; margin-top: 3px; text-align: center;">Figure 1: Healthcare Cybersecurity Risk Assessment Framework &amp; Criteria</p>
 </div>
 
 ### RISK TREATMENT

@@ -273,7 +273,6 @@ export default function ClientManagement({
   const [ownerEmail, setOwnerEmail] = useState('');
   const [facilityLogo, setFacilityLogo] = useState(PRESET_LOGOS[0].value);
   const [facilityStamp, setFacilityStamp] = useState(PRESET_STAMPS[0].value);
-  const [authRepSignature, setAuthRepSignature] = useState('');
   const [letterheadImage, setLetterheadImage] = useState<string>('');
   const [logoPlacement, setLogoPlacement] = useState<'FULL' | 'LEFT' | 'RIGHT'>('LEFT');
   const [footerPlacement, setFooterPlacement] = useState<'FULL' | 'LEFT' | 'RIGHT'>('LEFT');
@@ -299,26 +298,31 @@ export default function ClientManagement({
   const [authRepEmail, setAuthRepEmail] = useState('');
   const [authRepPhone, setAuthRepPhone] = useState('');
   const [authRepDesignation, setAuthRepDesignation] = useState('Authorized Representative');
+  const [authRepSignature, setAuthRepSignature] = useState('');
 
   const [clinicMgrName, setClinicMgrName] = useState('');
   const [clinicMgrEmail, setClinicMgrEmail] = useState('');
   const [clinicMgrPhone, setClinicMgrPhone] = useState('');
   const [clinicMgrDesignation, setClinicMgrDesignation] = useState('Clinic Manager');
+  const [clinicMgrSignature, setClinicMgrSignature] = useState('');
 
   const [medDirName, setMedDirName] = useState('');
   const [medDirEmail, setMedDirEmail] = useState('');
   const [medDirPhone, setMedDirPhone] = useState('');
   const [medDirDesignation, setMedDirDesignation] = useState('Medical Director');
+  const [medDirSignature, setMedDirSignature] = useState('');
 
   const [itAdminName, setItAdminName] = useState('');
   const [itAdminEmail, setItAdminEmail] = useState('');
   const [itAdminPhone, setItAdminPhone] = useState('');
   const [itAdminDesignation, setItAdminDesignation] = useState('IT Manager / Admin');
+  const [itAdminSignature, setItAdminSignature] = useState('');
 
   const [hrMgrName, setHrMgrName] = useState('');
   const [hrMgrEmail, setHrMgrEmail] = useState('');
   const [hrMgrPhone, setHrMgrPhone] = useState('');
   const [hrMgrDesignation, setHrMgrDesignation] = useState('HR Manager');
+  const [hrMgrSignature, setHrMgrSignature] = useState('');
 
   // Third-Party Support Channels
   const [itSupportName, setItSupportName] = useState('Apex Security Solutions');
@@ -484,9 +488,53 @@ export default function ClientManagement({
       reader.onloadend = () => {
         if (typeof reader.result === 'string') {
           if (isEdit && editingClient) {
-            setEditingClient({ ...editingClient, auth_rep_signature: reader.result });
+            setEditingClient({
+              ...editingClient,
+              auth_rep_signature: reader.result,
+              auth_representative: {
+                ...(editingClient.auth_representative || { name: '', email: '', phone: '', designation: 'Authorized Representative' }),
+                signature_image: reader.result
+              }
+            });
           } else {
             setAuthRepSignature(reader.result);
+          }
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSignatorySignatureUpload = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    roleKey: 'auth_representative' | 'clinic_manager' | 'medical_director' | 'it_manager' | 'hr_manager',
+    isEdit: boolean
+  ) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          const sigData = reader.result;
+          if (isEdit && editingClient) {
+            const currentRoleData = editingClient[roleKey] || { name: '', email: '', phone: '', designation: '' };
+            const updated: Client = {
+              ...editingClient,
+              [roleKey]: {
+                ...currentRoleData,
+                signature_image: sigData
+              }
+            };
+            if (roleKey === 'auth_representative') {
+              updated.auth_rep_signature = sigData;
+            }
+            setEditingClient(updated);
+          } else {
+            if (roleKey === 'auth_representative') setAuthRepSignature(sigData);
+            else if (roleKey === 'clinic_manager') setClinicMgrSignature(sigData);
+            else if (roleKey === 'medical_director') setMedDirSignature(sigData);
+            else if (roleKey === 'it_manager') setItAdminSignature(sigData);
+            else if (roleKey === 'hr_manager') setHrMgrSignature(sigData);
           }
         }
       };
@@ -566,11 +614,11 @@ export default function ClientManagement({
       facility_group_name: facilityGroupName,
       branches: structureClassification === 'GROUP' ? branches : [],
 
-      auth_representative: { name: authRepName, email: authRepEmail, phone: authRepPhone, designation: authRepDesignation },
-      clinic_manager: { name: clinicMgrName, email: clinicMgrEmail, phone: clinicMgrPhone, designation: clinicMgrDesignation },
-      medical_director: { name: medDirName, email: medDirEmail, phone: medDirPhone, designation: medDirDesignation },
-      it_manager: { name: itAdminName, email: itAdminEmail, phone: itAdminPhone, designation: itAdminDesignation },
-      hr_manager: { name: hrMgrName, email: hrMgrEmail, phone: hrMgrPhone, designation: hrMgrDesignation },
+      auth_representative: { name: authRepName, email: authRepEmail, phone: authRepPhone, designation: authRepDesignation, signature_image: authRepSignature },
+      clinic_manager: { name: clinicMgrName, email: clinicMgrEmail, phone: clinicMgrPhone, designation: clinicMgrDesignation, signature_image: clinicMgrSignature },
+      medical_director: { name: medDirName, email: medDirEmail, phone: medDirPhone, designation: medDirDesignation, signature_image: medDirSignature },
+      it_manager: { name: itAdminName, email: itAdminEmail, phone: itAdminPhone, designation: itAdminDesignation, signature_image: itAdminSignature },
+      hr_manager: { name: hrMgrName, email: hrMgrEmail, phone: hrMgrPhone, designation: hrMgrDesignation, signature_image: hrMgrSignature },
 
       it_support: { team_name: itSupportName, email: itSupportEmail, phone: itSupportPhone },
       emr_support: { team_name: emrSupportName, email: emrSupportEmail, phone: emrSupportPhone },
@@ -650,26 +698,31 @@ export default function ClientManagement({
     setAuthRepEmail('');
     setAuthRepPhone('');
     setAuthRepDesignation('Authorized Representative');
+    setAuthRepSignature('');
     
     setClinicMgrName('');
     setClinicMgrEmail('');
     setClinicMgrPhone('');
     setClinicMgrDesignation('Clinic Manager');
+    setClinicMgrSignature('');
     
     setMedDirName('');
     setMedDirEmail('');
     setMedDirPhone('');
     setMedDirDesignation('Medical Director');
+    setMedDirSignature('');
     
     setItAdminName('');
     setItAdminEmail('');
     setItAdminPhone('');
     setItAdminDesignation('IT Manager / Admin');
+    setItAdminSignature('');
     
     setHrMgrName('');
     setHrMgrEmail('');
     setHrMgrPhone('');
     setHrMgrDesignation('HR Manager');
+    setHrMgrSignature('');
 
     setItSupportName('Apex Security Solutions');
     setItSupportEmail('support@partner.ae');
@@ -690,11 +743,11 @@ export default function ClientManagement({
       ...client,
       structure_classification: client.structure_classification || (client.is_group ? 'GROUP' : 'SINGLE'),
       branches: client.branches || [],
-      auth_representative: client.auth_representative ? { ...client.auth_representative, designation: client.auth_representative.designation || 'Authorized Representative' } : { name: '', email: '', phone: '', designation: 'Authorized Representative' },
-      clinic_manager: client.clinic_manager ? { ...client.clinic_manager, designation: client.clinic_manager.designation || 'Clinic Manager' } : { name: '', email: '', phone: '', designation: 'Clinic Manager' },
-      medical_director: client.medical_director ? { ...client.medical_director, designation: client.medical_director.designation || 'Medical Director' } : { name: '', email: '', phone: '', designation: 'Medical Director' },
-      it_manager: client.it_manager ? { ...client.it_manager, designation: client.it_manager.designation || 'IT Manager / Admin' } : { name: '', email: '', phone: '', designation: 'IT Manager / Admin' },
-      hr_manager: client.hr_manager ? { ...client.hr_manager, designation: client.hr_manager.designation || 'HR Manager' } : { name: '', email: '', phone: '', designation: 'HR Manager' },
+      auth_representative: client.auth_representative ? { ...client.auth_representative, designation: client.auth_representative.designation || 'Authorized Representative', signature_image: client.auth_representative.signature_image || client.auth_rep_signature || '' } : { name: '', email: '', phone: '', designation: 'Authorized Representative', signature_image: client.auth_rep_signature || '' },
+      clinic_manager: client.clinic_manager ? { ...client.clinic_manager, designation: client.clinic_manager.designation || 'Clinic Manager', signature_image: client.clinic_manager.signature_image || '' } : { name: '', email: '', phone: '', designation: 'Clinic Manager', signature_image: '' },
+      medical_director: client.medical_director ? { ...client.medical_director, designation: client.medical_director.designation || 'Medical Director', signature_image: client.medical_director.signature_image || '' } : { name: '', email: '', phone: '', designation: 'Medical Director', signature_image: '' },
+      it_manager: client.it_manager ? { ...client.it_manager, designation: client.it_manager.designation || 'IT Manager / Admin', signature_image: client.it_manager.signature_image || '' } : { name: '', email: '', phone: '', designation: 'IT Manager / Admin', signature_image: '' },
+      hr_manager: client.hr_manager ? { ...client.hr_manager, designation: client.hr_manager.designation || 'HR Manager', signature_image: client.hr_manager.signature_image || '' } : { name: '', email: '', phone: '', designation: 'HR Manager', signature_image: '' },
       it_support: client.it_support || { team_name: 'Apex Security Solutions', email: 'support@partner.ae', phone: '+971...' },
       emr_support: client.emr_support || { team_name: 'CureMD Regional Support', email: 'emr@curemd.ae', phone: '+971...' }
     });
@@ -1187,6 +1240,38 @@ export default function ClientManagement({
                   placeholder="Contact Phone"
                   className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
+                {/* Signature Upload (.png) */}
+                <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[9.5px] font-semibold text-slate-600 block">Signatory .png Signature:</label>
+                    {authRepSignature && (
+                      <button
+                        type="button"
+                        onClick={() => setAuthRepSignature('')}
+                        className="text-[9px] text-rose-500 hover:text-rose-700 font-bold uppercase cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {authRepSignature ? (
+                    <div className="flex items-center gap-2 p-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+                      <img src={authRepSignature} alt="Signature" className="h-7 max-w-[120px] object-contain bg-white rounded border border-slate-100 p-0.5" />
+                      <span className="text-[9px] font-mono text-emerald-700 font-bold">✓ PNG Attached</span>
+                    </div>
+                  ) : (
+                    <label className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-emerald-500 rounded-lg text-slate-600 hover:text-emerald-700 cursor-pointer text-[10px] font-medium transition-all">
+                      <Upload className="w-3 h-3 text-slate-400" />
+                      <span>Upload .png Signature</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={e => handleSignatorySignatureUpload(e, 'auth_representative', false)}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
 
               {/* Clinic Manager */}
@@ -1253,6 +1338,38 @@ export default function ClientManagement({
                   placeholder="Contact Phone"
                   className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
+                {/* Signature Upload (.png) */}
+                <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[9.5px] font-semibold text-slate-600 block">Signatory .png Signature:</label>
+                    {clinicMgrSignature && (
+                      <button
+                        type="button"
+                        onClick={() => setClinicMgrSignature('')}
+                        className="text-[9px] text-rose-500 hover:text-rose-700 font-bold uppercase cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {clinicMgrSignature ? (
+                    <div className="flex items-center gap-2 p-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+                      <img src={clinicMgrSignature} alt="Signature" className="h-7 max-w-[120px] object-contain bg-white rounded border border-slate-100 p-0.5" />
+                      <span className="text-[9px] font-mono text-emerald-700 font-bold">✓ PNG Attached</span>
+                    </div>
+                  ) : (
+                    <label className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-emerald-500 rounded-lg text-slate-600 hover:text-emerald-700 cursor-pointer text-[10px] font-medium transition-all">
+                      <Upload className="w-3 h-3 text-slate-400" />
+                      <span>Upload .png Signature</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={e => handleSignatorySignatureUpload(e, 'clinic_manager', false)}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
 
               {/* Medical Director */}
@@ -1319,6 +1436,38 @@ export default function ClientManagement({
                   placeholder="Contact Phone"
                   className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
+                {/* Signature Upload (.png) */}
+                <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[9.5px] font-semibold text-slate-600 block">Signatory .png Signature:</label>
+                    {medDirSignature && (
+                      <button
+                        type="button"
+                        onClick={() => setMedDirSignature('')}
+                        className="text-[9px] text-rose-500 hover:text-rose-700 font-bold uppercase cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {medDirSignature ? (
+                    <div className="flex items-center gap-2 p-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+                      <img src={medDirSignature} alt="Signature" className="h-7 max-w-[120px] object-contain bg-white rounded border border-slate-100 p-0.5" />
+                      <span className="text-[9px] font-mono text-emerald-700 font-bold">✓ PNG Attached</span>
+                    </div>
+                  ) : (
+                    <label className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-emerald-500 rounded-lg text-slate-600 hover:text-emerald-700 cursor-pointer text-[10px] font-medium transition-all">
+                      <Upload className="w-3 h-3 text-slate-400" />
+                      <span>Upload .png Signature</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={e => handleSignatorySignatureUpload(e, 'medical_director', false)}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
 
               {/* IT Manager */}
@@ -1385,6 +1534,38 @@ export default function ClientManagement({
                   placeholder="Contact Phone"
                   className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
+                {/* Signature Upload (.png) */}
+                <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[9.5px] font-semibold text-slate-600 block">Signatory .png Signature:</label>
+                    {itAdminSignature && (
+                      <button
+                        type="button"
+                        onClick={() => setItAdminSignature('')}
+                        className="text-[9px] text-rose-500 hover:text-rose-700 font-bold uppercase cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {itAdminSignature ? (
+                    <div className="flex items-center gap-2 p-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+                      <img src={itAdminSignature} alt="Signature" className="h-7 max-w-[120px] object-contain bg-white rounded border border-slate-100 p-0.5" />
+                      <span className="text-[9px] font-mono text-emerald-700 font-bold">✓ PNG Attached</span>
+                    </div>
+                  ) : (
+                    <label className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-emerald-500 rounded-lg text-slate-600 hover:text-emerald-700 cursor-pointer text-[10px] font-medium transition-all">
+                      <Upload className="w-3 h-3 text-slate-400" />
+                      <span>Upload .png Signature</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={e => handleSignatorySignatureUpload(e, 'it_manager', false)}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
 
               {/* HR Manager */}
@@ -1451,6 +1632,38 @@ export default function ClientManagement({
                   placeholder="Contact Phone"
                   className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
+                {/* Signature Upload (.png) */}
+                <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[9.5px] font-semibold text-slate-600 block">Signatory .png Signature:</label>
+                    {hrMgrSignature && (
+                      <button
+                        type="button"
+                        onClick={() => setHrMgrSignature('')}
+                        className="text-[9px] text-rose-500 hover:text-rose-700 font-bold uppercase cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {hrMgrSignature ? (
+                    <div className="flex items-center gap-2 p-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+                      <img src={hrMgrSignature} alt="Signature" className="h-7 max-w-[120px] object-contain bg-white rounded border border-slate-100 p-0.5" />
+                      <span className="text-[9px] font-mono text-emerald-700 font-bold">✓ PNG Attached</span>
+                    </div>
+                  ) : (
+                    <label className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-emerald-500 rounded-lg text-slate-600 hover:text-emerald-700 cursor-pointer text-[10px] font-medium transition-all">
+                      <Upload className="w-3 h-3 text-slate-400" />
+                      <span>Upload .png Signature</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={e => handleSignatorySignatureUpload(e, 'hr_manager', false)}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -2486,6 +2699,48 @@ export default function ClientManagement({
                   placeholder="Contact Phone"
                   className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
+                {/* Signature Upload (.png) */}
+                <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[9.5px] font-semibold text-slate-600 block">Signatory .png Signature:</label>
+                    {(editingClient.auth_representative?.signature_image || editingClient.auth_rep_signature) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = {
+                            ...editingClient,
+                            auth_rep_signature: undefined,
+                            auth_representative: {
+                              ...(editingClient.auth_representative || { name: '', email: '', phone: '' }),
+                              signature_image: undefined
+                            }
+                          };
+                          setEditingClient(updated);
+                        }}
+                        className="text-[9px] text-rose-500 hover:text-rose-700 font-bold uppercase cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {(editingClient.auth_representative?.signature_image || editingClient.auth_rep_signature) ? (
+                    <div className="flex items-center gap-2 p-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+                      <img src={editingClient.auth_representative?.signature_image || editingClient.auth_rep_signature} alt="Signature" className="h-7 max-w-[120px] object-contain bg-white rounded border border-slate-100 p-0.5" />
+                      <span className="text-[9px] font-mono text-emerald-700 font-bold">✓ PNG Attached</span>
+                    </div>
+                  ) : (
+                    <label className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-emerald-500 rounded-lg text-slate-600 hover:text-emerald-700 cursor-pointer text-[10px] font-medium transition-all">
+                      <Upload className="w-3 h-3 text-slate-400" />
+                      <span>Upload .png Signature</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={e => handleSignatorySignatureUpload(e, 'auth_representative', true)}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
 
               {/* Clinic Manager */}
@@ -2569,6 +2824,46 @@ export default function ClientManagement({
                   placeholder="Contact Phone"
                   className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
+                {/* Signature Upload (.png) */}
+                <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[9.5px] font-semibold text-slate-600 block">Signatory .png Signature:</label>
+                    {editingClient.clinic_manager?.signature_image && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingClient({
+                            ...editingClient,
+                            clinic_manager: {
+                              ...(editingClient.clinic_manager || { name: '', email: '', phone: '' }),
+                              signature_image: undefined
+                            }
+                          });
+                        }}
+                        className="text-[9px] text-rose-500 hover:text-rose-700 font-bold uppercase cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {editingClient.clinic_manager?.signature_image ? (
+                    <div className="flex items-center gap-2 p-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+                      <img src={editingClient.clinic_manager.signature_image} alt="Signature" className="h-7 max-w-[120px] object-contain bg-white rounded border border-slate-100 p-0.5" />
+                      <span className="text-[9px] font-mono text-emerald-700 font-bold">✓ PNG Attached</span>
+                    </div>
+                  ) : (
+                    <label className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-emerald-500 rounded-lg text-slate-600 hover:text-emerald-700 cursor-pointer text-[10px] font-medium transition-all">
+                      <Upload className="w-3 h-3 text-slate-400" />
+                      <span>Upload .png Signature</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={e => handleSignatorySignatureUpload(e, 'clinic_manager', true)}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
 
               {/* Medical Director */}
@@ -2652,6 +2947,46 @@ export default function ClientManagement({
                   placeholder="Contact Phone"
                   className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
+                {/* Signature Upload (.png) */}
+                <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[9.5px] font-semibold text-slate-600 block">Signatory .png Signature:</label>
+                    {editingClient.medical_director?.signature_image && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingClient({
+                            ...editingClient,
+                            medical_director: {
+                              ...(editingClient.medical_director || { name: '', email: '', phone: '' }),
+                              signature_image: undefined
+                            }
+                          });
+                        }}
+                        className="text-[9px] text-rose-500 hover:text-rose-700 font-bold uppercase cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {editingClient.medical_director?.signature_image ? (
+                    <div className="flex items-center gap-2 p-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+                      <img src={editingClient.medical_director.signature_image} alt="Signature" className="h-7 max-w-[120px] object-contain bg-white rounded border border-slate-100 p-0.5" />
+                      <span className="text-[9px] font-mono text-emerald-700 font-bold">✓ PNG Attached</span>
+                    </div>
+                  ) : (
+                    <label className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-emerald-500 rounded-lg text-slate-600 hover:text-emerald-700 cursor-pointer text-[10px] font-medium transition-all">
+                      <Upload className="w-3 h-3 text-slate-400" />
+                      <span>Upload .png Signature</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={e => handleSignatorySignatureUpload(e, 'medical_director', true)}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
 
               {/* IT Manager */}
@@ -2735,6 +3070,46 @@ export default function ClientManagement({
                   placeholder="Contact Phone"
                   className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
+                {/* Signature Upload (.png) */}
+                <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[9.5px] font-semibold text-slate-600 block">Signatory .png Signature:</label>
+                    {editingClient.it_manager?.signature_image && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingClient({
+                            ...editingClient,
+                            it_manager: {
+                              ...(editingClient.it_manager || { name: '', email: '', phone: '' }),
+                              signature_image: undefined
+                            }
+                          });
+                        }}
+                        className="text-[9px] text-rose-500 hover:text-rose-700 font-bold uppercase cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {editingClient.it_manager?.signature_image ? (
+                    <div className="flex items-center gap-2 p-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+                      <img src={editingClient.it_manager.signature_image} alt="Signature" className="h-7 max-w-[120px] object-contain bg-white rounded border border-slate-100 p-0.5" />
+                      <span className="text-[9px] font-mono text-emerald-700 font-bold">✓ PNG Attached</span>
+                    </div>
+                  ) : (
+                    <label className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-emerald-500 rounded-lg text-slate-600 hover:text-emerald-700 cursor-pointer text-[10px] font-medium transition-all">
+                      <Upload className="w-3 h-3 text-slate-400" />
+                      <span>Upload .png Signature</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={e => handleSignatorySignatureUpload(e, 'it_manager', true)}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
 
               {/* HR Manager */}
@@ -2818,6 +3193,46 @@ export default function ClientManagement({
                   placeholder="Contact Phone"
                   className="w-full text-[11px] p-2 rounded border border-slate-200 focus:border-emerald-500"
                 />
+                {/* Signature Upload (.png) */}
+                <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[9.5px] font-semibold text-slate-600 block">Signatory .png Signature:</label>
+                    {editingClient.hr_manager?.signature_image && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingClient({
+                            ...editingClient,
+                            hr_manager: {
+                              ...(editingClient.hr_manager || { name: '', email: '', phone: '' }),
+                              signature_image: undefined
+                            }
+                          });
+                        }}
+                        className="text-[9px] text-rose-500 hover:text-rose-700 font-bold uppercase cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {editingClient.hr_manager?.signature_image ? (
+                    <div className="flex items-center gap-2 p-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+                      <img src={editingClient.hr_manager.signature_image} alt="Signature" className="h-7 max-w-[120px] object-contain bg-white rounded border border-slate-100 p-0.5" />
+                      <span className="text-[9px] font-mono text-emerald-700 font-bold">✓ PNG Attached</span>
+                    </div>
+                  ) : (
+                    <label className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-emerald-500 rounded-lg text-slate-600 hover:text-emerald-700 cursor-pointer text-[10px] font-medium transition-all">
+                      <Upload className="w-3 h-3 text-slate-400" />
+                      <span>Upload .png Signature</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={e => handleSignatorySignatureUpload(e, 'hr_manager', true)}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
             </div>
           </div>

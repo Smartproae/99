@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { RiskItem, Asset, Client } from '../types';
 import { 
-  Plus, Search, ShieldAlert, Sparkles, Filter, Trash2, Edit3, 
+  Plus, Search, ShieldAlert, Sparkles, Filter, Trash2, Edit3, Pencil,
   Check, X, RefreshCw, Activity, HelpCircle, Archive, ArchiveRestore,
   FileDown, ChevronDown, ChevronUp, ShieldCheck, Info, HardDrive, Cpu, History
 } from 'lucide-react';
@@ -505,6 +505,13 @@ export default function RiskRegister({
   const [newVersionAuthor, setNewVersionAuthor] = useState('');
   const [newVersionChanges, setNewVersionChanges] = useState('');
 
+  // Editing existing version in Risk Register
+  const [editingVersionIdx, setEditingVersionIdx] = useState<number | null>(null);
+  const [editVersionNo, setEditVersionNo] = useState('');
+  const [editVersionDate, setEditVersionDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [editVersionAuthor, setEditVersionAuthor] = useState('');
+  const [editVersionChanges, setEditVersionChanges] = useState('');
+
   const defaultVersionHistory = [
     { version: '1.0', date: '01/03/2022', author: 'Managing Director / IT Lead', changes: 'Initial document issue & approval under ISO 27001 & ADHICS v2 Framework' }
   ];
@@ -512,6 +519,54 @@ export default function RiskRegister({
   const displayVersionHistory = (client?.version_history && client.version_history.length > 0)
     ? client.version_history
     : defaultVersionHistory;
+
+  const handleStartEditVersion = (idx: number) => {
+    const vh = displayVersionHistory[idx];
+    if (!vh) return;
+    setEditingVersionIdx(idx);
+    setEditVersionNo(vh.version || (vh as any).version_number || '1.0');
+    setEditVersionDate(vh.date || (vh as any).revision_date || new Date().toISOString().split('T')[0]);
+    setEditVersionAuthor(vh.author || (vh as any).changed_by || 'IT Manager');
+    setEditVersionChanges(vh.changes || (vh as any).change_description || (vh as any).remarks || '');
+    setShowAddVersionInline(false);
+  };
+
+  const handleSaveEditVersion = () => {
+    if (editingVersionIdx === null) return;
+    if (!editVersionNo.trim()) return;
+    const updatedHistory = displayVersionHistory.map((item, i) => {
+      if (i === editingVersionIdx) {
+        return {
+          version: editVersionNo.trim(),
+          date: editVersionDate || new Date().toISOString().split('T')[0],
+          author: editVersionAuthor.trim() || 'IT Manager',
+          changes: editVersionChanges.trim() || 'Updated Risk Register'
+        };
+      }
+      return item;
+    });
+
+    if (client && onUpdateClient) {
+      onUpdateClient({
+        ...client,
+        doc_version: editingVersionIdx === 0 ? editVersionNo.trim() : client.doc_version,
+        version_history: updatedHistory
+      });
+    }
+    setEditingVersionIdx(null);
+  };
+
+  const handleDeleteVersionRecord = (idxToDelete: number) => {
+    if (displayVersionHistory.length <= 1) return;
+    const updatedHistory = displayVersionHistory.filter((_, i) => i !== idxToDelete);
+    if (client && onUpdateClient) {
+      onUpdateClient({
+        ...client,
+        doc_version: updatedHistory[0]?.version || client.doc_version,
+        version_history: updatedHistory
+      });
+    }
+  };
 
   const handleAddVersionRecord = () => {
     if (!newVersionNo.trim()) return;
@@ -2468,13 +2523,92 @@ export default function RiskRegister({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowAddVersionInline(!showAddVersionInline)}
+                  onClick={() => {
+                    setEditingVersionIdx(null);
+                    setShowAddVersionInline(!showAddVersionInline);
+                  }}
                   className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>+ Add Version Record</span>
                 </button>
               </div>
+
+              {/* Edit Version Record Form */}
+              {editingVersionIdx !== null && (
+                <div className="bg-amber-50/80 p-4 rounded-xl border border-amber-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                      <Pencil className="w-3.5 h-3.5 text-amber-600" />
+                      Edit Version Record Entry (Row #{editingVersionIdx + 1})
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => setEditingVersionIdx(null)}
+                      className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-12 gap-2 text-xs">
+                    <div className="col-span-3">
+                      <label className="block text-[10px] font-bold text-amber-900 mb-1">Version Number *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 1.0, 2.1"
+                        value={editVersionNo}
+                        onChange={(e) => setEditVersionNo(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-amber-200 rounded-lg text-xs focus:ring-2 focus:ring-amber-500 font-mono font-bold"
+                      />
+                    </div>
+                    <div className="col-span-3">
+                      <label className="block text-[10px] font-bold text-amber-900 mb-1">Date *</label>
+                      <input
+                        type="date"
+                        value={editVersionDate}
+                        onChange={(e) => setEditVersionDate(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-amber-200 rounded-lg text-xs focus:ring-2 focus:ring-amber-500 font-mono"
+                      />
+                    </div>
+                    <div className="col-span-6">
+                      <label className="block text-[10px] font-bold text-amber-900 mb-1">Author / Reviewer *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. IT Manager / Risk Officer"
+                        value={editVersionAuthor}
+                        onChange={(e) => setEditVersionAuthor(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-amber-200 rounded-lg text-xs focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div className="col-span-12">
+                      <label className="block text-[10px] font-bold text-amber-900 mb-1">Summary of Changes / Remarks *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Updated Register as per ADHICS v2 standards"
+                        value={editVersionChanges}
+                        onChange={(e) => setEditVersionChanges(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-amber-200 rounded-lg text-xs focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setEditingVersionIdx(null)}
+                      className="px-3 py-1 bg-white border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveEditVersion}
+                      className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold cursor-pointer inline-flex items-center gap-1"
+                    >
+                      <Check className="w-3.5 h-3.5" /> Save Changes
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {showAddVersionInline && (
                 <div className="bg-indigo-50/70 p-4 rounded-xl border border-indigo-200 space-y-3">
@@ -2549,28 +2683,61 @@ export default function RiskRegister({
                       <th className="py-2.5 px-3 w-[15%]">Version</th>
                       <th className="py-2.5 px-3 w-[15%]">Date</th>
                       <th className="py-2.5 px-3 w-[22%]">Author / Reviewer</th>
-                      <th className="py-2.5 px-3 w-[48%]">Summary of Changes / Remarks</th>
+                      <th className="py-2.5 px-3 w-[36%]">Summary of Changes / Remarks</th>
+                      <th className="py-2.5 px-3 w-[12%] text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 bg-white">
-                    {displayVersionHistory.map((vh, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-2.5 px-3 font-mono font-bold text-indigo-700 whitespace-nowrap align-top">
-                          <span className="bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 text-[10px] inline-block">
-                            {vh.version || (vh as any).version_number || 'V1.0'}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-600 font-mono text-[11px] whitespace-nowrap align-top">
-                          {vh.date || (vh as any).revision_date || '2026-05-29'}
-                        </td>
-                        <td className="py-2.5 px-3 font-semibold text-slate-800 align-top">
-                          {vh.author || (vh as any).changed_by || 'IT Manager'}
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-800 font-normal leading-relaxed break-words whitespace-pre-wrap align-top">
-                          {vh.changes || (vh as any).change_description || (vh as any).remarks || 'Risk Register revision'}
-                        </td>
-                      </tr>
-                    ))}
+                    {displayVersionHistory.map((vh, idx) => {
+                      const isEditing = editingVersionIdx === idx;
+                      return (
+                        <tr
+                          key={idx}
+                          className={
+                            isEditing
+                              ? 'bg-amber-50/80 border-y-2 border-amber-400 font-medium'
+                              : 'hover:bg-slate-50/80 transition-colors'
+                          }
+                        >
+                          <td className="py-2.5 px-3 font-mono font-bold text-indigo-700 whitespace-nowrap align-top">
+                            <span className="bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 text-[10px] inline-block">
+                              {vh.version || (vh as any).version_number || 'V1.0'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-600 font-mono text-[11px] whitespace-nowrap align-top">
+                            {vh.date || (vh as any).revision_date || '2026-05-29'}
+                          </td>
+                          <td className="py-2.5 px-3 font-semibold text-slate-800 align-top">
+                            {vh.author || (vh as any).changed_by || 'IT Manager'}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-800 font-normal leading-relaxed break-words whitespace-pre-wrap align-top">
+                            {vh.changes || (vh as any).change_description || (vh as any).remarks || 'Risk Register revision'}
+                          </td>
+                          <td className="py-2.5 px-3 text-center align-top">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditVersion(idx)}
+                                className="text-slate-400 hover:text-indigo-600 p-1 rounded cursor-pointer transition-colors"
+                                title="Edit version record"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              {displayVersionHistory.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteVersionRecord(idx)}
+                                  className="text-slate-400 hover:text-rose-600 p-1 rounded cursor-pointer transition-colors"
+                                  title="Delete version record"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

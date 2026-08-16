@@ -16,6 +16,7 @@ export interface ContactPerson {
   email: string;
   phone: string;
   designation?: string;
+  signature_image?: string; // Base64 or DataURL of signature (.png)
 }
 
 export interface ThirdPartySupport {
@@ -114,6 +115,9 @@ export interface Client {
     phone: string;
   };
 
+  // Client Specific Policy Exclusions / Non-Applicable Policies
+  not_applicable_policy_ids?: string[];
+
   // Version History
   version_history?: {
     version: string;
@@ -192,6 +196,7 @@ export interface Policy {
   document_path?: string;
   category: string;
   created_at: string;
+  updated_at?: string;
   department?: string;
   document_type?: 'Policy' | 'Procedure' | 'Form' | 'Guideline' | 'Record';
   approval_date?: string;
@@ -230,6 +235,15 @@ export interface Policy {
   framework_group?: 'Basic' | 'Transmission' | 'Advance' | string;
   additional_by_sign?: string;
   show_additional_by?: boolean;
+  not_applicable_clients?: string[];
+  is_applicable?: boolean;
+  non_applicable_reason?: string;
+  version_history?: {
+    version: string;
+    date: string;
+    author: string;
+    changes: string;
+  }[];
 }
 
 export interface PolicyAcknowledgement {

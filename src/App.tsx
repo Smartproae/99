@@ -248,38 +248,41 @@ export default function App() {
         return p;
       });
 
-      // Ensure all 34 master policies exist for SmartPro (c0) Compliance Consultant
-      const spMasterPolicies = getMasterSmartProPolicies();
-      const c0PolicyCodes = new Set(loaded.filter((p: any) => p.client_id === 'c0').map((p: any) => (p.policy_no || p.code || '').toUpperCase().trim()));
-      spMasterPolicies.forEach(spPol => {
-        if (!c0PolicyCodes.has(spPol.policy_no.toUpperCase().trim())) {
-          loaded.push(spPol);
-          c0PolicyCodes.add(spPol.policy_no.toUpperCase().trim());
-        }
-      });
+      // ONLY populate initial seed templates if no saved policy data exists in localStorage
+      if (!saved) {
+        // Ensure initial master policies exist for SmartPro (c0) Compliance Consultant
+        const spMasterPolicies = getMasterSmartProPolicies();
+        const c0PolicyCodes = new Set(loaded.filter((p: any) => p.client_id === 'c0').map((p: any) => (p.policy_no || p.code || '').toUpperCase().trim()));
+        spMasterPolicies.forEach(spPol => {
+          if (!c0PolicyCodes.has(spPol.policy_no.toUpperCase().trim())) {
+            loaded.push(spPol);
+            c0PolicyCodes.add(spPol.policy_no.toUpperCase().trim());
+          }
+        });
 
-      // Ensure all 34 master policies exist in repository for default client c1
-      const existingCodes = new Set(loaded.map((p: any) => (p.policy_no || p.code || '').toUpperCase().trim()));
-      MASTER_34_POLICY_TEMPLATES.forEach((tpl, idx) => {
-        if (!existingCodes.has(tpl.policy_no.toUpperCase().trim())) {
-          const defaults = getPolicyTemplateDefaults(tpl.policy_no, 'SmartPro Consultancy', tpl.policy_name);
-          loaded.push({
-            id: `p_m34_${tpl.policy_no}_${idx}`,
-            client_id: 'c1',
-            policy_no: tpl.policy_no,
-            policy_name: tpl.policy_name,
-            version: '1.0',
-            review_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            status: 'APPROVED',
-            category: tpl.category,
-            doc_type: tpl.doc_type || 'Policy',
-            created_at: new Date().toISOString(),
-            policy_statement: defaults.policy_statement || `Official Policy Framework for ${tpl.policy_name}.`,
-            full_content: defaults.policy_statement
-          } as Policy);
-          existingCodes.add(tpl.policy_no.toUpperCase().trim());
-        }
-      });
+        // Ensure 34 master policy baseline on initial cold start only
+        const existingCodes = new Set(loaded.map((p: any) => (p.policy_no || p.code || '').toUpperCase().trim()));
+        MASTER_34_POLICY_TEMPLATES.forEach((tpl, idx) => {
+          if (!existingCodes.has(tpl.policy_no.toUpperCase().trim())) {
+            const defaults = getPolicyTemplateDefaults(tpl.policy_no, 'SmartPro Consultancy', tpl.policy_name);
+            loaded.push({
+              id: `p_m34_${tpl.policy_no}_${idx}`,
+              client_id: 'c1',
+              policy_no: tpl.policy_no,
+              policy_name: tpl.policy_name,
+              version: '1.0',
+              review_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              status: 'APPROVED',
+              category: tpl.category,
+              doc_type: tpl.doc_type || 'Policy',
+              created_at: new Date().toISOString(),
+              policy_statement: defaults.policy_statement || `Official Policy Framework for ${tpl.policy_name}.`,
+              full_content: defaults.policy_statement
+            } as Policy);
+            existingCodes.add(tpl.policy_no.toUpperCase().trim());
+          }
+        });
+      }
     }
 
     return deduplicatePolicies(sanitizeAndDeduplicate(loaded, 'p'));
@@ -288,7 +291,7 @@ export default function App() {
   const [risks, setRisks] = useState<RiskItem[]>(() => {
     const saved = localStorage.getItem('sh_risks');
     const loaded = safeParseJSON(saved, INITIAL_RISK_ITEMS);
-    if (Array.isArray(loaded)) {
+    if (!saved && Array.isArray(loaded)) {
       const spMasterRisks = getMasterSmartProRisks();
       const c0RiskIds = new Set(loaded.filter((r: any) => r.client_id === 'c0').map((r: any) => r.risk_id));
       spMasterRisks.forEach(mr => {
@@ -303,7 +306,7 @@ export default function App() {
   const [assets, setAssets] = useState<Asset[]>(() => {
     const saved = localStorage.getItem('sh_assets');
     const loaded = safeParseJSON(saved, INITIAL_ASSETS);
-    if (Array.isArray(loaded)) {
+    if (!saved && Array.isArray(loaded)) {
       const spMasterAssets = getMasterSmartProAssets();
       const c0AssetCodes = new Set(loaded.filter((a: any) => a.client_id === 'c0').map((a: any) => a.asset_code));
       spMasterAssets.forEach(ma => {
@@ -1137,7 +1140,23 @@ export default function App() {
   };
 
   const handleUpdatePolicy = (updatedPolicy: Policy) => {
-    setPolicies(prev => prev.map(p => p.id === updatedPolicy.id ? updatedPolicy : p));
+    setPolicies(prev => {
+      const matchExists = prev.some(p => p.id === updatedPolicy.id || (p.policy_no === updatedPolicy.policy_no && (p.client_id === updatedPolicy.client_id || (!p.client_id && !updatedPolicy.client_id))));
+      let updated: Policy[];
+      if (matchExists) {
+        updated = prev.map(p => {
+          if (p.id === updatedPolicy.id) return updatedPolicy;
+          if (p.policy_no === updatedPolicy.policy_no && (p.client_id === updatedPolicy.client_id || (!p.client_id && !updatedPolicy.client_id))) {
+            return updatedPolicy;
+          }
+          return p;
+        });
+      } else {
+        updated = [...prev, updatedPolicy];
+      }
+      safeSetItem('sh_policies', JSON.stringify(updated));
+      return updated;
+    });
     logAuditTrail('POLICY_FRAMEWORK', 'UPDATED COMPLIANCE POLICY DETAILS', updatedPolicy);
   };
 
@@ -2050,6 +2069,7 @@ export default function App() {
               <PolicyFrameworksSetup
                 policies={policies}
                 users={users}
+                currentUser={currentUser}
                 employees={employees}
                 onAddPolicy={handleAddPolicy}
                 onDeletePolicy={handleDeletePolicy}
@@ -2059,6 +2079,7 @@ export default function App() {
                 client={currentClient}
                 clients={clients}
                 onSelectClient={setActiveClientId}
+                onUpdateClient={handleUpdateClient}
               />
             )}
 

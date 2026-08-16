@@ -16,7 +16,11 @@ import {
   ShieldCheck,
   Lock,
   Unlock,
+  Key,
+  KeyRound,
   Eye,
+  EyeOff,
+  X,
   Edit3,
   Clipboard,
   ClipboardCopy,
@@ -1129,6 +1133,13 @@ export default function HrDocumentsHub({ client, currentUser, employees, allClie
     Boolean(client?.company_name && client.company_name.toLowerCase().includes('compliance consultant')) || 
     Boolean(client?.facility_type && client.facility_type.toLowerCase().includes('consultan'));
 
+  // SuperAdmin Role Check for Master Document Operations
+  const isSuperAdmin =
+    !currentUser ||
+    currentUser.role === 'SUPER_ADMIN' ||
+    (currentUser.role as string)?.toLowerCase() === 'superadmin' ||
+    (currentUser.role as string)?.toLowerCase() === 'super_admin';
+
   // Available Clients List for Cross-Client & All-Client Batch Copying
   const availableClientsList = React.useMemo(() => {
     let list: Client[] = [];
@@ -1309,6 +1320,58 @@ export default function HrDocumentsHub({ client, currentUser, employees, allClie
   const currentLoadedClientRef = useRef<string>(currentClientKey);
   const [lastSavedTimestamp, setLastSavedTimestamp] = useState<string>(() => new Date().toLocaleTimeString());
   const [saveStatusMessage, setSaveStatusMessage] = useState<string | null>(null);
+
+  // Master Security Protection Key & Unlock State (Password: 663385)
+  const MASTER_SECURITY_PIN = '663385';
+  const [isProtectedUnlocked, setIsProtectedUnlocked] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem('smarthub_master_unlock_663385') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [showSecurityUnlockModal, setShowSecurityUnlockModal] = useState<boolean>(false);
+  const [securityPinInput, setSecurityPinInput] = useState<string>('');
+  const [securityPinError, setSecurityPinError] = useState<string | null>(null);
+  const [showPinPassword, setShowPinPassword] = useState<boolean>(false);
+  const [pendingActionOnUnlock, setPendingActionOnUnlock] = useState<(() => void) | null>(null);
+
+  const handleVerifySecurityPin = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (securityPinInput.trim() === MASTER_SECURITY_PIN) {
+      setIsProtectedUnlocked(true);
+      try {
+        sessionStorage.setItem('smarthub_master_unlock_663385', 'true');
+      } catch {}
+      setShowSecurityUnlockModal(false);
+      setSecurityPinInput('');
+      setSecurityPinError(null);
+      setFormCopyPasteNotice('🔓 Security Key Verified! Protected operations & Master template actions are UNLOCKED.');
+      setTimeout(() => setFormCopyPasteNotice(null), 5000);
+      if (pendingActionOnUnlock) {
+        const action = pendingActionOnUnlock;
+        setPendingActionOnUnlock(null);
+        action();
+      }
+    } else {
+      setSecurityPinError('❌ Invalid Security PIN. Please enter the authorized Master Security Key.');
+    }
+  };
+
+  const handleToggleProtectedLock = () => {
+    if (isProtectedUnlocked) {
+      setIsProtectedUnlocked(false);
+      try {
+        sessionStorage.removeItem('smarthub_master_unlock_663385');
+      } catch {}
+      setFormCopyPasteNotice('🔒 Master Protection RE-LOCKED. Security PIN required for destructive actions.');
+      setTimeout(() => setFormCopyPasteNotice(null), 4000);
+    } else {
+      setSecurityPinError(null);
+      setSecurityPinInput('');
+      setShowSecurityUnlockModal(true);
+    }
+  };
 
   // Synchronously initialize documents from storage on initial mount
   const [documents, setDocuments] = useState<HRDocumentRecord[]>(() => {
@@ -2889,6 +2952,16 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
 
   // Delete Document
   const handleDeleteDocument = (id: string, title?: string) => {
+    if (isConsultantMode && !isProtectedUnlocked) {
+      setSecurityPinError(null);
+      setSecurityPinInput('');
+      setPendingActionOnUnlock(() => () => {
+        const doc = documents.find(d => d.id === id);
+        if (doc) setDeletingDoc(doc);
+      });
+      setShowSecurityUnlockModal(true);
+      return;
+    }
     const docToDelete = documents.find(d => d.id === id);
     if (docToDelete) {
       setDeletingDoc(docToDelete);
@@ -2896,10 +2969,17 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
   };
 
   const confirmDeleteDocument = () => {
+    if (isConsultantMode && !isProtectedUnlocked) {
+      setDeletingDoc(null);
+      setShowSecurityUnlockModal(true);
+      return;
+    }
     if (!deletingDoc) return;
     const targetId = deletingDoc.id;
     const targetTitle = deletingDoc.title;
-    setDocuments(prev => prev.filter(d => d.id !== targetId));
+    const updatedList = documents.filter(d => d.id !== targetId);
+    setDocuments(updatedList);
+    persistDocumentsToStorage(currentClientKey, isConsultantMode, updatedList, client);
     setSelectedDocIds(prev => prev.filter(id => id !== targetId));
     if (selectedDoc?.id === targetId) {
       setSelectedDoc(null);
@@ -2912,9 +2992,21 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
 
   // Bulk Delete Selected HR Documents
   const handleBulkDelete = () => {
+    if (isConsultantMode && !isProtectedUnlocked) {
+      setShowBulkDeleteModal(false);
+      setSecurityPinError(null);
+      setSecurityPinInput('');
+      setPendingActionOnUnlock(() => () => {
+        if (selectedDocIds.length > 0) setShowBulkDeleteModal(true);
+      });
+      setShowSecurityUnlockModal(true);
+      return;
+    }
     if (selectedDocIds.length === 0) return;
     const count = selectedDocIds.length;
-    setDocuments(prev => prev.filter(d => !selectedDocIds.includes(d.id)));
+    const updatedList = documents.filter(d => !selectedDocIds.includes(d.id));
+    setDocuments(updatedList);
+    persistDocumentsToStorage(currentClientKey, isConsultantMode, updatedList, client);
     if (selectedDoc && selectedDocIds.includes(selectedDoc.id)) {
       setSelectedDoc(null);
       setShowPreviewModal(false);
@@ -2927,6 +3019,16 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
 
   // Clear / Purge All Documents from Current Vault
   const handleClearVault = () => {
+    if (isConsultantMode && !isProtectedUnlocked) {
+      setShowClearVaultModal(false);
+      setSecurityPinError(null);
+      setSecurityPinInput('');
+      setPendingActionOnUnlock(() => () => {
+        setShowClearVaultModal(true);
+      });
+      setShowSecurityUnlockModal(true);
+      return;
+    }
     setDocuments([]);
     setSelectedDocIds([]);
     setSelectedDoc(null);
@@ -2937,8 +3039,8 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
         localStorage.removeItem(`${STORAGE_KEY}_c1`);
       }
       if (isConsultantMode) {
-        localStorage.removeItem('smarthub_hr_documents_vault_v2_c0');
-        localStorage.removeItem('smarthub_hr_documents_vault_v2_SPRC');
+        localStorage.setItem('smarthub_hr_documents_vault_v2_c0', JSON.stringify([]));
+        localStorage.setItem('smarthub_hr_documents_vault_v2_SPRC', JSON.stringify([]));
       }
     } catch (e) {}
     setShowClearVaultModal(false);
@@ -2979,6 +3081,11 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
 
   // Copy Files from COMPLIANCE CONSULTANT to Client(s) Vault
   const handleExecuteCopyFromConsultant = (overrideDocIds?: string[], targetDestOverride?: string) => {
+    if (!isSuperAdmin) {
+      setFormCopyPasteNotice("⛔ Permission Restricted: Only SuperAdmin accounts are authorized to copy Master HR Vault Documents to client organizations.");
+      setTimeout(() => setFormCopyPasteNotice(null), 5000);
+      return;
+    }
     const targetIds = overrideDocIds || selectedConsultantDocIds;
     if (targetIds.length === 0) return;
 
@@ -3154,6 +3261,31 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
               <span className="px-3 py-1 rounded-full text-[10px] font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                 Vault Size: {documents.length} Records
               </span>
+
+              {/* MASTER SECURITY PROTECTED BUTTON */}
+              <button
+                type="button"
+                onClick={handleToggleProtectedLock}
+                className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 shadow-sm border ${
+                  isProtectedUnlocked
+                    ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/50'
+                    : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/50'
+                }`}
+                title={isProtectedUnlocked ? "Master Protection UNLOCKED - Click to Re-lock" : "Protected Master Repository - Click to unlock with Security PIN"}
+              >
+                {isProtectedUnlocked ? (
+                  <>
+                    <Unlock className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Unlocked (Protected Mode)</span>
+                  </>
+                ) : (
+                  <>
+                    <Shield className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Protected</span>
+                  </>
+                )}
+              </button>
+
               {isConsultantMode ? (
                 <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
                   <Lock className="w-3 h-3 text-amber-400" /> Compliance Consultant Master Mode (Frozen Baseline)
@@ -3359,6 +3491,28 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* PROTECTED / UNLOCKED SECURITY BUTTON */}
+          <button
+            type="button"
+            onClick={handleToggleProtectedLock}
+            className={`px-3.5 py-2.5 rounded-xl font-extrabold text-xs transition-all flex items-center gap-2 cursor-pointer shadow-lg border ${
+              isProtectedUnlocked
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400/50 shadow-emerald-950/40'
+                : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40 shadow-amber-950/30'
+            }`}
+            title={isProtectedUnlocked ? "Master Protection UNLOCKED - Click to Re-lock" : "Protected Master Repository - Click to unlock with Security PIN"}
+          >
+            {isProtectedUnlocked ? (
+              <>
+                <Unlock className="w-4 h-4 text-emerald-300" /> Unlocked (Protected Mode)
+              </>
+            ) : (
+              <>
+                <Shield className="w-4 h-4 text-amber-400" /> Protected
+              </>
+            )}
+          </button>
+
           <button
             type="button"
             onClick={handleManualSaveVault}
@@ -3518,6 +3672,28 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                 </span>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
+                {/* PROTECTED BUTTON IN TABLE HEADER */}
+                <button
+                  type="button"
+                  onClick={handleToggleProtectedLock}
+                  className={`px-3 py-1.5 rounded-xl font-extrabold text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition-all border ${
+                    isProtectedUnlocked
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400/40'
+                      : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40'
+                  }`}
+                  title={isProtectedUnlocked ? "Master Protection UNLOCKED - Click to Re-lock" : "Protected Master Repository - Click to unlock with Security PIN"}
+                >
+                  {isProtectedUnlocked ? (
+                    <>
+                      <Unlock className="w-3.5 h-3.5 text-emerald-300" /> Unlocked (Protected Mode)
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="w-3.5 h-3.5 text-amber-400" /> Protected
+                    </>
+                  )}
+                </button>
+
                 <button
                   type="button"
                   onClick={handleManualSaveVault}
@@ -3766,17 +3942,47 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                               <Mail className="w-4 h-4" />
                             </button>
 
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeletingDoc(doc);
-                              }}
-                              className="px-2.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-bold text-xs cursor-pointer flex items-center gap-1 transition-all shadow-xs"
-                              title="Delete Record from Vault"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" /> Delete
-                            </button>
+                            {/* DELETE BUTTON */}
+                            {(!isConsultantMode || isProtectedUnlocked) && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteDocument(doc.id, doc.title);
+                                }}
+                                className="px-2.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-bold text-xs cursor-pointer flex items-center gap-1 transition-all shadow-xs"
+                                title="Delete Record from Vault"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" /> Delete
+                              </button>
+                            )}
+
+                            {/* ROW PROTECTED BUTTON */}
+                            {isConsultantMode && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleProtectedLock();
+                                }}
+                                className={`px-2.5 py-1.5 rounded-xl font-extrabold text-xs cursor-pointer transition-all inline-flex items-center gap-1 border shadow-xs ${
+                                  isProtectedUnlocked
+                                    ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40'
+                                    : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40'
+                                }`}
+                                title={isProtectedUnlocked ? "Master Protection UNLOCKED - Click to Re-lock" : "Protected Master Document - Click to unlock with Security PIN"}
+                              >
+                                {isProtectedUnlocked ? (
+                                  <>
+                                    <Unlock className="w-3.5 h-3.5 text-emerald-400" /> Unlocked
+                                  </>
+                                ) : (
+                                  <>
+                                    <Shield className="w-3.5 h-3.5 text-amber-400" /> Protected
+                                  </>
+                                )}
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -6822,6 +7028,104 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                 <Trash2 className="w-4 h-4" /> Yes, Clear All Documents
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MASTER SECURITY UNLOCK MODAL (PASSWORD: 663385) */}
+      {showSecurityUnlockModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-fadeIn font-sans">
+          <div className="bg-slate-900 w-full max-w-md rounded-3xl shadow-2xl border border-amber-500/40 overflow-hidden text-left">
+            <div className="p-5 bg-gradient-to-r from-slate-950 via-slate-900 to-amber-950/70 text-white flex items-center justify-between border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-500/20 text-amber-400 rounded-2xl border border-amber-500/30">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm text-white flex items-center gap-1.5">
+                    HR Vault Master Protection Unlock
+                  </h3>
+                  <p className="text-[11px] text-slate-400">Security Key Verification for Protected Actions</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowSecurityUnlockModal(false);
+                  setSecurityPinError(null);
+                  setSecurityPinInput('');
+                  setPendingActionOnUnlock(null);
+                }}
+                className="text-slate-400 hover:text-white p-1 rounded-full cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleVerifySecurityPin} className="p-6 space-y-4 text-xs text-slate-300">
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-200 text-xs space-y-1">
+                <div className="font-bold flex items-center gap-1.5 text-amber-400">
+                  <Lock className="w-4 h-4" />
+                  <span>Master Protection Key Required</span>
+                </div>
+                <p className="text-[11px] text-amber-300/90 leading-relaxed">
+                  Enter the Master Security PIN to unlock master template modifications, deletion rights, and protected governance controls in HR Documents Hub &amp; Vault.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-bold text-slate-200 text-xs">
+                  Authorization Security Key *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPinPassword ? "text" : "password"}
+                    autoFocus
+                    value={securityPinInput}
+                    onChange={e => {
+                      setSecurityPinInput(e.target.value);
+                      if (securityPinError) setSecurityPinError(null);
+                    }}
+                    placeholder="Enter Security PIN (e.g. 123456)..."
+                    className="w-full pl-3.5 pr-10 py-2.5 rounded-xl border border-slate-700 bg-slate-950 focus:bg-slate-900 font-mono font-bold text-white text-sm tracking-wider focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPinPassword(prev => !prev)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-200 cursor-pointer"
+                    title={showPinPassword ? "Hide PIN" : "Show PIN"}
+                  >
+                    {showPinPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {securityPinError && (
+                  <p className="text-[11px] text-rose-400 font-bold flex items-center gap-1 pt-1">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+                    {securityPinError}
+                  </p>
+                )}
+              </div>
+
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSecurityUnlockModal(false);
+                    setSecurityPinError(null);
+                    setSecurityPinInput('');
+                    setPendingActionOnUnlock(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 font-bold text-xs text-slate-300 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-black text-xs shadow-lg cursor-pointer transition-all flex items-center gap-1.5 border border-amber-400/30"
+                >
+                  <Unlock className="w-4 h-4" /> Verify &amp; Unlock
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -19,7 +19,7 @@ export function getSyncedAuthorizedRepresentative(client?: Client): SyncedAuthRe
   const email = client?.auth_representative?.email || client?.owner_email || '';
   const phone = client?.auth_representative?.phone || client?.phone || '';
   const designation = client?.auth_representative?.designation || (email ? `Authorized Person • ${email}` : 'Authorized Person • Facility Security Director');
-  const signature = client?.auth_rep_signature || client?.facility_stamp;
+  const signature = client?.auth_representative?.signature_image || client?.auth_rep_signature || client?.facility_stamp;
 
   return {
     name,
@@ -42,6 +42,7 @@ export function syncClientProfileAuthRep(client: Client): Client {
   const authRepEmail = client.auth_representative?.email || client.owner_email || '';
   const authRepPhone = client.auth_representative?.phone || client.phone || '';
   const authRepDesignation = client.auth_representative?.designation || 'Authorized Representative';
+  const authRepSignature = client.auth_representative?.signature_image || client.auth_rep_signature || '';
 
   return {
     ...client,
@@ -49,11 +50,13 @@ export function syncClientProfileAuthRep(client: Client): Client {
     owner_email: authRepEmail || client.owner_email,
     doc_owner: authRepName || client.doc_owner,
     doc_approved_by: authRepName || client.doc_approved_by,
+    auth_rep_signature: authRepSignature || client.auth_rep_signature,
     auth_representative: {
       name: authRepName,
       email: authRepEmail,
       phone: authRepPhone,
       designation: authRepDesignation,
+      signature_image: authRepSignature,
     },
     updated_at: new Date().toISOString(),
   };

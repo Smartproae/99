@@ -132,7 +132,10 @@ export default function DocumentRepository({
   onNavigateTab,
   logAuditTrail,
   allClients = [],
-  onSelectClient
+  onSelectClient,
+  policies = [],
+  onUpdatePolicy,
+  onAddPolicy
 }: DocumentRepositoryProps) {
   const [activeSubTab, setActiveSubTab] = useState<'master_setup'>('master_setup');
 
