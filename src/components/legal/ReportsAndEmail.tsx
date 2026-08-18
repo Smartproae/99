@@ -71,14 +71,14 @@ export default function ReportsAndEmail({
   const facilityEmblemText = clientName.replace(/L\.?L\.?C\.?/i, '').trim().substring(0, 14).toUpperCase();
 
   // 1. Report config form states (Connected to Master Loop)
-  const [prepBy, setPrepBy] = useState('HR Director');
-  const [appBy, setAppBy] = useState('Risk Lead');
-  const [docRef, setDocRef] = useState('REF-HR-RST-B035');
-  const [docVersion, setDocVersion] = useState('v1.0 (Master Loop)');
-  const [docState, setDocState] = useState('CONFIDENTIAL');
+  const [prepBy, setPrepBy] = useState('Sarah Jenkins (Compliance Officer)');
+  const [appBy, setAppBy] = useState('Dr. Faisal Al-Mansoori (Medical Director)');
+  const [docRef, setDocRef] = useState('ANNIB-HR-Doc-03');
+  const [docVersion, setDocVersion] = useState('1.0');
+  const [docState, setDocState] = useState('APPROVED & ACTIVE');
   const [issueDate, setIssueDate] = useState('2026-08-01');
   const [lastReviewDate, setLastReviewDate] = useState('2027-08-01');
-  const [approvalStatus, setApprovalStatus] = useState('Approved & Active');
+  const [approvalStatus, setApprovalStatus] = useState('✓ Approved & Active');
 
   // Clone Data Modal State (Issue #3)
   const [showCloneModal, setShowCloneModal] = useState(false);
@@ -289,7 +289,15 @@ export default function ReportsAndEmail({
   // Live Interactive Report Modal
   const [showLivePreviewModal, setShowLivePreviewModal] = useState(false);
 
-  // Filtered Circulars & Standards based on user compliance selection (Default: Fully & Partially Compliant Only)
+  // Filtered Requirements, Circulars & Standards based on user compliance selection (Excludes 'Not Applicable' from UAE Legal Register)
+  const reportRequirements = requirements.filter(r => {
+    if (r.compliance_status === 'Not Applicable') return false;
+    if (complianceFilter === 'COMPLIANT_ONLY') return r.compliance_status === 'Fully Compliant' || r.compliance_status === 'Partially Compliant';
+    if (complianceFilter === 'FULLY_COMPLIANT') return r.compliance_status === 'Fully Compliant';
+    if (complianceFilter === 'PARTIALLY_COMPLIANT') return r.compliance_status === 'Partially Compliant';
+    return true;
+  });
+
   const reportCirculars = circulars.filter(c => {
     if (complianceFilter === 'COMPLIANT_ONLY') return c.compliance_status === 'Fully Compliant' || c.compliance_status === 'Partially Compliant';
     if (complianceFilter === 'FULLY_COMPLIANT') return c.compliance_status === 'Fully Compliant';
@@ -335,12 +343,8 @@ export default function ReportsAndEmail({
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   // 2. High-Fidelity Pure Vector PDF Generation (Landscape A4, Compact Fit-to-Page Layout)
-  const generatePDFReport = () => {
-    onLogAudit('EXPORT', `Generated GRC Landscape PDF Report type: ${reportType}`, docRef);
-    setIsGeneratingPdf(true);
-
-    try {
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const buildPDFDoc = () => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       const pageWidth = doc.internal.pageSize.getWidth(); // 297mm
       const pageHeight = doc.internal.pageSize.getHeight(); // 210mm
       const margin = 12;
@@ -461,7 +465,7 @@ export default function ReportsAndEmail({
 
       const boxW = (contentWidth - 9) / 4;
       const metrics = [
-        { label: "1. Legal Checkpoints", val: "100%", sub: `${requirements.length} Items Compliant`, color: [16, 185, 129] },
+        { label: "1. Legal Checkpoints", val: "100%", sub: `${reportRequirements.length} Items Compliant`, color: [16, 185, 129] },
         { label: "2. DOH Circulars", val: `${Math.round((reportCirculars.filter(c => c.compliance_status === 'Fully Compliant').length / Math.max(1, reportCirculars.length)) * 100)}%`, sub: `${reportCirculars.length} Active Logs`, color: [99, 102, 241] },
         { label: "3. DOH Standards", val: `${Math.round((reportStandards.filter(s => s.compliance_status === 'Fully Compliant').length / Math.max(1, reportStandards.length)) * 100)}%`, sub: `${reportStandards.length} Standards Verified`, color: [14, 165, 233] },
         { label: "4. License Expirations", val: "100%", sub: `${docs.length} Active Licenses`, color: [245, 158, 11] },
@@ -618,7 +622,7 @@ export default function ReportsAndEmail({
       if (reportType === 'HEALTHCARE_AUDIT' || reportType === 'EXECUTIVE' || reportType === 'LEGAL') {
         const legalHeaders = ["Reference No", "Law / Regulation Name", "Authority", "Issue Date", "Compliance Status", "Responsible Owner"];
         const legalWidths = [32, 95, 35, 28, 28, 55];
-        const legalRows = requirements.map(r => [r.ref_no, r.name, r.authority || 'DOH Abu Dhabi', r.issue_date, r.compliance_status, r.responsible_person]);
+        const legalRows = reportRequirements.map(r => [r.ref_no, r.name, r.authority || 'DOH Abu Dhabi', r.issue_date, r.compliance_status, r.responsible_person]);
         renderTable("2. UAE Healthcare Legal Register Checkpoints", legalHeaders, legalWidths, legalRows);
       }
 
@@ -654,6 +658,15 @@ export default function ReportsAndEmail({
         renderTable("5. Official Asset Inventory Compliance Register", assetHeaders, assetWidths, assetRows);
       }
 
+      return doc;
+  };
+
+  const generatePDFReport = () => {
+    onLogAudit('EXPORT', `Generated GRC Landscape PDF Report type: ${reportType}`, docRef);
+    setIsGeneratingPdf(true);
+
+    try {
+      const doc = buildPDFDoc();
       // Save PDF output file
       doc.save(`Healthcare_Legal_Compliance_Audit_Report_${docRef}.pdf`);
     } catch (err) {
@@ -759,7 +772,7 @@ export default function ReportsAndEmail({
         </table>
 
         <!-- UAE Legal Requirements -->
-        <div class="section-title">2. UAE Healthcare Legal Register Checkpoints (${requirements.length} Checkpoints)</div>
+        <div class="section-title">2. UAE Healthcare Legal Register Checkpoints (${reportRequirements.length} Checkpoints)</div>
         <table class="data-table">
           <thead>
             <tr>
@@ -770,11 +783,11 @@ export default function ReportsAndEmail({
             </tr>
           </thead>
           <tbody>
-            ${requirements.map(r => `
+            ${reportRequirements.map(r => `
               <tr>
                 <td><strong>${r.ref_no}</strong></td>
                 <td><strong>${r.name}</strong><br/><span style="color: #475569;">${r.summary || ''}</span></td>
-                <td><span class="${r.compliance_status === 'Fully Compliant' ? 'badge-compliant' : 'badge-non'}">${r.compliance_status}</span></td>
+                <td><span class="${r.compliance_status === 'Fully Compliant' ? 'badge-compliant' : r.compliance_status === 'Partially Compliant' ? 'badge-partially' : 'badge-non'}">${r.compliance_status}</span></td>
                 <td>${r.responsible_person}</td>
               </tr>
             `).join('')}
@@ -891,7 +904,7 @@ export default function ReportsAndEmail({
       XLSX.utils.book_append_sheet(wb, ws_meta, 'Summary');
 
       // Sheet 2: Legal requirements
-      const legal_rows = requirements.map(r => ({
+      const legal_rows = reportRequirements.map(r => ({
         'Reference No': r.ref_no,
         'Law / Regulation Name': r.name,
         'Authority': r.authority,
@@ -1084,7 +1097,7 @@ export default function ReportsAndEmail({
             </tbody>
           </table>
 
-          <h2>2. UAE Healthcare Legal Register Checkpoints</h2>
+          <h2>2. UAE Healthcare Legal Register Checkpoints (${reportRequirements.length} Checkpoints)</h2>
           <table>
             <thead>
               <tr>
@@ -1095,11 +1108,11 @@ export default function ReportsAndEmail({
               </tr>
             </thead>
             <tbody>
-              ${requirements.map(r => `
+              ${reportRequirements.map(r => `
                 <tr>
                   <td><strong>${r.ref_no}</strong></td>
                   <td><strong>${r.name}</strong><br/>${r.summary}</td>
-                  <td><span class="${r.compliance_status === 'Fully Compliant' ? 'status-compliant' : 'status-non'}">${r.compliance_status}</span></td>
+                  <td><span class="${r.compliance_status === 'Fully Compliant' ? 'status-compliant' : r.compliance_status === 'Partially Compliant' ? 'status-partially' : 'status-non'}">${r.compliance_status}</span></td>
                   <td>${r.responsible_person}</td>
                 </tr>
               `).join('')}
@@ -1171,38 +1184,103 @@ export default function ReportsAndEmail({
     }
   };
 
-  // 5. Simulated SMTP Email Dispatch with attach tracking (Module 8)
-  const handleSendEmailSubmit = (e: React.FormEvent) => {
+  // 5. Enterprise SMTP Email Dispatch with PDF/Attachment Integration
+  const handleSendEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!emailTo || !emailSubject || !emailMessage) {
-      alert('Please fill out mandatory email fields.');
+      alert('Please fill out mandatory email fields (To, Subject, Message).');
       return;
     }
 
     setIsSendingEmail(true);
     setEmailSuccess(null);
-    onLogAudit('EMAIL', `Initiating email dispatch simulation to ${emailTo}`, docRef);
+    onLogAudit('EMAIL', `Initiating email dispatch to ${emailTo}`, docRef);
 
-    setTimeout(() => {
-      setIsSendingEmail(false);
-      setEmailSuccess(`Success! Message dispatched via simulated SMTP server to ${emailTo}. Check logs in Settings!`);
-      
-      // Dispatch email log to parent hook
-      if (onAddEmailLog) {
-        onAddEmailLog(
-          emailTo, 
-          emailSubject, 
-          'REPORTS', 
-          'SENT', 
-          `Attachments: ${attachPdf ? '[PDF REPORT] ' : ''}${attachExcel ? '[EXCEL WORKBOOK]' : ''}\n\nCC: ${emailCc}\nBCC: ${emailBcc}\n\n${emailMessage}`
-        );
+    try {
+      // Retrieve configured SMTP settings from localStorage if available
+      let smtpConfig: any = undefined;
+      try {
+        const savedSmtp = localStorage.getItem('sh_smtp');
+        if (savedSmtp) {
+          smtpConfig = JSON.parse(savedSmtp);
+        }
+      } catch (err) {
+        console.warn('Could not parse stored SMTP settings', err);
       }
 
-      onLogAudit('EMAIL', `Dispatched compliant healthcare report to ${emailTo}`, docRef);
-      
-      // Clear fields on success
-      setTimeout(() => setEmailSuccess(null), 7000);
-    }, 2500);
+      // Generate base64 PDF attachment if requested
+      let pdfBase64: string | undefined = undefined;
+      if (attachPdf) {
+        try {
+          const doc = buildPDFDoc();
+          const dataUri = doc.output('datauristring');
+          pdfBase64 = dataUri.split(',')[1];
+        } catch (pdfErr) {
+          console.warn('Could not generate PDF attachment for email dispatch', pdfErr);
+        }
+      }
+
+      const response = await fetch('/api/send-compliance-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          smtpConfig,
+          recipientEmails: emailTo.split(/[,;]/).map(s => s.trim()).filter(Boolean),
+          cc: emailCc ? emailCc.split(/[,;]/).map(s => s.trim()).filter(Boolean) : undefined,
+          bcc: emailBcc ? emailBcc.split(/[,;]/).map(s => s.trim()).filter(Boolean) : undefined,
+          subject: emailSubject,
+          message: emailMessage,
+          htmlContent: `
+            <div style="font-family: sans-serif; padding: 24px; color: #1e293b; max-width: 680px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+              <div style="border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 18px;">
+                <h2 style="color: #0369a1; margin: 0 0 4px 0; font-size: 18px;">${clientName} — Compliance Report</h2>
+                <p style="margin: 0; color: #64748b; font-size: 12px;">Ref: ${docRef} | Version ${docVersion} (${docState}) | License: ${facilityLicense}</p>
+              </div>
+              <div style="font-size: 14px; line-height: 1.6; color: #334155; white-space: pre-wrap; margin-bottom: 20px;">
+                ${emailMessage}
+              </div>
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; font-size: 11px; color: #64748b;">
+                <strong>Attached Compliance Documents:</strong> ${attachPdf ? '✓ PDF Compliance Audit Report' : ''} ${attachExcel ? '✓ Excel Matrix' : ''}
+              </div>
+              <p style="font-size: 10px; color: #94a3b8; margin-top: 18px; border-top: 1px solid #f1f5f9; padding-top: 10px;">
+                This is an official transmission from the UAE Healthcare Regulatory & Compliance Portal.
+              </p>
+            </div>
+          `,
+          pdfAttachment: pdfBase64
+        })
+      });
+
+      const resData = await response.json();
+
+      if (resData.success) {
+        const simNotice = resData.simulated ? ' (Sandbox Relay Mode)' : '';
+        setEmailSuccess(`Email successfully delivered to ${emailTo}${simNotice}`);
+
+        // Dispatch email log to parent hook
+        if (onAddEmailLog) {
+          onAddEmailLog(
+            emailTo, 
+            emailSubject, 
+            'REPORTS', 
+            'SENT', 
+            `Attachments: ${attachPdf ? '[PDF REPORT] ' : ''}${attachExcel ? '[EXCEL WORKBOOK]' : ''}\n\nCC: ${emailCc}\nBCC: ${emailBcc}\n\n${emailMessage}`
+          );
+        }
+
+        onLogAudit('EMAIL', `Dispatched compliant healthcare report to ${emailTo}${simNotice}`, docRef);
+        setTimeout(() => setEmailSuccess(null), 8000);
+      } else {
+        const errorMsg = resData.error || 'Failed to dispatch email. Please check your SMTP configuration in Settings.';
+        alert(`Email Dispatch Notice: ${errorMsg}`);
+        onLogAudit('EMAIL_ERROR', `Email dispatch error to ${emailTo}: ${errorMsg}`, docRef);
+      }
+    } catch (err: any) {
+      console.error('Email dispatch error:', err);
+      alert(`Network or Server error while dispatching email: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setIsSendingEmail(false);
+    }
   };
 
   return (
@@ -1228,7 +1306,8 @@ export default function ReportsAndEmail({
               setDocRef(data.ref_code);
               setPrepBy(data.prepared_by);
               setAppBy(data.approved_by);
-              setDocState(data.classification || 'ACTIVE');
+              setDocState(data.classification || 'APPROVED & ACTIVE');
+              setApprovalStatus(data.classification?.includes('ACTIVE') ? '✓ Approved & Active' : 'Approved & Active');
               setDocVersion(data.version || '1.0');
               setIssueDate(data.issue_date);
               setLastReviewDate(data.review_date);
@@ -1350,7 +1429,7 @@ export default function ReportsAndEmail({
                   ⚡ Partially Compliant Only ({circulars.filter(c => c.compliance_status === 'Partially Compliant').length} Circulars / {standards.filter(s => s.compliance_status === 'Partially Compliant').length} Standards)
                 </option>
                 <option value="ALL">
-                  Show All Items (Including Non-Compliant & Not Applicable)
+                  Show All Items (Including Non-Compliant)
                 </option>
               </select>
               <p className="text-[10px] text-indigo-600/80 font-medium mt-1">
@@ -1744,7 +1823,7 @@ export default function ReportsAndEmail({
                   <div className="bg-emerald-50/80 p-2 rounded-xl border border-emerald-200 text-center">
                     <span className="text-[9px] font-extrabold text-emerald-800 uppercase block">1. Legal Checkpoints</span>
                     <span className="text-base font-black text-emerald-900">100%</span>
-                    <span className="text-[8.5px] font-bold text-emerald-700 block mt-0.5">{requirements.length} / {requirements.length} Compliant</span>
+                    <span className="text-[8.5px] font-bold text-emerald-700 block mt-0.5">{reportRequirements.length} / {reportRequirements.length} Compliant</span>
                   </div>
                   <div className="bg-indigo-50/80 p-2 rounded-xl border border-indigo-200 text-center">
                     <span className="text-[9px] font-extrabold text-indigo-800 uppercase block">2. DOH Circulars</span>
@@ -1868,7 +1947,7 @@ export default function ReportsAndEmail({
               {(reportType === 'HEALTHCARE_AUDIT' || reportType === 'EXECUTIVE' || reportType === 'LEGAL') && (
                 <div className="space-y-1.5 pt-1">
                   <h3 className="font-extrabold text-[11px] text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" /> 2. UAE Healthcare Legal Register Checkpoints
+                    <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" /> 2. UAE Healthcare Legal Register Checkpoints ({reportRequirements.length} Checkpoints)
                   </h3>
                   <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                     <table className="w-full text-[10px] text-left border-collapse">
@@ -1883,7 +1962,7 @@ export default function ReportsAndEmail({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 bg-white">
-                        {requirements.map((r, i) => (
+                        {reportRequirements.map((r, i) => (
                           <tr key={i} className="hover:bg-slate-50/80">
                             <td className="p-2 font-mono font-extrabold text-indigo-700 border-r border-slate-200">{r.ref_no}</td>
                             <td className="p-2 border-r border-slate-200">
@@ -1893,7 +1972,9 @@ export default function ReportsAndEmail({
                             <td className="p-2 text-slate-700 font-medium border-r border-slate-200">{r.authority || 'DOH Abu Dhabi'}</td>
                             <td className="p-2 text-slate-700 font-medium border-r border-slate-200">{r.issue_date}</td>
                             <td className="p-2 border-r border-slate-200">
-                              <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md text-[9.5px] font-extrabold">
+                              <span className={`px-2 py-0.5 rounded-md text-[9.5px] font-extrabold ${
+                                r.compliance_status === 'Fully Compliant' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                              }`}>
                                 {r.compliance_status}
                               </span>
                             </td>
@@ -2131,7 +2212,7 @@ export default function ReportsAndEmail({
               <div className="bg-emerald-50/80 p-2 rounded-xl border border-emerald-200 text-center">
                 <span className="text-[9px] font-extrabold text-emerald-800 uppercase block">1. Legal Checkpoints</span>
                 <span className="text-base font-black text-emerald-900">100%</span>
-                <span className="text-[8.5px] font-bold text-emerald-700 block mt-0.5">{requirements.length} / {requirements.length} Compliant</span>
+                <span className="text-[8.5px] font-bold text-emerald-700 block mt-0.5">{reportRequirements.length} / {reportRequirements.length} Compliant</span>
               </div>
               <div className="bg-indigo-50/80 p-2 rounded-xl border border-indigo-200 text-center">
                 <span className="text-[9px] font-extrabold text-indigo-800 uppercase block">2. DOH Circulars</span>
@@ -2227,7 +2308,7 @@ export default function ReportsAndEmail({
           {(reportType === 'HEALTHCARE_AUDIT' || reportType === 'EXECUTIVE' || reportType === 'LEGAL') && (
             <div className="space-y-1.5 pt-1">
               <h3 className="font-extrabold text-[11px] text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" /> 2. UAE Healthcare Legal Register Checkpoints
+                <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" /> 2. UAE Healthcare Legal Register Checkpoints ({reportRequirements.length} Checkpoints)
               </h3>
               <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                 <table className="w-full text-[10px] text-left border-collapse">
@@ -2242,7 +2323,7 @@ export default function ReportsAndEmail({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 bg-white">
-                    {requirements.map((r, i) => (
+                    {reportRequirements.map((r, i) => (
                       <tr key={i} className="hover:bg-slate-50/80">
                         <td className="p-2 font-mono font-extrabold text-indigo-700 border-r border-slate-200">{r.ref_no}</td>
                         <td className="p-2 border-r border-slate-200">
@@ -2252,7 +2333,9 @@ export default function ReportsAndEmail({
                         <td className="p-2 text-slate-700 font-medium border-r border-slate-200">{r.authority || 'DOH Abu Dhabi'}</td>
                         <td className="p-2 text-slate-700 font-medium border-r border-slate-200">{r.issue_date}</td>
                         <td className="p-2 border-r border-slate-200">
-                          <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md text-[9.5px] font-extrabold">
+                          <span className={`px-2 py-0.5 rounded-md text-[9.5px] font-extrabold ${
+                            r.compliance_status === 'Fully Compliant' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
                             {r.compliance_status}
                           </span>
                         </td>

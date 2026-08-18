@@ -13,10 +13,67 @@ export interface DocRefLoopData {
   reviewed_by: string;
   approved_by: string;
   version?: string;
+  framework_group?: string;
 }
 
 // Standard fallback Document Reference records connected via Loop
 export const DEFAULT_LOOP_DOC_RECORDS: DocRefLoopData[] = [
+  {
+    ref_code: 'ANNIB-IT-ACC-01',
+    doc_name: 'System Access Review Summary Report',
+    module_name: 'Access Management',
+    classification: 'RESTRICTED / CONFIDENTIAL',
+    issue_date: '2026-08-01',
+    review_date: '2027-08-01',
+    approval_date: '2026-08-01',
+    prepared_by: 'Aseef Sulaiman (IT Manager)',
+    reviewed_by: 'Sarah Jenkins (Compliance Officer)',
+    approved_by: 'Dr. Faisal Al-Mansoori (Medical Director)',
+    version: 'v2.0 (Master Loop)',
+    framework_group: 'Advance Tier (ISO 27001 / ADHICS)'
+  },
+  {
+    ref_code: 'REF-SYS-ACC-001',
+    doc_name: 'System Access Review Summary Report',
+    module_name: 'Access Management',
+    classification: 'APPROVED & ACTIVE',
+    issue_date: '2026-08-01',
+    review_date: '2027-08-01',
+    approval_date: '2026-08-01',
+    prepared_by: 'IT Manager',
+    reviewed_by: 'Compliance Lead',
+    approved_by: 'Medical Director',
+    version: 'v2.0 (Master Loop)',
+    framework_group: 'Advance Tier (ISO 27001 / ADHICS)'
+  },
+  {
+    ref_code: 'ADHICS-ACC-REV-2026',
+    doc_name: 'System Access Review Summary Report',
+    module_name: 'Access Management',
+    classification: 'RESTRICTED / CONFIDENTIAL',
+    issue_date: '2026-08-01',
+    review_date: '2027-08-01',
+    approval_date: '2026-08-01',
+    prepared_by: 'Aseef Sulaiman (IT Manager)',
+    reviewed_by: 'Compliance Lead',
+    approved_by: 'Dr. Faisal Al-Mansoori (Medical Director)',
+    version: 'v2.1',
+    framework_group: 'Advance Tier (ISO 27001 / ADHICS)'
+  },
+  {
+    ref_code: 'ANNIB-HR-Doc-03',
+    doc_name: 'Healthcare Legal & Compliance Audit Report',
+    module_name: 'Compliance Audit',
+    classification: 'APPROVED & ACTIVE',
+    issue_date: '2026-08-01',
+    review_date: '2027-08-01',
+    approval_date: '2026-08-01',
+    prepared_by: 'Sarah Jenkins (Compliance Officer)',
+    reviewed_by: 'Compliance Officer',
+    approved_by: 'Dr. Faisal Al-Mansoori (Medical Director)',
+    version: '1.0',
+    framework_group: 'Advance Tier'
+  },
   {
     ref_code: 'REF-HR-NDA-001',
     doc_name: 'Employee Confidentiality Agreement',
@@ -28,7 +85,8 @@ export const DEFAULT_LOOP_DOC_RECORDS: DocRefLoopData[] = [
     prepared_by: 'HR & Legal Desk',
     reviewed_by: 'Compliance Officer',
     approved_by: 'Managing Director',
-    version: 'v1.0 (Master Loop)'
+    version: 'v1.0 (Master Loop)',
+    framework_group: 'Basic'
   },
   {
     ref_code: 'REF-INC-LOG-002',
@@ -41,7 +99,8 @@ export const DEFAULT_LOOP_DOC_RECORDS: DocRefLoopData[] = [
     prepared_by: 'CISO / Security Desk',
     reviewed_by: 'Risk Committee',
     approved_by: 'Medical Director',
-    version: 'v1.0 (Master Loop)'
+    version: 'v1.0 (Master Loop)',
+    framework_group: 'Transmission Tier'
   },
   {
     ref_code: 'REF-ONB-CHK-003',
@@ -54,7 +113,8 @@ export const DEFAULT_LOOP_DOC_RECORDS: DocRefLoopData[] = [
     prepared_by: 'HR Training Officer',
     reviewed_by: 'Facility Manager',
     approved_by: 'HR Lead',
-    version: 'v1.0 (Master Loop)'
+    version: 'v1.0 (Master Loop)',
+    framework_group: 'Basic'
   },
   {
     ref_code: 'REF-HR-6597',
@@ -67,7 +127,8 @@ export const DEFAULT_LOOP_DOC_RECORDS: DocRefLoopData[] = [
     prepared_by: 'HR Director',
     reviewed_by: 'Compliance Officer',
     approved_by: 'Risk Review Lead',
-    version: 'v1.0 (Master Loop)'
+    version: 'v1.0 (Master Loop)',
+    framework_group: 'Basic'
   },
   {
     ref_code: 'REF-HR-2500',
@@ -80,7 +141,8 @@ export const DEFAULT_LOOP_DOC_RECORDS: DocRefLoopData[] = [
     prepared_by: 'HR Director',
     reviewed_by: 'Compliance Officer',
     approved_by: 'Risk Review Lead',
-    version: 'v1.0 (Master Loop)'
+    version: 'v1.0 (Master Loop)',
+    framework_group: 'Basic'
   },
   {
     ref_code: 'REF-HR-RST-B035',
@@ -93,7 +155,8 @@ export const DEFAULT_LOOP_DOC_RECORDS: DocRefLoopData[] = [
     prepared_by: 'HR Director',
     reviewed_by: 'Compliance Officer',
     approved_by: 'Risk Lead',
-    version: 'v1.0 (Master Loop)'
+    version: 'v1.0 (Master Loop)',
+    framework_group: 'Basic'
   },
   {
     ref_code: 'DOH-HLAR-2026-001',
@@ -106,7 +169,8 @@ export const DEFAULT_LOOP_DOC_RECORDS: DocRefLoopData[] = [
     prepared_by: 'Sarah Jenkins (Compliance Officer)',
     reviewed_by: 'Compliance Officer',
     approved_by: 'Dr. Faisal Al-Mansoori (Medical Director)',
-    version: '1.0'
+    version: '1.0',
+    framework_group: 'Advance Tier'
   },
   {
     ref_code: 'REF-POL-001',
@@ -119,7 +183,8 @@ export const DEFAULT_LOOP_DOC_RECORDS: DocRefLoopData[] = [
     prepared_by: 'CISO / Security Desk',
     reviewed_by: 'Compliance Officer',
     approved_by: 'Managing Director / CEO',
-    version: 'v1.0'
+    version: 'v1.0',
+    framework_group: 'Basic'
   },
   {
     ref_code: 'REF-SOP-002',
@@ -132,7 +197,8 @@ export const DEFAULT_LOOP_DOC_RECORDS: DocRefLoopData[] = [
     prepared_by: 'IT Lead',
     reviewed_by: 'Operations Manager',
     approved_by: 'Technical Director',
-    version: 'v1.2'
+    version: 'v1.2',
+    framework_group: 'Transmission Tier'
   },
   {
     ref_code: 'REF-AST-INV-004',
@@ -145,59 +211,8 @@ export const DEFAULT_LOOP_DOC_RECORDS: DocRefLoopData[] = [
     prepared_by: 'IT Asset Manager',
     reviewed_by: 'Infrastructure Lead',
     approved_by: 'Risk Director',
-    version: 'v2.0'
-  },
-  {
-    ref_code: 'REF-AGR-005',
-    doc_name: 'Commercial & Operational SLA Master Agreement',
-    module_name: 'Agreements',
-    classification: 'CONFIDENTIAL',
-    issue_date: '2025-02-01',
-    review_date: '2026-02-01',
-    approval_date: '2025-02-05',
-    prepared_by: 'Legal Counsel',
-    reviewed_by: 'Compliance Officer',
-    approved_by: 'CEO',
-    version: 'v1.0'
-  },
-  {
-    ref_code: 'REF-REP-006',
-    doc_name: 'Unified Compliance Audit & Executive Assessment Report',
-    module_name: 'Reports',
-    classification: 'CONFIDENTIAL',
-    issue_date: '2025-04-01',
-    review_date: '2026-04-01',
-    approval_date: '2025-04-05',
-    prepared_by: 'Lead Auditor',
-    reviewed_by: 'Quality Director',
-    approved_by: 'Board Committee',
-    version: 'v1.5'
-  },
-  {
-    ref_code: 'REF-PHY-SEC-2026',
-    doc_name: 'Facility Access Control & CCTV Perimeter Security Audit',
-    module_name: 'Physical Security',
-    classification: 'CONFIDENTIAL',
-    issue_date: '2025-03-10',
-    review_date: '2026-03-10',
-    approval_date: '2025-03-10',
-    prepared_by: 'Head of Physical Security',
-    reviewed_by: 'Facility Lead',
-    approved_by: 'Security Director',
-    version: 'v1.1'
-  },
-  {
-    ref_code: 'REF-KEY-REG-101',
-    doc_name: 'Master Key & Physical Vault Key Distribution Ledger',
-    module_name: 'Key Register',
-    classification: 'RESTRICTED',
-    issue_date: '2025-02-01',
-    review_date: '2026-02-01',
-    approval_date: '2025-02-01',
-    prepared_by: 'Security Custodian',
-    reviewed_by: 'Physical Security Manager',
-    approved_by: 'Chief Security Officer',
-    version: 'v2.0'
+    version: 'v2.0',
+    framework_group: 'Basic'
   }
 ];
 
@@ -224,46 +239,100 @@ export const DocRefLoopSelector: React.FC<DocRefLoopSelectorProps> = ({
   compact = false
 }) => {
   const [availableDocs, setAvailableDocs] = useState<DocRefLoopData[]>(DEFAULT_LOOP_DOC_RECORDS);
-  const [selectedRef, setSelectedRef] = useState<string>(currentRefCode || 'REF-HR-6597');
+  const [selectedRef, setSelectedRef] = useState<string>(currentRefCode || 'ANNIB-IT-ACC-01');
   const [isSynced, setIsSynced] = useState<boolean>(true);
 
-  // Load latest records from Quick Master Setup localStorage
-  useEffect(() => {
+  // Load latest records from Quick Master Setup localStorage & listen to loop sync events
+  const refreshRecords = () => {
     try {
+      const mergedMap = new Map<string, DocRefLoopData>();
+      DEFAULT_LOOP_DOC_RECORDS.forEach(item => mergedMap.set(item.ref_code, item));
+
+      // 1. Check root quick master setup
       const saved = localStorage.getItem('sh_quick_master_setup');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed.documents) && parsed.documents.length > 0) {
-          const mappedDocs: DocRefLoopData[] = parsed.documents.map((d: any) => ({
-            ref_code: d.ref_code || 'REF-GEN-001',
-            doc_name: d.doc_name || 'Governance Record',
-            module_name: d.module_name || 'General',
-            classification: d.classification || 'CONFIDENTIAL',
-            issue_date: toISODate(d.issue_date),
-            review_date: toISODate(d.next_due_date || d.review_date),
-            approval_date: toISODate(d.approval_date || d.effective_date),
-            prepared_by: d.prepared_by || 'HR Director',
-            reviewed_by: d.reviewed_by || 'Compliance Officer',
-            approved_by: d.approved_by || 'Risk Lead',
-            version: d.version_control || 'v1.0'
-          }));
+          parsed.documents.forEach((d: any) => {
+            if (d && d.ref_code) {
+              mergedMap.set(d.ref_code, {
+                ref_code: d.ref_code,
+                doc_name: d.doc_name || 'Governance Record',
+                module_name: d.module_name || 'General',
+                classification: d.classification || 'CONFIDENTIAL',
+                issue_date: toISODate(d.issue_date),
+                review_date: toISODate(d.next_due_date || d.review_date),
+                approval_date: toISODate(d.approval_date || d.effective_date),
+                prepared_by: d.prepared_by || 'HR Director',
+                reviewed_by: d.reviewed_by || 'Compliance Officer',
+                approved_by: d.approved_by || 'Risk Lead',
+                version: d.version_control || 'v1.0',
+                framework_group: d.framework_group || 'Basic'
+              });
+            }
+          });
+        }
+      }
 
-          // Merge with default loop records ensuring no duplicates
-          const mergedMap = new Map<string, DocRefLoopData>();
-          DEFAULT_LOOP_DOC_RECORDS.forEach(item => mergedMap.set(item.ref_code, item));
-          mappedDocs.forEach(item => mergedMap.set(item.ref_code, item));
-
-          const merged = Array.from(mergedMap.values());
-          setAvailableDocs(merged);
-
-          if (currentRefCode && mergedMap.has(currentRefCode)) {
-            setSelectedRef(currentRefCode);
+      // 2. Check client-specific keys
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('sh_quick_master_setup_')) {
+          try {
+            const clientSaved = localStorage.getItem(key);
+            if (clientSaved) {
+              const clientParsed = JSON.parse(clientSaved);
+              if (Array.isArray(clientParsed.documents)) {
+                clientParsed.documents.forEach((d: any) => {
+                  if (d && d.ref_code) {
+                    mergedMap.set(d.ref_code, {
+                      ref_code: d.ref_code,
+                      doc_name: d.doc_name || 'Governance Record',
+                      module_name: d.module_name || 'General',
+                      classification: d.classification || 'CONFIDENTIAL',
+                      issue_date: toISODate(d.issue_date),
+                      review_date: toISODate(d.next_due_date || d.review_date),
+                      approval_date: toISODate(d.approval_date || d.effective_date),
+                      prepared_by: d.prepared_by || 'HR Director',
+                      reviewed_by: d.reviewed_by || 'Compliance Officer',
+                      approved_by: d.approved_by || 'Risk Lead',
+                      version: d.version_control || 'v1.0',
+                      framework_group: d.framework_group || 'Basic'
+                    });
+                  }
+                });
+              }
+            }
+          } catch {
+            // ignore
           }
         }
+      }
+
+      const merged = Array.from(mergedMap.values());
+      setAvailableDocs(merged);
+
+      if (currentRefCode && mergedMap.has(currentRefCode)) {
+        setSelectedRef(currentRefCode);
       }
     } catch (e) {
       console.warn('Could not read sh_quick_master_setup in DocRefLoopSelector:', e);
     }
+  };
+
+  useEffect(() => {
+    refreshRecords();
+
+    const handleSyncEvent = () => refreshRecords();
+    window.addEventListener('sh_quick_master_setup_updated', handleSyncEvent);
+    window.addEventListener('sh_doc_ref_loop_applied', handleSyncEvent);
+    window.addEventListener('storage', handleSyncEvent);
+
+    return () => {
+      window.removeEventListener('sh_quick_master_setup_updated', handleSyncEvent);
+      window.removeEventListener('sh_doc_ref_loop_applied', handleSyncEvent);
+      window.removeEventListener('storage', handleSyncEvent);
+    };
   }, [currentRefCode]);
 
   const handleExecuteLoopConnect = (refToApply?: string) => {
@@ -272,6 +341,55 @@ export const DocRefLoopSelector: React.FC<DocRefLoopSelectorProps> = ({
     if (found) {
       onApplyLoop(found);
       setIsSynced(true);
+
+      // Persist to localStorage and dispatch event to update Quick Master Setup & Automatic Module Resolver
+      try {
+        localStorage.setItem('sh_selected_doc_ref', JSON.stringify(found));
+
+        // Upsert into sh_quick_master_setup
+        const masterRaw = localStorage.getItem('sh_quick_master_setup');
+        let masterData: any = {};
+        if (masterRaw) {
+          masterData = JSON.parse(masterRaw);
+        }
+        if (!masterData.documents || !Array.isArray(masterData.documents)) {
+          masterData.documents = [];
+        }
+
+        const existingIdx = masterData.documents.findIndex((d: any) => d.ref_code === found.ref_code);
+        const docRecord = {
+          id: existingIdx >= 0 ? masterData.documents[existingIdx].id : 'doc_' + Date.now(),
+          ref_code: found.ref_code,
+          doc_name: found.doc_name,
+          module_name: found.module_name || 'Access Management',
+          framework_group: found.framework_group || 'Basic',
+          version_control: found.version || 'v2.0 (Master Loop)',
+          issue_date: found.issue_date,
+          approval_date: found.approval_date,
+          effective_date: found.approval_date || found.issue_date,
+          next_due_date: found.review_date,
+          classification: found.classification,
+          prepared_by: found.prepared_by,
+          reviewed_by: found.reviewed_by,
+          approved_by: found.approved_by,
+          is_mapped: true
+        };
+
+        if (existingIdx >= 0) {
+          masterData.documents[existingIdx] = { ...masterData.documents[existingIdx], ...docRecord };
+        } else {
+          masterData.documents.unshift(docRecord);
+        }
+
+        localStorage.setItem('sh_quick_master_setup', JSON.stringify(masterData));
+
+        // Dispatch events so QuickMasterSetup and all modules immediately update Document Reference Details & Resolver
+        window.dispatchEvent(new CustomEvent('sh_doc_ref_loop_applied', { detail: docRecord }));
+        window.dispatchEvent(new CustomEvent('sh_quick_master_setup_updated', { detail: masterData }));
+        window.dispatchEvent(new Event('storage'));
+      } catch (err) {
+        console.warn('Failed to sync loop record to sh_quick_master_setup', err);
+      }
     }
   };
 

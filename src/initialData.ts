@@ -70,8 +70,27 @@ export const INITIAL_CLIENTS: Client[] = [
     emr_support: {
       team_name: 'Beema Yoosaf',
       email: 'beema@safecaretec.com',
-      phone: '+971 2 506 7300'
-    }
+      phone: '+971 2 506 7300',
+      service_type: 'Primary EMR / EHR'
+    },
+    emr_vendors: [
+      {
+        id: 'emr-v1',
+        team_name: 'Beema Yoosaf (SafeCare Medical Systems)',
+        email: 'beema@safecaretec.com',
+        phone: '+971 2 506 7300',
+        service_type: 'Primary EMR / EHR',
+        contact_person: 'Beema Yoosaf'
+      },
+      {
+        id: 'emr-v2',
+        team_name: 'Malaffi HIE Direct Integration Tech',
+        email: 'support@malaffi.ae',
+        phone: '+971 2 400 9000',
+        service_type: 'Malaffi HIE Integrator',
+        contact_person: 'Malaffi Support Desk'
+      }
+    ]
   },
   {
     id: 'c0',
@@ -1869,14 +1888,14 @@ export const INITIAL_EMAIL_LOGS: EmailLog[] = [
 ];
 
 export const DEFAULT_SMTP: SMTPSetting = {
-  server: 'smtp.office365.com',
+  server: 'mail.smartpro.ae',
   port: 587,
-  username: 'compliance.hub@smarthub.io',
-  password: 'CompliancePass123!',
-  sender_email: 'no-reply@smarthub.io',
+  username: 'mail@smartpro.ae',
+  password: '',
+  sender_email: 'mail@smartpro.ae',
   tls: true,
   ssl: false,
-  provider: 'Office 365',
+  provider: 'Custom SMTP',
   sandbox_mode: false
 };
 
@@ -1972,5 +1991,256 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     department: 'Admin',
     joining_date: '2024-01-01',
     current_status: 'Active'
+  },
+  {
+    id: 'emp-yasser-01',
+    client_id: 'c1',
+    employee_id: 'EMP-CCAD-106',
+    employee_name: 'Yasser Elsayed',
+    position: 'Senior IT Specialist',
+    department: 'IT & Infrastructure',
+    joining_date: '2023-04-01',
+    current_status: 'Active'
+  },
+  {
+    id: 'emp-yasser-sprc',
+    client_id: 'SPRC',
+    employee_id: 'SPRC-02',
+    employee_name: 'Yasser Elsayed',
+    position: 'Senior IT Specialist',
+    department: 'IT & Infrastructure',
+    joining_date: '2023-04-01',
+    current_status: 'Active'
+  }
+];
+
+export const INITIAL_SYSTEM_ACCESS_REVIEWS: import('./types').SystemAccessReviewItem[] = [
+  {
+    id: 'sar-001',
+    client_id: 'c1',
+    employee_id: 'EMP-CCAD-106',
+    employee_name: 'Yasser Elsayed',
+    position: 'Senior IT Specialist',
+    department: 'IT & Infrastructure',
+    system_application: 'Desktop / Computer User Accounts',
+    access_role: 'General / End User',
+    username: 'yasserit',
+    module_privilege: 'Standard Workstation & Local Domain User',
+    status: 'Active',
+    approved_by: 'Dr. Faisal Al-Mansoori (Medical Director)',
+    approved_by_designation: 'Medical Director',
+    prepared_by: 'Aseef Sulaiman (IT Manager)',
+    prepared_by_designation: 'IT Manager',
+    review_date: '2026-08-17',
+    created_at: '2026-08-17T08:30:00Z',
+    updated_at: '2026-08-17T08:30:00Z',
+    created_by: 'IT Manager',
+    modified_by: 'IT Manager',
+    notes: 'Standard authorized desktop workstation credentials.',
+    audit_history: [
+      {
+        id: 'aud-001',
+        action: 'CREATED',
+        changed_at: '2026-08-17T08:30:00Z',
+        changed_by: 'IT Manager',
+        details: 'Initial system access review created with Active status',
+        new_status: 'Active'
+      }
+    ]
+  },
+  {
+    id: 'sar-002',
+    client_id: 'c1',
+    employee_id: 'EMP-CCAD-106',
+    employee_name: 'Yasser Elsayed',
+    position: 'Senior IT Specialist',
+    department: 'IT & Infrastructure',
+    system_application: 'Firewall',
+    access_role: 'Administrator',
+    username: 'yasser_fw',
+    module_privilege: 'Firewall Administration',
+    status: 'Active',
+    approved_by: 'Dr. Faisal Al-Mansoori (Medical Director)',
+    approved_by_designation: 'Medical Director',
+    prepared_by: 'Aseef Sulaiman (IT Manager)',
+    prepared_by_designation: 'IT Manager',
+    review_date: '2026-08-17',
+    created_at: '2026-08-17T08:32:00Z',
+    updated_at: '2026-08-17T08:32:00Z',
+    created_by: 'IT Manager',
+    modified_by: 'IT Manager',
+    notes: 'Perimeter firewall configuration and rule management.',
+    audit_history: [
+      {
+        id: 'aud-002',
+        action: 'CREATED',
+        changed_at: '2026-08-17T08:32:00Z',
+        changed_by: 'IT Manager',
+        details: 'Privileged firewall administrator role review verified.',
+        new_status: 'Active'
+      }
+    ]
+  },
+  {
+    id: 'sar-003',
+    client_id: 'c1',
+    employee_id: 'EMP-CCAD-106',
+    employee_name: 'Yasser Elsayed',
+    position: 'Senior IT Specialist',
+    department: 'IT & Infrastructure',
+    system_application: 'NAS',
+    access_role: 'Administrator',
+    username: 'yasser_nas',
+    module_privilege: 'NAS Read/Write',
+    status: 'Active',
+    approved_by: 'Dr. Faisal Al-Mansoori (Medical Director)',
+    approved_by_designation: 'Medical Director',
+    prepared_by: 'Aseef Sulaiman (IT Manager)',
+    prepared_by_designation: 'IT Manager',
+    review_date: '2026-08-17',
+    created_at: '2026-08-17T08:35:00Z',
+    updated_at: '2026-08-17T08:35:00Z',
+    created_by: 'IT Manager',
+    modified_by: 'IT Manager',
+    notes: 'Storage storage volume admin and backup shares access.',
+    audit_history: [
+      {
+        id: 'aud-003',
+        action: 'CREATED',
+        changed_at: '2026-08-17T08:35:00Z',
+        changed_by: 'IT Manager',
+        details: 'NAS storage repository administrator access confirmed.',
+        new_status: 'Active'
+      }
+    ]
+  },
+  {
+    id: 'sar-004',
+    client_id: 'c1',
+    employee_id: 'EMP-CCAD-106',
+    employee_name: 'Yasser Elsayed',
+    position: 'Senior IT Specialist',
+    department: 'IT & Infrastructure',
+    system_application: 'Other Application',
+    access_role: 'Business Application User',
+    username: 'yasser_app',
+    module_privilege: 'Application User',
+    status: 'Active',
+    approved_by: 'Dr. Faisal Al-Mansoori (Medical Director)',
+    approved_by_designation: 'Medical Director',
+    prepared_by: 'Aseef Sulaiman (IT Manager)',
+    prepared_by_designation: 'IT Manager',
+    review_date: '2026-08-17',
+    created_at: '2026-08-17T08:36:00Z',
+    updated_at: '2026-08-17T08:36:00Z',
+    created_by: 'IT Manager',
+    modified_by: 'IT Manager',
+    notes: 'Core HIS and EMR application business user.',
+    audit_history: [
+      {
+        id: 'aud-004',
+        action: 'CREATED',
+        changed_at: '2026-08-17T08:36:00Z',
+        changed_by: 'IT Manager',
+        details: 'Business application user access logged and approved.',
+        new_status: 'Active'
+      }
+    ]
+  },
+  {
+    id: 'sar-005',
+    client_id: 'c1',
+    employee_id: 'EMP-CCAD-101',
+    employee_name: 'Sarah Jenkins',
+    position: 'Compliance Specialist',
+    department: 'Quality Department',
+    system_application: 'Desktop / Computer User Accounts',
+    access_role: 'General / End User',
+    username: 'sarah.j',
+    module_privilege: 'Standard Domain Access',
+    status: 'Active',
+    approved_by: 'Dr. Faisal Al-Mansoori (Medical Director)',
+    approved_by_designation: 'Medical Director',
+    prepared_by: 'Aseef Sulaiman (IT Manager)',
+    prepared_by_designation: 'IT Manager',
+    review_date: '2026-08-17',
+    created_at: '2026-08-17T09:00:00Z',
+    updated_at: '2026-08-17T09:00:00Z',
+    created_by: 'IT Manager',
+    modified_by: 'IT Manager',
+    audit_history: [
+      {
+        id: 'aud-005',
+        action: 'CREATED',
+        changed_at: '2026-08-17T09:00:00Z',
+        changed_by: 'IT Manager',
+        details: 'Initial review approved.',
+        new_status: 'Active'
+      }
+    ]
+  },
+  {
+    id: 'sar-006',
+    client_id: 'c1',
+    employee_id: 'EMP-CCAD-101',
+    employee_name: 'Sarah Jenkins',
+    position: 'Compliance Specialist',
+    department: 'Quality Department',
+    system_application: 'CCTV / NVR',
+    access_role: 'Operator',
+    username: 'sarah_cctv',
+    module_privilege: 'CCTV Live View',
+    status: 'Active',
+    approved_by: 'Dr. Faisal Al-Mansoori (Medical Director)',
+    approved_by_designation: 'Medical Director',
+    prepared_by: 'Aseef Sulaiman (IT Manager)',
+    prepared_by_designation: 'IT Manager',
+    review_date: '2026-08-17',
+    created_at: '2026-08-17T09:05:00Z',
+    updated_at: '2026-08-17T09:05:00Z',
+    created_by: 'IT Manager',
+    modified_by: 'IT Manager',
+    audit_history: [
+      {
+        id: 'aud-006',
+        action: 'CREATED',
+        changed_at: '2026-08-17T09:05:00Z',
+        changed_by: 'IT Manager',
+        details: 'CCTV Operator live-view authorized for compliance audits.',
+        new_status: 'Active'
+      }
+    ]
+  },
+  {
+    id: 'sar-007',
+    client_id: 'SPRC',
+    employee_id: 'SPRC-02',
+    employee_name: 'Yasser Elsayed',
+    position: 'Senior IT Specialist',
+    department: 'IT & Infrastructure',
+    system_application: 'Server',
+    access_role: 'Administrator',
+    username: 'yasser_admin',
+    module_privilege: 'Server Administration',
+    status: 'Active',
+    approved_by: 'Raziya Aseef (Clinic Manager)',
+    approved_by_designation: 'Clinic Manager',
+    prepared_by: 'Aseef Sulaiman (IT Manager)',
+    prepared_by_designation: 'IT Manager',
+    review_date: '2026-08-17',
+    created_at: '2026-08-17T09:10:00Z',
+    updated_at: '2026-08-17T09:10:00Z',
+    created_by: 'IT Manager',
+    modified_by: 'IT Manager',
+    audit_history: [
+      {
+        id: 'aud-007',
+        action: 'CREATED',
+        changed_at: '2026-08-17T09:10:00Z',
+        changed_by: 'IT Manager',
+        details: 'Server infrastructure admin rights review confirmed.',
+        new_status: 'Active'
+      }
+    ]
   }
 ];

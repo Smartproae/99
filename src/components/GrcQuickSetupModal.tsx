@@ -19,10 +19,11 @@ import {
   HelpCircle,
   MapPin,
   Lock,
-  KeyRound
+  KeyRound,
+  Stethoscope
 } from 'lucide-react';
 import { Client, ContactPerson, ThirdPartySupport } from '../types';
-import { syncClientProfileAuthRep } from '../utils/clientSyncUtils';
+import { syncClientProfileAuthRep, getClientEmrVendors } from '../utils/clientSyncUtils';
 import { formatDateDMY } from '../utils/dateUtils';
 
 interface GrcQuickSetupModalProps {
@@ -71,6 +72,7 @@ export default function GrcQuickSetupModal({ isOpen, onClose, client, onSaveClie
   const [emrSupportName, setEmrSupportName] = useState('');
   const [emrSupportEmail, setEmrSupportEmail] = useState('');
   const [emrSupportPhone, setEmrSupportPhone] = useState('');
+  const [emrVendors, setEmrVendors] = useState<ThirdPartySupport[]>([]);
 
   // Facility Physical & IT Infrastructure Layout Configuration
   const [escortRequired, setEscortRequired] = useState(true);
@@ -136,6 +138,7 @@ export default function GrcQuickSetupModal({ isOpen, onClose, client, onSaveClie
       setEmrSupportName(client.emr_support?.team_name || '');
       setEmrSupportEmail(client.emr_support?.email || '');
       setEmrSupportPhone(client.emr_support?.phone || '');
+      setEmrVendors(getClientEmrVendors(client));
 
       setDocRef(client.doc_ref || 'ZZP-IT-PE-05/2021');
       setDocClassification(client.doc_classification || 'RESTRICTED');
@@ -202,7 +205,8 @@ export default function GrcQuickSetupModal({ isOpen, onClose, client, onSaveClie
       hr_manager: { name: hrMgrName, email: hrMgrEmail, phone: hrMgrPhone },
 
       it_support: { team_name: itSupportName, email: itSupportEmail, phone: itSupportPhone },
-      emr_support: { team_name: emrSupportName, email: emrSupportEmail, phone: emrSupportPhone },
+      emr_support: emrVendors[0] || { team_name: emrSupportName, email: emrSupportEmail, phone: emrSupportPhone },
+      emr_vendors: emrVendors.filter(v => v.team_name || v.email || v.phone),
 
       doc_ref: docRef,
       doc_classification: docClassification,
@@ -524,45 +528,135 @@ export default function GrcQuickSetupModal({ isOpen, onClose, client, onSaveClie
                 </div>
               </div>
 
-              {/* EMR Support Team */}
-              <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-100 space-y-3">
-                <div>
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">EMR Support Team (Third-Party)</span>
-                  <span className="text-[9px] text-slate-400 font-medium">e.g. CureMD Regional Support</span>
-                </div>
-                <div className="space-y-2">
+              {/* EMR Support Team (Multi-Vendor) */}
+              <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-100 space-y-3 md:col-span-2">
+                <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
                   <div>
-                    <label className="block text-[9px] text-slate-500 font-bold mb-0.5">EMR Provider Name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. CureMD Regional Support"
-                      value={emrSupportName}
-                      onChange={e => setEmrSupportName(e.target.value)}
-                      className="w-full text-xs p-1.5 rounded border border-slate-200 bg-white"
-                    />
+                    <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <Stethoscope className="w-3.5 h-3.5 text-indigo-600" />
+                      EMR & Clinical Systems Support (Third-Party)
+                      <span className="bg-indigo-50 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-200">
+                        {emrVendors.length} {emrVendors.length === 1 ? 'Vendor' : 'Vendors'}
+                      </span>
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-medium">Add all clinical EMR vendors, Malaffi integrators, and healthcare system providers</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[9px] text-slate-500 font-bold mb-0.5">Support Email</label>
-                      <input
-                        type="email"
-                        placeholder="emr@curemd.ae"
-                        value={emrSupportEmail}
-                        onChange={e => setEmrSupportEmail(e.target.value)}
-                        className="w-full text-[11px] p-1.5 rounded border border-slate-200 bg-white"
-                      />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmrVendors(prev => [
+                        ...prev,
+                        { id: `emr-v-${Date.now()}`, team_name: '', email: '', phone: '', service_type: 'Secondary EMR / Integrator' }
+                      ]);
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-all border border-indigo-200 shadow-2xs hover:scale-102"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add More EMR Vendor</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2.5">
+                  {emrVendors.map((vendor, vIndex) => (
+                    <div key={vendor.id || vIndex} className="p-3 bg-white rounded-lg border border-slate-200/80 space-y-2 relative group hover:border-indigo-200 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-black text-[10px] flex items-center justify-center">
+                            {vIndex + 1}
+                          </span>
+                          <span className="text-[11px] font-bold text-slate-700">
+                            {vIndex === 0 ? 'Primary EMR Vendor' : `Additional EMR / Clinical Vendor #${vIndex + 1}`}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={vendor.service_type || (vIndex === 0 ? 'Primary EMR / EHR' : 'Secondary EMR / Integrator')}
+                            onChange={e => {
+                              const updated = [...emrVendors];
+                              updated[vIndex] = { ...updated[vIndex], service_type: e.target.value };
+                              setEmrVendors(updated);
+                              if (vIndex === 0) setEmrSupportName(updated[0]?.team_name || '');
+                            }}
+                            className="text-[10px] font-semibold bg-slate-50 border border-slate-200 rounded px-2 py-0.5 text-slate-700"
+                          >
+                            <option value="Primary EMR / EHR">Primary EMR / EHR</option>
+                            <option value="Malaffi HIE Integrator">Malaffi HIE Integrator</option>
+                            <option value="NABIDH HIE Direct">NABIDH HIE Direct</option>
+                            <option value="PACS / Radiology EMR">PACS / Radiology EMR</option>
+                            <option value="LIMS / Lab System">LIMS / Lab System</option>
+                            <option value="Billing & Claims Engine">Billing & Claims Engine</option>
+                            <option value="Dental / Specialty EMR">Dental / Specialty EMR</option>
+                            <option value="Secondary / Backup EMR">Secondary / Backup EMR</option>
+                            <option value="Telehealth / Remote Care">Telehealth / Remote Care</option>
+                            <option value="Third-Party Integrator">Third-Party Integrator</option>
+                          </select>
+
+                          {emrVendors.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const filtered = emrVendors.filter((_, idx) => idx !== vIndex);
+                                setEmrVendors(filtered.length > 0 ? filtered : [{ id: `emr-v-${Date.now()}`, team_name: '', email: '', phone: '', service_type: 'Primary EMR / EHR' }]);
+                              }}
+                              className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50 transition-colors"
+                              title="Remove EMR Vendor"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-[9px] text-slate-500 font-bold mb-0.5">Vendor / Provider Name</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. CureMD Regional Support"
+                            value={vendor.team_name}
+                            onChange={e => {
+                              const updated = [...emrVendors];
+                              updated[vIndex] = { ...updated[vIndex], team_name: e.target.value };
+                              setEmrVendors(updated);
+                              if (vIndex === 0) setEmrSupportName(e.target.value);
+                            }}
+                            className="w-full text-xs p-1.5 rounded border border-slate-200 bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] text-slate-500 font-bold mb-0.5">Support Email</label>
+                          <input
+                            type="email"
+                            placeholder="support@emr.ae"
+                            value={vendor.email}
+                            onChange={e => {
+                              const updated = [...emrVendors];
+                              updated[vIndex] = { ...updated[vIndex], email: e.target.value };
+                              setEmrVendors(updated);
+                              if (vIndex === 0) setEmrSupportEmail(e.target.value);
+                            }}
+                            className="w-full text-[11px] p-1.5 rounded border border-slate-200 bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] text-slate-500 font-bold mb-0.5">Support Phone</label>
+                          <input
+                            type="text"
+                            placeholder="+971..."
+                            value={vendor.phone}
+                            onChange={e => {
+                              const updated = [...emrVendors];
+                              updated[vIndex] = { ...updated[vIndex], phone: e.target.value };
+                              setEmrVendors(updated);
+                              if (vIndex === 0) setEmrSupportPhone(e.target.value);
+                            }}
+                            className="w-full text-[11px] p-1.5 rounded border border-slate-200 bg-white"
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-[9px] text-slate-500 font-bold mb-0.5">Support Phone</label>
-                      <input
-                        type="text"
-                        placeholder="+971..."
-                        value={emrSupportPhone}
-                        onChange={e => setEmrSupportPhone(e.target.value)}
-                        className="w-full text-[11px] p-1.5 rounded border border-slate-200 bg-white"
-                      />
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
 

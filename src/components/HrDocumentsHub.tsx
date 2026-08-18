@@ -51,7 +51,8 @@ import {
   Send,
   Layers,
   Save,
-  Database
+  Database,
+  Calendar
 } from 'lucide-react';
 import { Client, User, Employee } from '../types';
 import { INITIAL_EMPLOYEES, INITIAL_CLIENTS } from '../initialData';
@@ -126,6 +127,8 @@ export interface HRDocumentEmployeeDetails {
   jobTitle: string;
   department: string;
   joiningDate?: string;
+  lastWorkingDate?: string;
+  employmentStatus?: 'Active' | 'Vacation' | 'Resigned' | 'Terminated' | string;
 }
 
 export interface HRDocumentFacilityDetails {
@@ -213,6 +216,8 @@ export const getProcessedHtmlContent = (htmlContent: string | undefined, doc?: P
   const medDirName = client?.medical_director?.name || doc?.riskCommitteeContacts?.complianceOfficer || 'Raziya Aseef';
   const itMgrName = client?.it_manager?.name || 'IT Manager / Admin';
   const hrMgrName = client?.hr_manager?.name || 'HR Manager';
+  const lastWorkingDateStr = doc?.employeeDetails?.lastWorkingDate ? formatDateDisplay(doc.employeeDetails.lastWorkingDate) : '';
+  const empStatus = doc?.employeeDetails?.employmentStatus || 'Active';
 
   let processed = htmlContent
     .replace(/\(Company Name\)/gi, compName)
@@ -229,6 +234,13 @@ export const getProcessedHtmlContent = (htmlContent: string | undefined, doc?: P
     .replace(/\[FACILITY_NAME\]/gi, facName)
     .replace(/\(Employee Name\)/gi, empName)
     .replace(/\[Employee Name\]/gi, empName)
+    .replace(/\{employee\.fullLegalName\}/gi, empName)
+    .replace(/\(Last Working Date\)/gi, lastWorkingDateStr)
+    .replace(/\[Last Working Date\]/gi, lastWorkingDateStr)
+    .replace(/\[LAST_WORKING_DATE\]/gi, lastWorkingDateStr)
+    .replace(/\{employee\.last_working_date\}/gi, lastWorkingDateStr)
+    .replace(/\{employee\.lastWorkingDate\}/gi, lastWorkingDateStr)
+    .replace(/\{employee\.employmentStatus\}/gi, empStatus)
     .replace(/\(Authorized Representative\)/gi, authRepName)
     .replace(/\[Authorized Representative\]/gi, authRepName)
     .replace(/\(Auth Rep\)/gi, authRepName)
@@ -281,7 +293,9 @@ export const DEFAULT_EMPLOYEE_DETAILS: HRDocumentEmployeeDetails = {
   passportNumber: 'N1029384',
   jobTitle: 'Manager',
   department: 'Admin',
-  joiningDate: '2024-01-01'
+  joiningDate: '2024-01-01',
+  lastWorkingDate: '',
+  employmentStatus: 'Active'
 };
 
 export const DEFAULT_FACILITY_DETAILS: HRDocumentFacilityDetails = {
@@ -1542,6 +1556,8 @@ export default function HrDocumentsHub({ client, currentUser, employees, allClie
   const [newJobTitle, setNewJobTitle] = useState('');
   const [newDept, setNewDept] = useState('');
   const [newJoiningDate, setNewJoiningDate] = useState('2024-01-01');
+  const [newEmpStatus, setNewEmpStatus] = useState<string>('Active');
+  const [newLastWorkingDate, setNewLastWorkingDate] = useState<string>('');
   const [newFacilityName, setNewFacilityName] = useState('AL NAHDA NATIONAL INSURANCE BROKERS COMPANY W.L.L');
   const [newFacilityLicenseNo, setNewFacilityLicenseNo] = useState('');
   const [newDohMohapRegNo, setNewDohMohapRegNo] = useState('');
@@ -1683,6 +1699,8 @@ export default function HrDocumentsHub({ client, currentUser, employees, allClie
   const [editJobTitle, setEditJobTitle] = useState('');
   const [editDept, setEditDept] = useState('');
   const [editJoiningDate, setEditJoiningDate] = useState('');
+  const [editEmpStatus, setEditEmpStatus] = useState<string>('Active');
+  const [editLastWorkingDate, setEditLastWorkingDate] = useState<string>('');
   const [editFacilityName, setEditFacilityName] = useState('');
   const [editFacilityLicenseNo, setEditFacilityLicenseNo] = useState('');
   const [editDohMohapRegNo, setEditDohMohapRegNo] = useState('');
@@ -1968,13 +1986,18 @@ HR & Governance Division`);
     const emp = effectiveEmployees.find(e => e.id === empId);
     if (!emp) return;
 
+    const empStatus = emp.current_status || emp.status || 'Active';
+    const lwd = emp.last_working_date || (emp as any).lastWorkingDate || '';
+
     const updatedEmpDetails = {
       ...docToProcess.employeeDetails,
       fullLegalName: emp.employee_name,
       employeeId: emp.employee_id,
       jobTitle: emp.position || docToProcess.employeeDetails?.jobTitle || '',
       department: emp.department || docToProcess.employeeDetails?.department || '',
-      joiningDate: (emp as any).joining_date || (emp as any).date_of_joining || docToProcess.employeeDetails?.joiningDate || ''
+      joiningDate: (emp as any).joining_date || (emp as any).date_of_joining || docToProcess.employeeDetails?.joiningDate || '',
+      lastWorkingDate: lwd || docToProcess.employeeDetails?.lastWorkingDate || '',
+      employmentStatus: empStatus
     };
 
     const updatedFacilityDetails = emp?.branch_name ? {
@@ -2035,13 +2058,18 @@ HR & Governance Division`);
       return;
     }
 
+    const empStatus = emp?.current_status || emp?.status || connectEmployeeTargetDoc.employeeDetails?.employmentStatus || 'Active';
+    const lwd = emp?.last_working_date || (emp as any)?.lastWorkingDate || connectEmployeeTargetDoc.employeeDetails?.lastWorkingDate || '';
+
     const updatedEmployeeDetails = emp ? {
       ...connectEmployeeTargetDoc.employeeDetails,
       fullLegalName: emp.employee_name,
       employeeId: emp.employee_id,
       jobTitle: emp.position || connectEmployeeTargetDoc.employeeDetails?.jobTitle || '',
       department: emp.department || connectEmployeeTargetDoc.employeeDetails?.department || '',
-      joiningDate: (emp as any).joining_date || (emp as any).date_of_joining || connectEmployeeTargetDoc.employeeDetails?.joiningDate || ''
+      joiningDate: (emp as any).joining_date || (emp as any).date_of_joining || connectEmployeeTargetDoc.employeeDetails?.joiningDate || '',
+      lastWorkingDate: lwd,
+      employmentStatus: empStatus
     } : connectEmployeeTargetDoc.employeeDetails;
 
     const updatedFacilityDetails = emp?.branch_name ? {
@@ -2142,6 +2170,16 @@ HR & Governance Division`);
     setEditJobTitle(doc.employeeDetails?.jobTitle || '');
     setEditDept(doc.employeeDetails?.department || '');
     setEditJoiningDate(toISODate(doc.employeeDetails?.joiningDate || '2024-01-01'));
+
+    const matchedEmp = effectiveEmployees.find(e => 
+      e.employee_id === doc.employeeDetails?.employeeId ||
+      e.employee_name?.toLowerCase() === doc.employeeDetails?.fullLegalName?.toLowerCase()
+    );
+    const empStatus = doc.employeeDetails?.employmentStatus || matchedEmp?.current_status || matchedEmp?.status || 'Active';
+    const lwd = doc.employeeDetails?.lastWorkingDate || matchedEmp?.last_working_date || '';
+    setEditEmpStatus(empStatus);
+    setEditLastWorkingDate(lwd ? toISODate(lwd) : '');
+
     setEditFacilityName(doc.facilityDetails?.facilityName || DEFAULT_FACILITY_DETAILS.facilityName);
     setEditFacilityLicenseNo(doc.facilityDetails?.facilityLicenseNo || DEFAULT_FACILITY_DETAILS.facilityLicenseNo);
     setEditDohMohapRegNo(doc.facilityDetails?.dohMohapRegNo || DEFAULT_FACILITY_DETAILS.dohMohapRegNo);
@@ -2210,7 +2248,9 @@ HR & Governance Division`);
         passportNumber: editPassportNumber,
         jobTitle: editJobTitle,
         department: editDept,
-        joiningDate: toISODate(editJoiningDate)
+        joiningDate: toISODate(editJoiningDate),
+        lastWorkingDate: (editEmpStatus === 'Resigned' || editEmpStatus === 'Terminated' || editLastWorkingDate) ? toISODate(editLastWorkingDate) : undefined,
+        employmentStatus: editEmpStatus || 'Active'
       },
       facilityDetails: {
         facilityName: editFacilityName,
@@ -2893,7 +2933,9 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
         passportNumber: 'N12345678',
         jobTitle: newJobTitle || 'Staff Member',
         department: newDept || 'General Operations',
-        joiningDate: toISODate(newJoiningDate || '2024-01-01')
+        joiningDate: toISODate(newJoiningDate || '2024-01-01'),
+        lastWorkingDate: (newEmpStatus === 'Resigned' || newEmpStatus === 'Terminated' || newLastWorkingDate) ? toISODate(newLastWorkingDate) : undefined,
+        employmentStatus: newEmpStatus || 'Active'
       },
       facilityDetails: {
         facilityName: newFacilityName || DEFAULT_FACILITY_DETAILS.facilityName,
@@ -3812,29 +3854,83 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                           />
                         </td>
                         <td className="p-4">
-                          <div className="space-y-0.5">
-                            <span className="font-mono text-[10px] text-emerald-400 font-bold block">
-                              {doc.legalMetadata?.referenceCode || 'REF-HR-0000'}
-                            </span>
-                            <span className="font-black text-slate-100 text-sm block">{doc.title}</span>
-                          </div>
+                          {(() => {
+                            const matchedEmp = effectiveEmployees.find(e => 
+                              e.employee_id === doc.employeeDetails?.employeeId ||
+                              e.employee_name?.toLowerCase() === doc.employeeDetails?.fullLegalName?.toLowerCase()
+                            );
+                            const effectiveStatus = doc.employeeDetails?.employmentStatus || matchedEmp?.current_status || matchedEmp?.status || 'Active';
+                            const effectiveLwd = doc.employeeDetails?.lastWorkingDate || matchedEmp?.last_working_date || '';
+                            const isInactive = effectiveStatus === 'Resigned' || effectiveStatus === 'Terminated';
+
+                            return (
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-mono text-[10px] text-emerald-400 font-bold">
+                                    {doc.legalMetadata?.referenceCode || 'REF-HR-0000'}
+                                  </span>
+                                  {isInactive && (
+                                    <span className="inline-flex items-center gap-1 text-[9.5px] font-black text-rose-300 bg-rose-950/80 border border-rose-500/50 px-1.5 py-0.5 rounded shadow-xs animate-pulse">
+                                      <AlertTriangle className="w-2.5 h-2.5 text-rose-400" />
+                                      {effectiveStatus.toUpperCase()}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="font-black text-slate-100 text-sm block">{doc.title}</span>
+                                {isInactive && (
+                                  <div className="inline-flex items-center gap-1.5 text-[10.5px] font-bold text-rose-300 bg-rose-950/50 border border-rose-500/30 px-2 py-0.5 rounded-md mt-0.5">
+                                    <Calendar className="w-3 h-3 text-rose-400 shrink-0" />
+                                    <span>Last Working Date *: <strong className="font-mono text-white">{effectiveLwd ? formatDateDisplay(effectiveLwd) : 'Required in Form'}</strong></span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         <td className="p-4">
-                          <div>
-                            <span className="font-bold text-slate-200 block">{doc.employeeDetails?.fullLegalName || 'Employee'}</span>
-                            <span className="text-[10px] text-slate-400 font-mono block">
-                              ID: {doc.employeeDetails?.employeeId || 'N/A'} &bull; {doc.employeeDetails?.department || 'General'}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenConnectEmployeeModal(doc)}
-                              className="text-[10px] text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1 font-bold mt-1 transition-colors cursor-pointer"
-                              title="Connect or change staff record from Employee & Operator Management"
-                            >
-                              <UserCheck className="w-3 h-3" /> Connect Staff Record
-                            </button>
-                          </div>
+                          {(() => {
+                            const matchedEmp = effectiveEmployees.find(e => 
+                              e.employee_id === doc.employeeDetails?.employeeId ||
+                              e.employee_name?.toLowerCase() === doc.employeeDetails?.fullLegalName?.toLowerCase()
+                            );
+                            const effectiveStatus = doc.employeeDetails?.employmentStatus || matchedEmp?.current_status || matchedEmp?.status || 'Active';
+                            const effectiveLwd = doc.employeeDetails?.lastWorkingDate || matchedEmp?.last_working_date || '';
+                            const isInactive = effectiveStatus === 'Resigned' || effectiveStatus === 'Terminated';
+
+                            return (
+                              <div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-slate-200 block">{doc.employeeDetails?.fullLegalName || 'Employee'}</span>
+                                  {isInactive ? (
+                                    <span className="text-[9.5px] font-black text-rose-300 bg-rose-950/80 px-1.5 py-0.5 rounded border border-rose-500/40 uppercase">
+                                      {effectiveStatus}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9.5px] font-bold text-emerald-400 bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-500/30 uppercase">
+                                      {effectiveStatus}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[10px] text-slate-400 font-mono block">
+                                  ID: {doc.employeeDetails?.employeeId || 'N/A'} &bull; {doc.employeeDetails?.department || 'General'}
+                                </span>
+                                {isInactive && (
+                                  <span className="text-[10px] font-bold text-rose-400 block mt-0.5 font-mono">
+                                    Last Working Date *: {effectiveLwd ? formatDateDisplay(effectiveLwd) : 'Not Specified'}
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenConnectEmployeeModal(doc)}
+                                  className="text-[10px] text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1 font-bold mt-1 transition-colors cursor-pointer"
+                                  title="Connect or change staff record from Employee & Operator Management"
+                                >
+                                  <UserCheck className="w-3 h-3" /> Connect Staff Record
+                                </button>
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         <td className="p-4">
@@ -4378,6 +4474,13 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                       setNewEmpId(emp.employee_id);
                       setNewJobTitle(emp.position || '');
                       setNewDept(emp.department || '');
+                      const status = emp.current_status || emp.status || 'Active';
+                      setNewEmpStatus(status);
+                      if (emp.last_working_date) {
+                        setNewLastWorkingDate(toISODate(emp.last_working_date));
+                      } else {
+                        setNewLastWorkingDate('');
+                      }
                       if ((emp as any).joining_date || (emp as any).date_of_joining || (emp as any).joiningDate) {
                         setNewJoiningDate((emp as any).joining_date || (emp as any).date_of_joining || (emp as any).joiningDate);
                       }
@@ -4391,11 +4494,11 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                   <option value="" disabled>-- Select Employee from Facility Operator Roster --</option>
                   {filteredEmployeesForCreate.map(emp => (
                     <option key={emp.id} value={emp.id}>
-                      {emp.employee_name} ({emp.employee_id}) • {emp.position || 'Staff'} • {emp.department || 'Operations'} ({emp.branch_name || 'Main Facility'})
+                      {emp.employee_name} ({emp.employee_id}) • {emp.status || 'Active'} • {emp.position || 'Staff'} • {emp.department || 'Operations'} ({emp.branch_name || 'Main Facility'})
                     </option>
                   ))}
                 </select>
-                <p className="text-[10.5px] text-slate-400 italic">Filtered by selected facility. Selecting a record auto-populates Legal Name, Employee ID, Job Designation, and Department.</p>
+                <p className="text-[10.5px] text-slate-400 italic">Filtered by selected facility. Selecting a record auto-populates Legal Name, Employee ID, Job Designation, Department, Status, and Separation Dates.</p>
               </div>
 
               <div>
@@ -4405,7 +4508,18 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                   required
                   placeholder="e.g. Hamdan Al-Nahyan"
                   value={newEmpName}
-                  onChange={e => setNewEmpName(e.target.value)}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setNewEmpName(val);
+                    const matched = effectiveEmployees.find(emp => emp.employee_name.toLowerCase() === val.toLowerCase());
+                    if (matched) {
+                      const st = matched.current_status || matched.status || 'Active';
+                      setNewEmpStatus(st);
+                      if (matched.last_working_date) {
+                        setNewLastWorkingDate(toISODate(matched.last_working_date));
+                      }
+                    }
+                  }}
                   list="new-emp-roster-list"
                   className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:ring-2 focus:ring-emerald-500/30"
                 />
@@ -4417,6 +4531,42 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                   ))}
                 </datalist>
               </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">Employment Status</label>
+                <select
+                  value={newEmpStatus}
+                  onChange={e => setNewEmpStatus(e.target.value)}
+                  className={`w-full p-2.5 bg-slate-950 border rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/30 cursor-pointer ${
+                    newEmpStatus === 'Resigned' || newEmpStatus === 'Terminated' ? 'border-rose-500 text-rose-300' : 'border-slate-800 text-white'
+                  }`}
+                >
+                  <option value="Active">Active</option>
+                  <option value="On Leave">On Leave</option>
+                  <option value="Resigned">Resigned</option>
+                  <option value="Terminated">Terminated</option>
+                </select>
+              </div>
+
+              {(newEmpStatus === 'Resigned' || newEmpStatus === 'Terminated') && (
+                <div className="bg-rose-950/40 border border-rose-500/50 p-3 rounded-xl">
+                  <label className="text-xs font-black text-rose-300 flex items-center gap-1.5 mb-1">
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                    Last Working Date *
+                    <span className="text-[10px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded font-mono font-bold uppercase">
+                      Mandatory for {newEmpStatus} Staff
+                    </span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={newLastWorkingDate}
+                    onChange={e => setNewLastWorkingDate(e.target.value)}
+                    className="w-full p-2 bg-slate-950 border border-rose-500/60 rounded-xl text-xs text-rose-200 font-bold focus:ring-2 focus:ring-rose-500"
+                  />
+                  <p className="text-[10px] text-rose-400/90 mt-1">Required compliance record for separated/inactive employee credential archiving.</p>
+                </div>
+              )}
 
               <div>
                 <label className="text-xs font-bold text-slate-300 block mb-1">Employee ID</label>
@@ -5251,6 +5401,23 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                                 <span className="text-[9px] text-slate-500 font-bold uppercase block">Department:</span>
                                 <span className="font-bold text-slate-900">{selectedDoc.employeeDetails?.department || 'Admin'}</span>
                               </div>
+                              {(() => {
+                                const empStatus = selectedDoc.employeeDetails?.employmentStatus;
+                                const lwd = selectedDoc.employeeDetails?.lastWorkingDate;
+                                const isInactive = empStatus === 'Resigned' || empStatus === 'Terminated';
+                                if (!isInactive && !lwd) return null;
+                                return (
+                                  <div className="col-span-2 pt-1 border-t border-rose-200 bg-rose-50/70 p-1.5 rounded flex items-center justify-between">
+                                    <div>
+                                      <span className="text-[9px] text-rose-700 font-bold uppercase block">Last Working Date *:</span>
+                                      <span className="font-mono font-black text-rose-900 text-xs">{lwd ? formatDateDisplay(lwd) : 'Separation on file'}</span>
+                                    </div>
+                                    <span className="text-[9px] font-black uppercase bg-rose-200 text-rose-900 px-1.5 py-0.5 rounded border border-rose-300">
+                                      Status: {empStatus || 'Inactive'}
+                                    </span>
+                                  </div>
+                                );
+                              })()}
                               {showJoiningDate && (
                                 <div className="col-span-2 pt-1 border-t border-slate-200/60 flex items-center justify-between">
                                   <div>
@@ -5909,6 +6076,13 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                         setEditEmpId(emp.employee_id);
                         setEditJobTitle(emp.position || '');
                         setEditDept(emp.department || '');
+                        const st = emp.current_status || emp.status || 'Active';
+                        setEditEmpStatus(st);
+                        if (emp.last_working_date) {
+                          setEditLastWorkingDate(toISODate(emp.last_working_date));
+                        } else {
+                          setEditLastWorkingDate('');
+                        }
                         if ((emp as any).joining_date || (emp as any).date_of_joining || (emp as any).joiningDate) {
                           setEditJoiningDate((emp as any).joining_date || (emp as any).date_of_joining || (emp as any).joiningDate);
                         }
@@ -5922,11 +6096,11 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                     <option value="" disabled>-- Select Employee from Facility Operator Roster to Auto-Fill --</option>
                     {filteredEmployeesForEdit.map(emp => (
                       <option key={emp.id} value={emp.id}>
-                        {emp.employee_name} ({emp.employee_id}) • {emp.position || 'Staff'} • {emp.department || 'Operations'} ({emp.branch_name || 'Main Facility'})
+                        {emp.employee_name} ({emp.employee_id}) • {emp.status || 'Active'} • {emp.position || 'Staff'} • {emp.department || 'Operations'} ({emp.branch_name || 'Main Facility'})
                       </option>
                     ))}
                   </select>
-                  <p className="text-[10.5px] text-slate-400 italic">Filtered by selected facility. Selecting a record updates Employee Full Legal Name, Employee ID, Job Designation, and Department.</p>
+                  <p className="text-[10.5px] text-slate-400 italic">Filtered by selected facility. Selecting a record updates Employee Full Legal Name, Employee ID, Job Designation, Department, Status, and Separation Dates.</p>
                 </div>
 
                 <div>
@@ -5935,7 +6109,18 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                     type="text"
                     required
                     value={editEmpName}
-                    onChange={e => setEditEmpName(e.target.value)}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setEditEmpName(val);
+                      const matched = effectiveEmployees.find(emp => emp.employee_name.toLowerCase() === val.toLowerCase());
+                      if (matched) {
+                        const st = matched.current_status || matched.status || 'Active';
+                        setEditEmpStatus(st);
+                        if (matched.last_working_date) {
+                          setEditLastWorkingDate(toISODate(matched.last_working_date));
+                        }
+                      }
+                    }}
                     list="edit-emp-roster-list"
                     className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:ring-2 focus:ring-amber-500/30"
                   />
@@ -5947,6 +6132,42 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                     ))}
                   </datalist>
                 </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">Employment Status</label>
+                  <select
+                    value={editEmpStatus}
+                    onChange={e => setNewEmpStatus ? setEditEmpStatus(e.target.value) : null}
+                    className={`w-full p-2.5 bg-slate-950 border rounded-xl text-xs font-bold focus:ring-2 focus:ring-amber-500/30 cursor-pointer ${
+                      editEmpStatus === 'Resigned' || editEmpStatus === 'Terminated' ? 'border-rose-500 text-rose-300' : 'border-slate-800 text-white'
+                    }`}
+                  >
+                    <option value="Active">Active</option>
+                    <option value="On Leave">On Leave</option>
+                    <option value="Resigned">Resigned</option>
+                    <option value="Terminated">Terminated</option>
+                  </select>
+                </div>
+
+                {(editEmpStatus === 'Resigned' || editEmpStatus === 'Terminated') && (
+                  <div className="bg-rose-950/40 border border-rose-500/50 p-3 rounded-xl">
+                    <label className="text-xs font-black text-rose-300 flex items-center gap-1.5 mb-1">
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                      Last Working Date *
+                      <span className="text-[10px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded font-mono font-bold uppercase">
+                        Mandatory for {editEmpStatus} Staff
+                      </span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={editLastWorkingDate}
+                      onChange={e => setEditLastWorkingDate(e.target.value)}
+                      className="w-full p-2 bg-slate-950 border border-rose-500/60 rounded-xl text-xs text-rose-200 font-bold focus:ring-2 focus:ring-rose-500"
+                    />
+                    <p className="text-[10px] text-rose-400/90 mt-1">Required compliance record for separated/inactive employee credential archiving.</p>
+                  </div>
+                )}
 
                 <div>
                   <label className="text-xs font-bold text-slate-300 block mb-1">Employee ID</label>
@@ -6708,15 +6929,34 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
               {unfreezeSelectedEmployeeId && (() => {
                 const matchedEmp = effectiveEmployees.find(e => e.id === unfreezeSelectedEmployeeId);
                 if (!matchedEmp) return null;
+                const isInactive = matchedEmp.current_status === 'Resigned' || matchedEmp.current_status === 'Terminated' || matchedEmp.status === 'Resigned' || matchedEmp.status === 'Terminated';
+                const lwd = matchedEmp.last_working_date;
+
                 return (
-                  <div className="bg-cyan-950/40 border border-cyan-500/30 p-2.5 rounded-lg text-xs space-y-1 text-cyan-200">
+                  <div className={`border p-2.5 rounded-lg text-xs space-y-1.5 ${
+                    isInactive ? 'bg-rose-950/40 border-rose-500/50 text-rose-200' : 'bg-cyan-950/40 border-cyan-500/30 text-cyan-200'
+                  }`}>
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-white">{matchedEmp.employee_name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white">{matchedEmp.employee_name}</span>
+                        {isInactive && (
+                          <span className="text-[9.5px] font-black text-rose-300 bg-rose-950/90 border border-rose-500/60 px-1.5 py-0.5 rounded uppercase flex items-center gap-1">
+                            <AlertTriangle className="w-2.5 h-2.5 text-rose-400" />
+                            {matchedEmp.current_status || matchedEmp.status}
+                          </span>
+                        )}
+                      </div>
                       <span className="font-mono text-[11px] text-cyan-300 font-extrabold">{matchedEmp.employee_id}</span>
                     </div>
                     <div className="text-[11px] text-slate-300">
                       Designation: <strong>{matchedEmp.position || 'Staff'}</strong> &bull; Dept: <strong>{matchedEmp.department || 'Operations'}</strong>
                     </div>
+                    {isInactive && (
+                      <div className="text-[11px] font-bold text-rose-300 bg-rose-950/60 border border-rose-500/40 px-2 py-1 rounded flex items-center gap-1.5 mt-1 font-mono">
+                        <Calendar className="w-3 h-3 text-rose-400 shrink-0" />
+                        <span>Last Working Date *: <strong className="text-white">{lwd ? formatDateDisplay(lwd) : 'Not Set in Profile'}</strong></span>
+                      </div>
+                    )}
                     {matchedEmp.branch_name && (
                       <div className="text-[10.5px] text-slate-400">
                         Facility: {matchedEmp.branch_name}
@@ -6863,17 +7103,30 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                             <span>Dept: <strong className="text-slate-200">{emp.department || 'Operations'}</strong></span>
                             {emp.branch_name && <span>Facility: <strong className="text-slate-300">{emp.branch_name}</strong></span>}
                           </div>
+                          {(emp.current_status === 'Resigned' || emp.current_status === 'Terminated' || emp.status === 'Resigned' || emp.status === 'Terminated') && (
+                            <div className="text-[10.5px] font-bold text-rose-400 mt-1 flex items-center gap-1 font-mono">
+                              <Calendar className="w-3 h-3 text-rose-400" />
+                              Last Working Date *: <span className="text-rose-200">{emp.last_working_date ? formatDateDisplay(emp.last_working_date) : 'Required'}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
 
                       <div className="shrink-0 text-right">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
-                          emp.status === 'Active' || emp.current_status === 'Active' || !emp.status
-                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                            : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                        }`}>
-                          {emp.current_status || emp.status || 'Active'}
-                        </span>
+                        {emp.current_status === 'Resigned' || emp.current_status === 'Terminated' || emp.status === 'Resigned' || emp.status === 'Terminated' ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase border bg-rose-500/20 text-rose-300 border-rose-500/40 inline-flex items-center gap-1">
+                            <AlertTriangle className="w-2.5 h-2.5 text-rose-400" />
+                            {emp.current_status || emp.status}
+                          </span>
+                        ) : (
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
+                            emp.status === 'Active' || emp.current_status === 'Active' || !emp.status
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                              : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                          }`}>
+                            {emp.current_status || emp.status || 'Active'}
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
@@ -6885,8 +7138,13 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
             {connectEmployeeSelectedId && (() => {
               const chosen = effectiveEmployees.find(e => e.id === connectEmployeeSelectedId);
               if (!chosen) return null;
+              const isInactive = chosen.current_status === 'Resigned' || chosen.current_status === 'Terminated' || chosen.status === 'Resigned' || chosen.status === 'Terminated';
+              const lwd = chosen.last_working_date;
+
               return (
-                <div className="p-3 bg-cyan-950/30 rounded-xl border border-cyan-500/40 text-xs space-y-1.5">
+                <div className={`p-3 rounded-xl border text-xs space-y-1.5 ${
+                  isInactive ? 'bg-rose-950/30 border-rose-500/50' : 'bg-cyan-950/30 border-cyan-500/40'
+                }`}>
                   <div className="flex items-center justify-between text-cyan-300 font-bold">
                     <span className="flex items-center gap-1.5">
                       <UserCheck className="w-4 h-4 text-cyan-400" /> Selected Staff for Auto-Binding:
@@ -6897,8 +7155,19 @@ ${docsToExport.map(d => `    <Document id="${d.id}">
                     <div><span className="text-slate-400 block text-[10px]">DESIGNATION</span><strong>{chosen.position || 'Staff'}</strong></div>
                     <div><span className="text-slate-400 block text-[10px]">DEPARTMENT</span><strong>{chosen.department || 'Operations'}</strong></div>
                     <div><span className="text-slate-400 block text-[10px]">FACILITY / BRANCH</span><strong>{chosen.branch_name || client?.company_name || 'Main Facility'}</strong></div>
-                    <div><span className="text-slate-400 block text-[10px]">STATUS</span><strong className="text-emerald-400">{chosen.current_status || chosen.status || 'Active'}</strong></div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">STATUS</span>
+                      <strong className={isInactive ? 'text-rose-400 font-black' : 'text-emerald-400'}>
+                        {chosen.current_status || chosen.status || 'Active'}
+                      </strong>
+                    </div>
                   </div>
+                  {isInactive && (
+                    <div className="text-[11px] font-bold text-rose-300 bg-rose-950/60 border border-rose-500/40 px-2 py-1 rounded flex items-center gap-1.5 mt-1 font-mono">
+                      <Calendar className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      <span>Last Working Date *: <strong className="text-white">{lwd ? formatDateDisplay(lwd) : 'Separation Date to be archived'}</strong></span>
+                    </div>
+                  )}
                 </div>
               );
             })()}

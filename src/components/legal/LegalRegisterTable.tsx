@@ -244,7 +244,6 @@ export default function LegalRegisterTable({
                 <option value="Fully Compliant">Fully Compliant</option>
                 <option value="Partially Compliant">Partially Compliant</option>
                 <option value="Non-Compliant">Non-Compliant</option>
-                <option value="Not Applicable">Not Applicable</option>
               </select>
             </div>
 
@@ -329,7 +328,6 @@ export default function LegalRegisterTable({
                             <option value="Fully Compliant">Fully Compliant</option>
                             <option value="Partially Compliant">Partially Compliant</option>
                             <option value="Non-Compliant">Non-Compliant</option>
-                            <option value="Not Applicable">Not Applicable</option>
                           </select>
                         )}
                       </div>

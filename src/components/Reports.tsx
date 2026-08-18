@@ -13,6 +13,7 @@ import {
   Settings, CheckSquare, Square, RefreshCw, Layers, Mail, Shield 
 } from 'lucide-react';
 import { formatDateDMY, formatTime12h, formatDateTimeDMY } from '../utils/dateUtils';
+import { getClientEmrVendors } from '../utils/clientSyncUtils';
 import { DocRefLoopSelector } from './DocRefLoopSelector';
 import { 
   generateFrameworkGroupPDFReport, 
@@ -3275,14 +3276,16 @@ ${clientRisks.map(r => `[${r.risk_id}] - ${r.asset_name}: ${r.risk_title} (Inher
                                 {currentClient.it_support.email && <p className="text-slate-500 pl-2 text-[8px] truncate">Email: {currentClient.it_support.email}</p>}
                               </div>
                             )}
-                            {currentClient.emr_support?.team_name && (
-                              <div className="mt-1">
-                                <p className="font-extrabold text-indigo-950">EMR Support: {currentClient.emr_support.team_name}</p>
-                                {currentClient.emr_support.phone && <p className="text-slate-500 pl-2 text-[8px]">Tel: {currentClient.emr_support.phone}</p>}
-                                {currentClient.emr_support.email && <p className="text-slate-500 pl-2 text-[8px] truncate">Email: {currentClient.emr_support.email}</p>}
+                            {getClientEmrVendors(currentClient).map((vendor, vIdx) => (
+                              <div key={vendor.id || vIdx} className="mt-1">
+                                <p className="font-extrabold text-indigo-950">
+                                  {vendor.service_type || (vIdx === 0 ? 'EMR Support' : `Clinical Vendor #${vIdx + 1}`)}: {vendor.team_name}
+                                </p>
+                                {vendor.phone && <p className="text-slate-500 pl-2 text-[8px]">Tel: {vendor.phone}</p>}
+                                {vendor.email && <p className="text-slate-500 pl-2 text-[8px] truncate">Email: {vendor.email}</p>}
                               </div>
-                            )}
-                            {!currentClient.it_support?.team_name && !currentClient.emr_support?.team_name && (
+                            ))}
+                            {!currentClient.it_support?.team_name && getClientEmrVendors(currentClient).length === 0 && (
                               <p className="text-slate-400 italic text-[8px]">No support contacts filled</p>
                             )}
                           </div>
@@ -3931,14 +3934,16 @@ ${clientRisks.map(r => `[${r.risk_id}] - ${r.asset_name}: ${r.risk_title} (Inher
                                       {currentClient.it_support.email && <p className="text-slate-500 pl-2 text-[8px] truncate">Email: {currentClient.it_support.email}</p>}
                                     </div>
                                   )}
-                                  {currentClient.emr_support?.team_name && (
-                                    <div className="mt-1">
-                                      <p className="font-extrabold text-indigo-950">EMR Support: {currentClient.emr_support.team_name}</p>
-                                      {currentClient.emr_support.phone && <p className="text-slate-500 pl-2 text-[8px]">Tel: {currentClient.emr_support.phone}</p>}
-                                      {currentClient.emr_support.email && <p className="text-slate-500 pl-2 text-[8px] truncate">Email: {currentClient.emr_support.email}</p>}
+                                  {getClientEmrVendors(currentClient).map((vendor, vIdx) => (
+                                    <div key={vendor.id || vIdx} className="mt-1">
+                                      <p className="font-extrabold text-indigo-950">
+                                        {vendor.service_type || (vIdx === 0 ? 'EMR Support' : `Clinical Vendor #${vIdx + 1}`)}: {vendor.team_name}
+                                      </p>
+                                      {vendor.phone && <p className="text-slate-500 pl-2 text-[8px]">Tel: {vendor.phone}</p>}
+                                      {vendor.email && <p className="text-slate-500 pl-2 text-[8px] truncate">Email: {vendor.email}</p>}
                                     </div>
-                                  )}
-                                  {!currentClient.it_support?.team_name && !currentClient.emr_support?.team_name && (
+                                  ))}
+                                  {!currentClient.it_support?.team_name && getClientEmrVendors(currentClient).length === 0 && (
                                     <p className="text-slate-400 italic text-[8px]">No support contacts filled</p>
                                   )}
                                 </div>

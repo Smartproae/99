@@ -1,4 +1,4 @@
-import { Client } from '../types';
+import { Client, ThirdPartySupport } from '../types';
 
 export interface SyncedAuthRep {
   name: string;
@@ -8,6 +8,49 @@ export interface SyncedAuthRep {
   designation: string;
   keyCustodianTitle: string;
   signature?: string;
+}
+
+/**
+ * Dynamically retrieves all configured EMR Support Vendors for a client.
+ * Falls back gracefully to client.emr_support if emr_vendors array is not set.
+ */
+export function getClientEmrVendors(client?: Client | null): ThirdPartySupport[] {
+  if (!client) return [];
+  if (client.emr_vendors && client.emr_vendors.length > 0) {
+    const valid = client.emr_vendors.filter(v => v && (v.team_name || v.email || v.phone));
+    if (valid.length > 0) return valid;
+  }
+  if (client.emr_support && (client.emr_support.team_name || client.emr_support.email || client.emr_support.phone)) {
+    return [{
+      id: client.emr_support.id || 'emr-1',
+      team_name: client.emr_support.team_name,
+      email: client.emr_support.email,
+      phone: client.emr_support.phone,
+      service_type: client.emr_support.service_type || 'Primary EMR / EHR'
+    }];
+  }
+  return [];
+}
+
+/**
+ * Dynamically retrieves all configured IT Support Vendors for a client.
+ */
+export function getClientItVendors(client?: Client | null): ThirdPartySupport[] {
+  if (!client) return [];
+  if (client.it_vendors && client.it_vendors.length > 0) {
+    const valid = client.it_vendors.filter(v => v && (v.team_name || v.email || v.phone));
+    if (valid.length > 0) return valid;
+  }
+  if (client.it_support && (client.it_support.team_name || client.it_support.email || client.it_support.phone)) {
+    return [{
+      id: client.it_support.id || 'it-1',
+      team_name: client.it_support.team_name,
+      email: client.it_support.email,
+      phone: client.it_support.phone,
+      service_type: client.it_support.service_type || 'Managed IT Support'
+    }];
+  }
+  return [];
 }
 
 /**

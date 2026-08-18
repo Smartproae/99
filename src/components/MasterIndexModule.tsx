@@ -77,6 +77,7 @@ import {
 } from '../types';
 import QuickMasterSetup from './QuickMasterSetup';
 import { printCurrentView } from '../utils/printUtils';
+import { getClientEmrVendors } from '../utils/clientSyncUtils';
 
 interface MasterIndexModuleProps {
   policies: Policy[];
@@ -4633,12 +4634,17 @@ export default function MasterIndexModule({
                       <p className="text-slate-600 font-mono text-[10px]">Support Phone: {client?.it_support?.phone || '+971 52 4846770'}</p>
                     </div>
 
-                    <div className="bg-white p-2.5 rounded-lg border border-sky-200 shadow-2xs">
+                    <div className="bg-white p-2.5 rounded-lg border border-sky-200 shadow-2xs space-y-2">
                       <span className="font-extrabold text-sky-900 block text-[10px] uppercase">EMR Support Team (Third-Party)</span>
-                      <p className="text-slate-500 text-[10px]">e.g. CureMD Regional Support / SafeCare</p>
-                      <p className="text-slate-900 font-black text-xs mt-1">EMR Provider Name: {client?.emr_support?.team_name || 'Beema Yoosaf'}</p>
-                      <p className="text-slate-600 font-mono text-[10px] mt-0.5">Support Email: {client?.emr_support?.email || 'beema@safecaretec.com'}</p>
-                      <p className="text-slate-600 font-mono text-[10px]">Support Phone: {client?.emr_support?.phone || '+971 2 506 7300'}</p>
+                      {getClientEmrVendors(client).map((vendor, vIdx) => (
+                        <div key={vendor.id || vIdx} className={vIdx > 0 ? "pt-2 border-t border-slate-100" : ""}>
+                          <p className="text-slate-900 font-black text-xs">
+                            {vendor.service_type || (vIdx === 0 ? 'EMR Provider' : `Clinical Vendor #${vIdx + 1}`)}: {vendor.team_name || 'Beema Yoosaf'}
+                          </p>
+                          {vendor.email && <p className="text-slate-600 font-mono text-[10px] mt-0.5">Support Email: {vendor.email}</p>}
+                          {vendor.phone && <p className="text-slate-600 font-mono text-[10px]">Support Phone: {vendor.phone}</p>}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>

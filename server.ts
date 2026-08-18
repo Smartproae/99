@@ -4,6 +4,7 @@ import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import nodemailer from 'nodemailer';
+import dns from 'dns';
 
 dotenv.config();
 
@@ -147,66 +148,172 @@ app.post('/api/ask-ai', async (req, res) => {
   }
 });
 
+// Smart SMTP Host Resolver with MX auto-discovery for UAE and custom enterprise domains
+async function resolveSmtpHost(rawHost: string): Promise<{ resolvedHost: string; isAutoResolved: boolean; originalHost: string }> {
+  const host = (rawHost || '').trim();
+  if (!host) {
+    return { resolvedHost: 'najma.tasjeel.ae', isAutoResolved: false, originalHost: host };
+  }
+
+  // Known direct overrides for UAE SmartPro domain on Tasjeel
+  if (host === 'mail.smartpro.ae' || host === 'smtp.smartpro.ae' || host === 'smartpro.ae') {
+    return { resolvedHost: 'najma.tasjeel.ae', isAutoResolved: true, originalHost: host };
+  }
+
+  try {
+    await dns.promises.lookup(host);
+    return { resolvedHost: host, isAutoResolved: false, originalHost: host };
+  } catch (err: any) {
+    console.log(`[SMTP DNS] Direct lookup for host '${host}' failed (${err.code}). Attempting MX resolution...`);
+    try {
+      const parts = host.split('.');
+      const domain = parts.length > 2 ? parts.slice(-2).join('.') : host;
+      const mxRecords = await dns.promises.resolveMx(domain);
+      if (mxRecords && mxRecords.length > 0) {
+        mxRecords.sort((a, b) => a.priority - b.priority);
+        const bestMx = mxRecords[0].exchange;
+        console.log(`[SMTP DNS] Discovered MX host for '${domain}': ${bestMx}`);
+        return { resolvedHost: bestMx, isAutoResolved: true, originalHost: host };
+      }
+    } catch (mxErr: any) {
+      console.log(`[SMTP DNS] MX lookup also failed for '${host}':`, mxErr.message);
+    }
+    
+    // Fallback for smartpro domains
+    if (host.includes('smartpro.ae')) {
+      return { resolvedHost: 'najma.tasjeel.ae', isAutoResolved: true, originalHost: host };
+    }
+    
+    return { resolvedHost: host, isAutoResolved: false, originalHost: host };
+  }
+}
+
+// Helper to normalize diverse SMTP configuration payloads from various frontend components
+function normalizeSmtpConfig(rawConfig: any) {
+  const config = rawConfig || {};
+  const server = config.server || config.host || config.smtp_server || config.smtp_host || config.smtpServer || 'najma.tasjeel.ae';
+  const port = Number(config.port || config.smtp_port || config.smtpPort || 587);
+  const username = config.username || config.user || config.auth_user || config.login || config.email || '';
+  const password = config.password || config.pass || config.auth_pass || config.authPassword || '';
+  const sender_email = config.sender_email || config.sender || config.from || config.from_email || config.senderEmail || username || 'mail@smartpro.ae';
+  
+  const isSslExplicit = config.ssl === true || config.secure === true || config.is_ssl === true;
+  const isTlsExplicit = config.tls === true || config.requireTLS === true || config.starttls === true || config.is_tls === true;
+  
+  // Port 465 is implicit SSL; 587 and 25 use STARTTLS
+  const isSecure = port === 465 || (isSslExplicit && port !== 587 && port !== 25);
+  const requireTLS = port === 587 || isTlsExplicit;
+  const sandbox_mode = Boolean(config.sandbox_mode ?? config.sandbox ?? config.is_sandbox ?? false);
+
+  return {
+    server,
+    port,
+    username,
+    password,
+    sender_email,
+    ssl: isSecure,
+    tls: requireTLS,
+    sandbox_mode,
+    provider: config.provider || 'Custom'
+  };
+}
+
+// Helper to normalize diverse recipient formats (array, single string, comma/semicolon delimited)
+function normalizeRecipients(rawRecipients: any): string[] {
+  if (!rawRecipients) return [];
+  if (Array.isArray(rawRecipients)) {
+    return rawRecipients
+      .flatMap(r => typeof r === 'string' ? r.split(/[,;]/) : [])
+      .map(r => r.trim())
+      .filter(r => r && r.includes('@'));
+  }
+  if (typeof rawRecipients === 'string') {
+    return rawRecipients
+      .split(/[,;]/)
+      .map(r => r.trim())
+      .filter(r => r && r.includes('@'));
+  }
+  return [];
+}
+
 // SMTP Connection Verification endpoint using actual credentials
 app.post('/api/test-smtp', async (req, res) => {
   try {
-    const { server, port, username, password, ssl, tls, sandbox_mode } = req.body;
+    const smtpConfig = normalizeSmtpConfig(req.body);
+    const { server: rawServer, port, username, password, ssl, tls, sandbox_mode } = smtpConfig;
     
-    if (!server || !port) {
+    if (!rawServer || !port) {
       return res.status(400).json({ error: 'Server and Port are required' });
     }
 
-    const isInternalOrUnresolvableDomain = server.includes('smartpro.ae') || server === 'mail.smartpro.ae' || sandbox_mode;
+    // Resolve actual mail server host (e.g. mail.smartpro.ae -> najma.tasjeel.ae)
+    const { resolvedHost, isAutoResolved, originalHost } = await resolveSmtpHost(rawServer);
 
-    if (isInternalOrUnresolvableDomain) {
-      console.log(`[SMTP API] Sandbox simulation verified successfully for ${server}:${port}`);
+    if (sandbox_mode) {
+      console.log(`[SMTP API] Sandbox mode explicitly active. Simulating connection for ${resolvedHost}:${port}...`);
       return res.json({
         success: true,
         simulated: true,
-        message: `[Sandbox Relay Gate] Connection & authentication verified successfully for ${server}:${port} (Internal Corporate Relay Host).`
+        message: `[Sandbox Relay Gate] Connection & authentication simulated successfully for ${originalHost} (${resolvedHost}:${port}).`
       });
     }
 
-    console.log(`[SMTP API] Testing connection to ${server}:${port}...`);
-    
-    const smtpPort = Number(port);
-    // Port 587 or 25 do not use implicit SSL (secure: true). They must start as cleartext and upgrade via STARTTLS.
-    const isSecure = smtpPort === 465 || (!!ssl && smtpPort !== 587 && smtpPort !== 25);
-    const requireTLS = smtpPort === 587 || !!tls;
+    console.log(`[SMTP API] Testing connection to ${resolvedHost}:${port} (Original: ${originalHost})...`);
 
     const transporter = nodemailer.createTransport({
-      host: server,
-      port: smtpPort,
-      secure: isSecure,
+      host: resolvedHost,
+      port: port,
+      secure: ssl,
       auth: (username && password) ? {
         user: username,
         pass: password,
       } : undefined,
       tls: {
-        rejectUnauthorized: false // Don't crash on self-signed certificates
+        rejectUnauthorized: false,
+        minVersion: 'TLSv1.2'
       },
-      requireTLS: requireTLS,
-      connectionTimeout: 10000, // 10 seconds
+      requireTLS: tls,
+      connectionTimeout: 12000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
     });
 
-    // Verify connection configuration
+    // Verify connection and authentication configuration
     await transporter.verify();
     
-    console.log(`[SMTP API] SMTP connection verified successfully for ${server}`);
-    return res.json({ success: true, message: `Successfully verified connection & authentication to ${server}:${port}` });
+    const hostNote = isAutoResolved ? ` (via MX relay: ${resolvedHost})` : '';
+    console.log(`[SMTP API] SMTP connection verified successfully for ${originalHost}${hostNote}`);
+    return res.json({ 
+      success: true, 
+      message: `Successfully verified connection & authentication to ${originalHost}:${port}${hostNote}` 
+    });
   } catch (error: any) {
     const errMsg = error?.message || 'SMTP Handshake or Authentication failed';
     console.log(`[SMTP API] Connection verification check result: ${errMsg}`);
     
-    const isDnsError = errMsg.includes('EAI_AGAIN') || errMsg.includes('ENOTFOUND') || errMsg.includes('getaddrinfo') || errMsg.includes('ETIMEDOUT') || errMsg.includes('ECONNREFUSED');
+    const isAuthError = errMsg.includes('535') || errMsg.includes('Invalid login') || errMsg.includes('authentication failed') || errMsg.includes('Username and Password not accepted');
+    if (isAuthError) {
+      return res.status(200).json({
+        success: false,
+        error: `SMTP Authentication Failed: The mail server connected, but rejected credentials for '${req.body?.username}'. Please verify password.`
+      });
+    }
+
+    const isDnsOrNetworkError = 
+      errMsg.includes('EAI_AGAIN') || 
+      errMsg.includes('ENOTFOUND') || 
+      errMsg.includes('getaddrinfo') || 
+      errMsg.includes('ETIMEDOUT') || 
+      errMsg.includes('ECONNREFUSED') ||
+      errMsg.includes('EHOSTUNREACH');
     
-    if (isDnsError) {
-      console.log(`[SMTP API] Host '${req.body?.server}' unreachable or unresolvable. Auto-falling back to Sandbox Simulation Mode.`);
+    if (isDnsOrNetworkError && req.body?.sandbox_mode) {
+      console.log(`[SMTP API] Host unreachable and sandbox requested. Falling back to Sandbox Mode.`);
       return res.json({
         success: true,
         simulated: true,
         autoFallback: true,
-        message: `[Sandbox Relay Gate - Auto Fallback] Connection to '${req.body?.server}:${req.body?.port}' verified in Sandbox Simulation Mode (Host '${req.body?.server}' is an internal domain).`
+        message: `[Sandbox Relay Gate] Connection to '${req.body?.server || 'relay'}:${req.body?.port || 587}' simulated in Sandbox Mode.`
       });
     }
 
@@ -220,62 +327,52 @@ app.post('/api/test-smtp', async (req, res) => {
 // Send Test Email using actual SMTP credentials
 app.post('/api/send-test-email', async (req, res) => {
   try {
-    let { smtpConfig, recipientEmail, subject, body } = req.body;
+    const smtpConfig = normalizeSmtpConfig(req.body.smtpConfig || req.body);
+    const recipientList = normalizeRecipients(req.body.recipientEmail || req.body.recipientEmails || req.body.recipients || req.body.to);
+    const recipientEmail = recipientList[0] || req.body.recipientEmail;
+    const { subject, body } = req.body;
     
     if (!recipientEmail) {
       return res.status(400).json({ error: 'recipientEmail is required' });
     }
 
-    if (!smtpConfig || !smtpConfig.server) {
-      smtpConfig = {
-        server: 'smtp.office365.com',
-        port: 587,
-        username: 'compliance.hub@smarthub.io',
-        password: 'CompliancePass123!',
-        sender_email: 'no-reply@smarthub.io',
-        tls: true,
-        ssl: false,
-        sandbox_mode: true
-      };
-    }
+    const { server: rawServer, port, username, password, ssl, tls, sender_email, sandbox_mode } = smtpConfig;
 
-    const { server, port, username, password, ssl, tls, sender_email, sandbox_mode } = smtpConfig;
+    // Resolve actual mail server host (e.g. mail.smartpro.ae -> najma.tasjeel.ae)
+    const { resolvedHost, isAutoResolved, originalHost } = await resolveSmtpHost(rawServer);
 
-    const isInternalOrUnresolvableDomain = server.includes('smartpro.ae') || server === 'mail.smartpro.ae' || sandbox_mode;
-
-    if (isInternalOrUnresolvableDomain) {
-      console.log(`[SMTP API] Sandbox simulation test email to ${recipientEmail} (Host: ${server})`);
+    if (sandbox_mode) {
+      console.log(`[SMTP API] Sandbox mode active. Simulating test email to ${recipientEmail} (Host: ${resolvedHost})`);
       return res.json({
         success: true,
         simulated: true,
         messageId: 'simulated-test-' + Date.now(),
-        message: `[Sandbox Relay Gate] Connection & authentication simulated successfully. Test compliance email simulated for ${recipientEmail}.`
+        message: `[Sandbox Relay Gate] Test compliance email captured and simulated for ${recipientEmail}.`
       });
     }
 
-    console.log(`[SMTP API] Dispatching test email to ${recipientEmail} via ${server}...`);
-
-    const smtpPort = Number(port);
-    const isSecure = smtpPort === 465 || (!!ssl && smtpPort !== 587 && smtpPort !== 25);
-    const requireTLS = smtpPort === 587 || !!tls;
+    console.log(`[SMTP API] Dispatching real test email to ${recipientEmail} via ${resolvedHost}:${port} (Original: ${originalHost})...`);
 
     const transporter = nodemailer.createTransport({
-      host: server,
-      port: smtpPort,
-      secure: isSecure,
+      host: resolvedHost,
+      port: port,
+      secure: ssl,
       auth: (username && password) ? {
         user: username,
         pass: password,
       } : undefined,
       tls: {
-        rejectUnauthorized: false
+        rejectUnauthorized: false,
+        minVersion: 'TLSv1.2'
       },
-      requireTLS: requireTLS,
-      connectionTimeout: 10000,
+      requireTLS: tls,
+      connectionTimeout: 12000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
     });
 
     const info = await transporter.sendMail({
-      from: sender_email || username || 'support@smartpro.ae',
+      from: sender_email || username || 'mail@smartpro.ae',
       to: recipientEmail,
       subject: subject || 'Outbound SMTP Compliance Test Notification',
       text: body || 'This is a test notification confirming your outbound SMTP compliance gateway is active and successfully delivering messages.',
@@ -286,14 +383,14 @@ app.post('/api/send-test-email', async (req, res) => {
             <h2 style="color: #4f46e5; margin-top: 10px; font-size: 20px; font-weight: 800; letter-spacing: -0.025em;">SMTP Gateway Active</h2>
           </div>
           <p style="font-size: 14px; line-height: 1.5; color: #475569;">Hello,</p>
-          <p style="font-size: 14px; line-height: 1.5; color: #475569;">This is a high-fidelity outbound diagnostic transmission confirming that your custom enterprise SMTP relay config on <strong>${server}</strong> is active and delivering emails perfectly.</p>
+          <p style="font-size: 14px; line-height: 1.5; color: #475569;">This is a high-fidelity outbound diagnostic transmission confirming that your custom enterprise SMTP relay config on <strong>${originalHost}</strong> is active and delivering emails perfectly.</p>
           
           <div style="background-color: #f8fafc; border: 1px solid #f1f5f9; border-radius: 12px; padding: 15px; margin: 20px 0;">
             <span style="font-size: 10px; font-weight: bold; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 10px;">Connection Diagnostics</span>
             <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #334155;">
               <tr>
                 <td style="padding: 4px 0; font-weight: 600; width: 140px; color: #64748b;">SMTP Host:</td>
-                <td style="padding: 4px 0; font-family: monospace; color: #0f172a;">${server}:${port}</td>
+                <td style="padding: 4px 0; font-family: monospace; color: #0f172a;">${originalHost}:${port}${isAutoResolved ? ` (${resolvedHost})` : ''}</td>
               </tr>
               <tr>
                 <td style="padding: 4px 0; font-weight: 600; color: #64748b;">Sender Identity:</td>
@@ -315,37 +412,19 @@ app.post('/api/send-test-email', async (req, res) => {
       `
     });
 
-    console.log('[SMTP API] Test email dispatched successfully. MessageID:', info.messageId);
-    return res.json({ success: true, messageId: info.messageId, message: `Email successfully delivered to ${recipientEmail}` });
+    console.log('[SMTP API] Real test email dispatched successfully. MessageID:', info.messageId);
+    return res.json({ 
+      success: true, 
+      messageId: info.messageId, 
+      message: `Email successfully delivered to ${recipientEmail} via ${resolvedHost}` 
+    });
   } catch (error: any) {
     const errMsg = error?.message || 'SMTP Connection or Authentication error';
-    
-    // Auto-fallback to Sandbox Simulation if DNS resolution or socket connection fails (e.g. EAI_AGAIN mail.smartpro.ae)
-    const isNetworkOrDnsError = 
-      errMsg.includes('EAI_AGAIN') ||
-      errMsg.includes('ENOTFOUND') ||
-      errMsg.includes('ETIMEDOUT') ||
-      errMsg.includes('ECONNREFUSED') ||
-      errMsg.includes('EHOSTUNREACH') ||
-      errMsg.includes('getaddrinfo') ||
-      errMsg.includes('connect');
-
-    if (isNetworkOrDnsError) {
-      console.log(`[SMTP API] Host '${req.body?.smtpConfig?.server}' unreachable or unresolvable. Auto-falling back to Sandbox Simulation Mode.`);
-      return res.json({
-        success: true,
-        simulated: true,
-        autoFallback: true,
-        messageId: 'simulated-fallback-' + Date.now(),
-        message: `[Sandbox Relay Gate - Auto Fallback] SMTP host '${req.body?.smtpConfig?.server || 'unspecified'}' was unreachable. Test email was safely simulated and recorded.`
-      });
-    }
-
     console.log(`[SMTP API] Test email dispatch error: ${errMsg}`);
-
+    
     return res.status(200).json({
       success: false,
-      error: `Real SMTP Delivery Failed (${errMsg}). Check host, port, and credentials in Settings -> SMTP Configuration, or toggle Sandbox Simulation Mode to test.`
+      error: `SMTP Delivery Notice (${errMsg}). Check host, port, and authentication credentials in Settings -> SMTP Configuration, or toggle Sandbox Simulation Mode to capture test emails locally.`
     });
   }
 });
@@ -353,31 +432,24 @@ app.post('/api/send-test-email', async (req, res) => {
 // Send Rich Compliance Email using actual SMTP credentials
 app.post('/api/send-compliance-email', async (req, res) => {
   try {
-    let { smtpConfig, recipientEmails, subject, message, htmlContent, pdfAttachment } = req.body;
+    const smtpConfig = normalizeSmtpConfig(req.body.smtpConfig || req.body);
+    const recipientEmails = normalizeRecipients(req.body.recipientEmails || req.body.recipientEmail || req.body.recipients || req.body.to);
+    const ccEmails = normalizeRecipients(req.body.cc || req.body.emailCc || req.body.ccEmails);
+    const bccEmails = normalizeRecipients(req.body.bcc || req.body.emailBcc || req.body.bccEmails);
     
-    if (!recipientEmails || recipientEmails.length === 0) {
-      return res.status(400).json({ error: 'recipientEmails are required' });
+    const { subject, message, htmlContent, pdfAttachment, attachments: rawAttachments } = req.body;
+    
+    if (recipientEmails.length === 0) {
+      return res.status(400).json({ error: 'At least one valid recipient email is required' });
     }
 
-    if (!smtpConfig || !smtpConfig.server) {
-      smtpConfig = {
-        server: 'smtp.office365.com',
-        port: 587,
-        username: 'compliance.hub@smarthub.io',
-        password: 'CompliancePass123!',
-        sender_email: 'no-reply@smarthub.io',
-        tls: true,
-        ssl: false,
-        sandbox_mode: true
-      };
-    }
+    const { server: rawServer, port, username, password, ssl, tls, sender_email, sandbox_mode } = smtpConfig;
 
-    const { server, port, username, password, ssl, tls, sender_email, sandbox_mode } = smtpConfig;
+    // Resolve actual mail server host (e.g. mail.smartpro.ae -> najma.tasjeel.ae)
+    const { resolvedHost, isAutoResolved, originalHost } = await resolveSmtpHost(rawServer);
 
-    const isInternalOrUnresolvableDomain = server.includes('smartpro.ae') || server === 'mail.smartpro.ae' || sandbox_mode;
-
-    if (isInternalOrUnresolvableDomain) {
-      console.log(`[Sandbox Relay Gate] Compliance report email simulated successfully for ${recipientEmails.join(', ')} (Host: ${server}).`);
+    if (sandbox_mode) {
+      console.log(`[Sandbox Relay Gate] Compliance report email simulated successfully for ${recipientEmails.join(', ')} (Host: ${resolvedHost}).`);
       return res.json({
         success: true,
         simulated: true,
@@ -386,30 +458,29 @@ app.post('/api/send-compliance-email', async (req, res) => {
       });
     }
 
-    console.log(`[SMTP API] Dispatching Compliance Report to ${recipientEmails.join(', ')} via ${server}...`);
-
-    const smtpPort = Number(port);
-    const isSecure = smtpPort === 465 || (!!ssl && smtpPort !== 587 && smtpPort !== 25);
-    const requireTLS = smtpPort === 587 || !!tls;
+    console.log(`[SMTP API] Dispatching real Compliance Report to ${recipientEmails.join(', ')} via ${resolvedHost}:${port}...`);
 
     const transporter = nodemailer.createTransport({
-      host: server,
-      port: smtpPort,
-      secure: isSecure,
+      host: resolvedHost,
+      port: port,
+      secure: ssl,
       auth: (username && password) ? {
         user: username,
         pass: password,
       } : undefined,
       tls: {
-        rejectUnauthorized: false
+        rejectUnauthorized: false,
+        minVersion: 'TLSv1.2'
       },
-      requireTLS: requireTLS,
-      connectionTimeout: 10000,
+      requireTLS: tls,
+      connectionTimeout: 12000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
     });
 
-    const attachments = [];
+    const attachments: any[] = [];
     if (pdfAttachment) {
-      const sanitizedSubject = (subject || 'Risk_Assessment_Report').replace(/[^a-zA-Z0-9]/g, '_');
+      const sanitizedSubject = (subject || 'Compliance_Report').replace(/[^a-zA-Z0-9]/g, '_');
       attachments.push({
         filename: `${sanitizedSubject}.pdf`,
         content: pdfAttachment,
@@ -418,46 +489,46 @@ app.post('/api/send-compliance-email', async (req, res) => {
       });
     }
 
-    const info = await transporter.sendMail({
-      from: sender_email || username || 'support@smartpro.ae',
+    if (Array.isArray(rawAttachments)) {
+      for (const att of rawAttachments) {
+        if (att && att.content && att.filename) {
+          attachments.push({
+            filename: att.filename,
+            content: att.content,
+            encoding: att.encoding || 'base64',
+            contentType: att.contentType || 'application/octet-stream'
+          });
+        }
+      }
+    }
+
+    const mailOptions: any = {
+      from: sender_email || username || 'mail@smartpro.ae',
       to: recipientEmails.join(', '),
       subject: subject || 'AL NASR PHARMACY Compliance Register',
       text: message || 'Please find the latest Regulatory Compliance Risk Register.',
-      html: htmlContent,
-      attachments
-    });
+      html: htmlContent || undefined,
+      attachments: attachments.length > 0 ? attachments : undefined
+    };
 
-    console.log('[SMTP API] Compliance report email dispatched. MessageID:', info.messageId);
-    return res.json({ success: true, messageId: info.messageId, message: `Email successfully delivered to ${recipientEmails.join(', ')}` });
+    if (ccEmails.length > 0) mailOptions.cc = ccEmails.join(', ');
+    if (bccEmails.length > 0) mailOptions.bcc = bccEmails.join(', ');
+
+    const info = await transporter.sendMail(mailOptions);
+
+    console.log('[SMTP API] Real compliance report email dispatched. MessageID:', info.messageId);
+    return res.json({ 
+      success: true, 
+      messageId: info.messageId, 
+      message: `Email successfully delivered to ${recipientEmails.join(', ')} via ${resolvedHost}` 
+    });
   } catch (error: any) {
     const errMsg = error?.message || 'SMTP Connection or Authentication error';
-    
-    // Auto-fallback to Sandbox Simulation if DNS resolution or socket connection fails (e.g. EAI_AGAIN mail.smartpro.ae)
-    const isNetworkOrDnsError = 
-      errMsg.includes('EAI_AGAIN') ||
-      errMsg.includes('ENOTFOUND') ||
-      errMsg.includes('ETIMEDOUT') ||
-      errMsg.includes('ECONNREFUSED') ||
-      errMsg.includes('EHOSTUNREACH') ||
-      errMsg.includes('getaddrinfo') ||
-      errMsg.includes('connect');
-
-    if (isNetworkOrDnsError) {
-      console.log(`[SMTP API] Host '${req.body?.smtpConfig?.server}' unreachable or unresolvable. Auto-falling back to Sandbox Simulation Mode.`);
-      return res.json({
-        success: true,
-        simulated: true,
-        autoFallback: true,
-        messageId: 'simulated-fallback-' + Date.now(),
-        message: `[Sandbox Relay Gate - Auto Fallback] SMTP host '${req.body?.smtpConfig?.server || 'unspecified'}' was unreachable. Compliance email was safely simulated and captured.`
-      });
-    }
-
     console.log(`[SMTP API] Compliance report dispatch error: ${errMsg}`);
 
     return res.status(200).json({
       success: false,
-      error: `Real SMTP Delivery Failed (${errMsg}). Check host, port, and credentials in Settings -> SMTP Configuration, or toggle Sandbox Simulation Mode to capture test emails locally.`
+      error: `SMTP Delivery Failed (${errMsg}). Check host, port, and credentials in Settings -> SMTP Configuration, or toggle Sandbox Simulation Mode to capture test emails locally.`
     });
   }
 });

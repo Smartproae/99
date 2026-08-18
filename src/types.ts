@@ -20,9 +20,13 @@ export interface ContactPerson {
 }
 
 export interface ThirdPartySupport {
+  id?: string;
   team_name: string;
   email: string;
   phone: string;
+  service_type?: string; // e.g. "Primary EMR / EHR", "Malaffi Integrator", "LIMS / Lab System", "PACS / Radiology", "Claims / Billing"
+  contact_person?: string;
+  notes?: string;
 }
 
 export type DocumentStorageProvider = 'LOCAL_PC' | 'GOOGLE_DRIVE' | 'DROPBOX' | 'ONE_DRIVE';
@@ -61,6 +65,8 @@ export interface Client {
   owner_email?: string;
   facility_stamp?: string;
   facility_logo?: string;
+  logo_url?: string;
+  license_number?: string;
   logo_placement?: 'FULL' | 'LEFT' | 'RIGHT';
   footer_placement?: 'FULL' | 'LEFT' | 'RIGHT';
   footer_logo?: string;
@@ -92,6 +98,8 @@ export interface Client {
   // Third-Party Support Channels
   it_support?: ThirdPartySupport;
   emr_support?: ThirdPartySupport;
+  emr_vendors?: ThirdPartySupport[]; // Multi-vendor EMR support channels (e.g. Primary EMR, Malaffi, LIMS, PACS, etc.)
+  it_vendors?: ThirdPartySupport[];  // Multi-vendor IT support channels
 
   // Document Metadata
   doc_ref?: string;
@@ -628,6 +636,60 @@ export interface Employee {
   branch_name?: string;
   branch?: string;
   facility_name?: string;
+}
+
+export type SystemApplicationType =
+  | 'Desktop / Computer User Accounts'
+  | 'Server'
+  | 'Firewall'
+  | 'CCTV / NVR'
+  | 'Antivirus / Kaspersky'
+  | 'NAS'
+  | 'Other Application';
+
+export type AccessRoleType =
+  | 'General / End User'
+  | 'Operator'
+  | 'Administrator'
+  | 'Business Application User'
+  | 'DB User';
+
+export type AccessReviewStatus = 'Active' | 'Inactive' | 'Removed' | 'Modified';
+
+export interface AccessReviewAuditLog {
+  id: string;
+  action: string;
+  changed_at: string;
+  changed_by: string;
+  details: string;
+  prev_status?: AccessReviewStatus;
+  new_status?: AccessReviewStatus;
+}
+
+export interface SystemAccessReviewItem {
+  id: string;
+  client_id: string;
+  employee_id: string;
+  employee_name: string;
+  position: string;
+  department?: string;
+  branch_name?: string;
+  system_application: SystemApplicationType | string;
+  access_role: AccessRoleType | string;
+  username?: string;
+  module_privilege?: string;
+  status: AccessReviewStatus;
+  approved_by: string;
+  approved_by_designation?: string;
+  prepared_by: string;
+  prepared_by_designation?: string;
+  review_date: string;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  modified_by: string;
+  notes?: string;
+  audit_history?: AccessReviewAuditLog[];
 }
 
 export interface ServiceAgreement {

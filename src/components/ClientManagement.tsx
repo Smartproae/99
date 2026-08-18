@@ -4,9 +4,9 @@
  */
 
 import React, { useState } from 'react';
-import { Client, User, DocumentStorageProvider, Employee } from '../types';
-import { Plus, Edit2, Search, Building2, CheckCircle2, XCircle, MapPin, Globe, Phone, Mail, Trash2, Upload, Shield, Award, Send, Key, RefreshCw, Zap, Activity, ShieldCheck, Database, Copy, UserCheck, Users, Sparkles } from 'lucide-react';
-import { syncClientProfileAuthRep } from '../utils/clientSyncUtils';
+import { Client, User, DocumentStorageProvider, Employee, ThirdPartySupport } from '../types';
+import { Plus, Edit2, Search, Building2, CheckCircle2, XCircle, MapPin, Globe, Phone, Mail, Trash2, Upload, Shield, Award, Send, Key, RefreshCw, Zap, Activity, ShieldCheck, Database, Copy, UserCheck, Users, Sparkles, Server, Stethoscope } from 'lucide-react';
+import { syncClientProfileAuthRep, getClientEmrVendors } from '../utils/clientSyncUtils';
 import FrameworkGroupModal from './FrameworkGroupModal';
 import { FrameworkGroupTier } from '../utils/frameworkGroupUtils';
 import { INITIAL_EMPLOYEES } from '../initialData';
@@ -333,6 +333,47 @@ export default function ClientManagement({
   const [emrSupportEmail, setEmrSupportEmail] = useState('emr@curemd.ae');
   const [emrSupportPhone, setEmrSupportPhone] = useState('+971...');
 
+  // Multi-Vendor EMR Support state for Add Facility
+  const [emrVendors, setEmrVendors] = useState<ThirdPartySupport[]>([
+    { id: 'emr-v-1', team_name: 'CureMD Regional Support', email: 'emr@curemd.ae', phone: '+971 2 506 7300', service_type: 'Primary EMR / EHR' }
+  ]);
+
+  const handleAddEmrVendorRow = () => {
+    setEmrVendors(prev => [
+      ...prev,
+      {
+        id: `emr-v-${Date.now()}`,
+        team_name: '',
+        email: '',
+        phone: '',
+        service_type: 'Secondary EMR / Integrator'
+      }
+    ]);
+  };
+
+  const handleUpdateEmrVendorRow = (index: number, field: keyof ThirdPartySupport, value: string) => {
+    setEmrVendors(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      if (index === 0) {
+        if (field === 'team_name') setEmrSupportName(value);
+        if (field === 'email') setEmrSupportEmail(value);
+        if (field === 'phone') setEmrSupportPhone(value);
+      }
+      return updated;
+    });
+  };
+
+  const handleRemoveEmrVendorRow = (index: number) => {
+    setEmrVendors(prev => {
+      const filtered = prev.filter((_, i) => i !== index);
+      if (filtered.length === 0) {
+        return [{ id: `emr-v-${Date.now()}`, team_name: '', email: '', phone: '', service_type: 'Primary EMR / EHR' }];
+      }
+      return filtered;
+    });
+  };
+
   // Client Admin Access details states
   const [clientAdminName, setClientAdminName] = useState('');
   const [clientAdminEmail, setClientAdminEmail] = useState('');
@@ -621,7 +662,10 @@ export default function ClientManagement({
       hr_manager: { name: hrMgrName, email: hrMgrEmail, phone: hrMgrPhone, designation: hrMgrDesignation, signature_image: hrMgrSignature },
 
       it_support: { team_name: itSupportName, email: itSupportEmail, phone: itSupportPhone },
-      emr_support: { team_name: emrSupportName, email: emrSupportEmail, phone: emrSupportPhone },
+      emr_support: emrVendors.find(v => v.team_name || v.email || v.phone) 
+        ? { team_name: emrVendors[0]?.team_name || emrSupportName, email: emrVendors[0]?.email || emrSupportEmail, phone: emrVendors[0]?.phone || emrSupportPhone, service_type: emrVendors[0]?.service_type || 'Primary EMR / EHR' }
+        : { team_name: emrSupportName, email: emrSupportEmail, phone: emrSupportPhone, service_type: 'Primary EMR / EHR' },
+      emr_vendors: emrVendors.filter(v => v.team_name || v.email || v.phone),
 
       client_admin_contact: clientAdminName || clientAdminEmail || clientAdminPhone ? {
         name: clientAdminName,
@@ -653,7 +697,21 @@ export default function ClientManagement({
   const handleSaveEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingClient) return;
-    const syncedClient = syncClientProfileAuthRep(editingClient);
+    const validEmrVendors = (editingClient.emr_vendors || []).filter(v => v && (v.team_name || v.email || v.phone));
+    const primaryVendor = validEmrVendors[0] || editingClient.emr_support;
+    
+    const clientToSave: Client = {
+      ...editingClient,
+      emr_vendors: validEmrVendors.length > 0 ? validEmrVendors : (editingClient.emr_support ? [editingClient.emr_support] : []),
+      emr_support: primaryVendor ? {
+        team_name: primaryVendor.team_name || '',
+        email: primaryVendor.email || '',
+        phone: primaryVendor.phone || '',
+        service_type: primaryVendor.service_type || 'Primary EMR / EHR'
+      } : undefined
+    };
+
+    const syncedClient = syncClientProfileAuthRep(clientToSave);
     onUpdateClient(syncedClient);
     setEditingClient(null);
   };
@@ -732,6 +790,10 @@ export default function ClientManagement({
     setEmrSupportEmail('emr@curemd.ae');
     setEmrSupportPhone('+971...');
 
+    setEmrVendors([
+      { id: `emr-v-1`, team_name: 'CureMD Regional Support', email: 'emr@curemd.ae', phone: '+971 2 506 7300', service_type: 'Primary EMR / EHR' }
+    ]);
+
     setClientAdminName('');
     setClientAdminEmail('');
     setClientAdminPhone('');
@@ -739,6 +801,11 @@ export default function ClientManagement({
   };
 
   const startEdit = (client: Client) => {
+    const loadedVendors = getClientEmrVendors(client);
+    const resolvedVendors: ThirdPartySupport[] = loadedVendors.length > 0 ? loadedVendors : [
+      { id: 'emr-1', team_name: client.emr_support?.team_name || 'CureMD Regional Support', email: client.emr_support?.email || 'emr@curemd.ae', phone: client.emr_support?.phone || '+971...', service_type: client.emr_support?.service_type || 'Primary EMR / EHR' }
+    ];
+
     setEditingClient({
       ...client,
       structure_classification: client.structure_classification || (client.is_group ? 'GROUP' : 'SINGLE'),
@@ -749,7 +816,8 @@ export default function ClientManagement({
       it_manager: client.it_manager ? { ...client.it_manager, designation: client.it_manager.designation || 'IT Manager / Admin', signature_image: client.it_manager.signature_image || '' } : { name: '', email: '', phone: '', designation: 'IT Manager / Admin', signature_image: '' },
       hr_manager: client.hr_manager ? { ...client.hr_manager, designation: client.hr_manager.designation || 'HR Manager', signature_image: client.hr_manager.signature_image || '' } : { name: '', email: '', phone: '', designation: 'HR Manager', signature_image: '' },
       it_support: client.it_support || { team_name: 'Apex Security Solutions', email: 'support@partner.ae', phone: '+971...' },
-      emr_support: client.emr_support || { team_name: 'CureMD Regional Support', email: 'emr@curemd.ae', phone: '+971...' }
+      emr_support: client.emr_support || resolvedVendors[0] || { team_name: 'CureMD Regional Support', email: 'emr@curemd.ae', phone: '+971...' },
+      emr_vendors: resolvedVendors
     });
   };
 
@@ -1706,32 +1774,105 @@ export default function ClientManagement({
               </div>
 
               {/* EMR Support */}
-              <div className="p-3 bg-white rounded-xl border border-slate-155 shadow-xs space-y-2">
-                <span className="text-xs font-bold text-slate-800 block border-b border-slate-50 pb-1">EMR Support Team (Third-Party)</span>
-                <div className="grid grid-cols-1 gap-2">
-                  <input
-                    type="text"
-                    value={emrSupportName}
-                    onChange={e => setEmrSupportName(e.target.value)}
-                    placeholder="e.g. CureMD Regional Support"
-                    className="w-full text-xs p-2.5 rounded border border-slate-200"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="email"
-                      value={emrSupportEmail}
-                      onChange={e => setEmrSupportEmail(e.target.value)}
-                      placeholder="emr@curemd.ae"
-                      className="w-full text-xs p-2.5 rounded border border-slate-200"
-                    />
-                    <input
-                      type="text"
-                      value={emrSupportPhone}
-                      onChange={e => setEmrSupportPhone(e.target.value)}
-                      placeholder="Phone"
-                      className="w-full text-xs p-2.5 rounded border border-slate-200"
-                    />
+              <div className="p-3 bg-white rounded-xl border border-slate-155 shadow-xs space-y-3 md:col-span-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Stethoscope className="w-3.5 h-3.5 text-indigo-600" />
+                      EMR Support Team (Third-Party)
+                      <span className="bg-indigo-50 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-200">
+                        {emrVendors.length} {emrVendors.length === 1 ? 'Vendor' : 'Vendors'}
+                      </span>
+                    </span>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      Add all EMR, Malaffi HIE, PACS, LIMS, and clinical software vendors servicing this facility.
+                    </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={handleAddEmrVendorRow}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-all border border-indigo-200 shadow-2xs hover:scale-102"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add More EMR Vendor</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2.5">
+                  {emrVendors.map((vendor, vIndex) => (
+                    <div key={vendor.id || vIndex} className="p-2.5 bg-slate-50/80 rounded-lg border border-slate-200/80 space-y-2 relative group hover:border-indigo-200 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-black text-[10px] flex items-center justify-center">
+                            {vIndex + 1}
+                          </span>
+                          <span className="text-[11px] font-bold text-slate-700">
+                            {vIndex === 0 ? 'Primary EMR Vendor' : `Additional EMR / Clinical Vendor #${vIndex + 1}`}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={vendor.service_type || (vIndex === 0 ? 'Primary EMR / EHR' : 'Secondary EMR / Integrator')}
+                            onChange={e => handleUpdateEmrVendorRow(vIndex, 'service_type', e.target.value)}
+                            className="text-[10px] font-semibold bg-white border border-slate-200 rounded px-2 py-0.5 text-slate-700"
+                          >
+                            <option value="Primary EMR / EHR">Primary EMR / EHR</option>
+                            <option value="Malaffi HIE Integrator">Malaffi HIE Integrator</option>
+                            <option value="NABIDH HIE Direct">NABIDH HIE Direct</option>
+                            <option value="PACS / Radiology EMR">PACS / Radiology EMR</option>
+                            <option value="LIMS / Lab System">LIMS / Lab System</option>
+                            <option value="Billing & Claims Engine">Billing & Claims Engine</option>
+                            <option value="Dental / Specialty EMR">Dental / Specialty EMR</option>
+                            <option value="Secondary / Backup EMR">Secondary / Backup EMR</option>
+                            <option value="Telehealth / Remote Care">Telehealth / Remote Care</option>
+                            <option value="Third-Party Integrator">Third-Party Integrator</option>
+                          </select>
+
+                          {emrVendors.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveEmrVendorRow(vIndex)}
+                              className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50 transition-colors"
+                              title="Remove EMR Vendor"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div className="sm:col-span-1">
+                          <input
+                            type="text"
+                            value={vendor.team_name}
+                            onChange={e => handleUpdateEmrVendorRow(vIndex, 'team_name', e.target.value)}
+                            placeholder="Vendor Name (e.g. CureMD / SafeCare)"
+                            className="w-full text-xs p-2 rounded border border-slate-200 bg-white"
+                          />
+                        </div>
+                        <div>
+                          <input
+                            type="email"
+                            value={vendor.email}
+                            onChange={e => handleUpdateEmrVendorRow(vIndex, 'email', e.target.value)}
+                            placeholder="Support Email (e.g. support@emr.ae)"
+                            className="w-full text-xs p-2 rounded border border-slate-200 bg-white"
+                          />
+                        </div>
+                        <div>
+                          <input
+                            type="text"
+                            value={vendor.phone}
+                            onChange={e => handleUpdateEmrVendorRow(vIndex, 'phone', e.target.value)}
+                            placeholder="Support Phone / Hotline"
+                            className="w-full text-xs p-2 rounded border border-slate-200 bg-white"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -3284,41 +3425,158 @@ export default function ClientManagement({
               </div>
 
               {/* EMR Support */}
-              <div className="p-3 bg-white rounded-xl border border-slate-155 shadow-xs space-y-2">
-                <span className="text-xs font-bold text-slate-800 block border-b border-slate-50 pb-1">EMR Support Team (Third-Party)</span>
-                <div className="grid grid-cols-1 gap-2">
-                  <input
-                    type="text"
-                    value={editingClient.emr_support?.team_name || ''}
-                    onChange={e => setEditingClient({
-                      ...editingClient,
-                      emr_support: { ...(editingClient.emr_support || { team_name: '', email: '', phone: '' }), team_name: e.target.value }
-                    })}
-                    placeholder="e.g. CureMD Regional Support"
-                    className="w-full text-xs p-2.5 rounded border border-slate-200"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="email"
-                      value={editingClient.emr_support?.email || ''}
-                      onChange={e => setEditingClient({
-                        ...editingClient,
-                        emr_support: { ...(editingClient.emr_support || { team_name: '', email: '', phone: '' }), email: e.target.value }
-                      })}
-                      placeholder="emr@curemd.ae"
-                      className="w-full text-xs p-2.5 rounded border border-slate-200"
-                    />
-                    <input
-                      type="text"
-                      value={editingClient.emr_support?.phone || ''}
-                      onChange={e => setEditingClient({
-                        ...editingClient,
-                        emr_support: { ...(editingClient.emr_support || { team_name: '', email: '', phone: '' }), phone: e.target.value }
-                      })}
-                      placeholder="Phone"
-                      className="w-full text-xs p-2.5 rounded border border-slate-200"
-                    />
+              <div className="p-3 bg-white rounded-xl border border-slate-155 shadow-xs space-y-3 md:col-span-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Stethoscope className="w-3.5 h-3.5 text-indigo-600" />
+                      EMR Support Team (Third-Party)
+                      <span className="bg-indigo-50 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-200">
+                        {((editingClient.emr_vendors && editingClient.emr_vendors.length > 0) ? editingClient.emr_vendors : (editingClient.emr_support ? [editingClient.emr_support] : [])).length} Vendors
+                      </span>
+                    </span>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      Add all EMR, Malaffi HIE, PACS, LIMS, and clinical software vendors servicing this facility.
+                    </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentVendors = (editingClient.emr_vendors && editingClient.emr_vendors.length > 0)
+                        ? editingClient.emr_vendors
+                        : (editingClient.emr_support ? [editingClient.emr_support] : []);
+                      setEditingClient({
+                        ...editingClient,
+                        emr_vendors: [
+                          ...currentVendors,
+                          { id: `emr-v-${Date.now()}`, team_name: '', email: '', phone: '', service_type: 'Secondary EMR / Integrator' }
+                        ]
+                      });
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-all border border-indigo-200 shadow-2xs hover:scale-102"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add More EMR Vendor</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2.5">
+                  {((editingClient.emr_vendors && editingClient.emr_vendors.length > 0)
+                    ? editingClient.emr_vendors
+                    : (editingClient.emr_support ? [editingClient.emr_support] : [{ team_name: '', email: '', phone: '', service_type: 'Primary EMR / EHR' }])
+                  ).map((vendor, vIndex, arr) => (
+                    <div key={vendor.id || vIndex} className="p-2.5 bg-slate-50/80 rounded-lg border border-slate-200/80 space-y-2 relative group hover:border-indigo-200 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-black text-[10px] flex items-center justify-center">
+                            {vIndex + 1}
+                          </span>
+                          <span className="text-[11px] font-bold text-slate-700">
+                            {vIndex === 0 ? 'Primary EMR Vendor' : `Additional EMR / Clinical Vendor #${vIndex + 1}`}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={vendor.service_type || (vIndex === 0 ? 'Primary EMR / EHR' : 'Secondary EMR / Integrator')}
+                            onChange={e => {
+                              const currentVendors = [...arr];
+                              currentVendors[vIndex] = { ...currentVendors[vIndex], service_type: e.target.value };
+                              setEditingClient({
+                                ...editingClient,
+                                emr_vendors: currentVendors,
+                                emr_support: vIndex === 0 ? { ...(editingClient.emr_support || currentVendors[0]), service_type: e.target.value } : editingClient.emr_support
+                              });
+                            }}
+                            className="text-[10px] font-semibold bg-white border border-slate-200 rounded px-2 py-0.5 text-slate-700"
+                          >
+                            <option value="Primary EMR / EHR">Primary EMR / EHR</option>
+                            <option value="Malaffi HIE Integrator">Malaffi HIE Integrator</option>
+                            <option value="NABIDH HIE Direct">NABIDH HIE Direct</option>
+                            <option value="PACS / Radiology EMR">PACS / Radiology EMR</option>
+                            <option value="LIMS / Lab System">LIMS / Lab System</option>
+                            <option value="Billing & Claims Engine">Billing & Claims Engine</option>
+                            <option value="Dental / Specialty EMR">Dental / Specialty EMR</option>
+                            <option value="Secondary / Backup EMR">Secondary / Backup EMR</option>
+                            <option value="Telehealth / Remote Care">Telehealth / Remote Care</option>
+                            <option value="Third-Party Integrator">Third-Party Integrator</option>
+                          </select>
+
+                          {arr.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const filtered = arr.filter((_, idx) => idx !== vIndex);
+                                setEditingClient({
+                                  ...editingClient,
+                                  emr_vendors: filtered.length > 0 ? filtered : [{ id: `emr-v-${Date.now()}`, team_name: '', email: '', phone: '', service_type: 'Primary EMR / EHR' }],
+                                  emr_support: filtered[0] || { team_name: '', email: '', phone: '', service_type: 'Primary EMR / EHR' }
+                                });
+                              }}
+                              className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50 transition-colors"
+                              title="Remove EMR Vendor"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div className="sm:col-span-1">
+                          <input
+                            type="text"
+                            value={vendor.team_name}
+                            onChange={e => {
+                              const currentVendors = [...arr];
+                              currentVendors[vIndex] = { ...currentVendors[vIndex], team_name: e.target.value };
+                              setEditingClient({
+                                ...editingClient,
+                                emr_vendors: currentVendors,
+                                emr_support: vIndex === 0 ? { ...(editingClient.emr_support || currentVendors[0]), team_name: e.target.value } : editingClient.emr_support
+                              });
+                            }}
+                            placeholder="Vendor Name (e.g. CureMD / SafeCare)"
+                            className="w-full text-xs p-2 rounded border border-slate-200 bg-white"
+                          />
+                        </div>
+                        <div>
+                          <input
+                            type="email"
+                            value={vendor.email}
+                            onChange={e => {
+                              const currentVendors = [...arr];
+                              currentVendors[vIndex] = { ...currentVendors[vIndex], email: e.target.value };
+                              setEditingClient({
+                                ...editingClient,
+                                emr_vendors: currentVendors,
+                                emr_support: vIndex === 0 ? { ...(editingClient.emr_support || currentVendors[0]), email: e.target.value } : editingClient.emr_support
+                              });
+                            }}
+                            placeholder="Support Email (e.g. support@emr.ae)"
+                            className="w-full text-xs p-2 rounded border border-slate-200 bg-white"
+                          />
+                        </div>
+                        <div>
+                          <input
+                            type="text"
+                            value={vendor.phone}
+                            onChange={e => {
+                              const currentVendors = [...arr];
+                              currentVendors[vIndex] = { ...currentVendors[vIndex], phone: e.target.value };
+                              setEditingClient({
+                                ...editingClient,
+                                emr_vendors: currentVendors,
+                                emr_support: vIndex === 0 ? { ...(editingClient.emr_support || currentVendors[0]), phone: e.target.value } : editingClient.emr_support
+                              });
+                            }}
+                            placeholder="Support Phone / Hotline"
+                            className="w-full text-xs p-2 rounded border border-slate-200 bg-white"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

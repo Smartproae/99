@@ -20,7 +20,8 @@ import {
   INITIAL_AUDIT_LOGS,
   INITIAL_EMAIL_LOGS,
   INITIAL_NOTIFICATIONS,
-  INITIAL_EMPLOYEES
+  INITIAL_EMPLOYEES,
+  INITIAL_SYSTEM_ACCESS_REVIEWS
 } from './initialData';
 import { getPolicyTemplateDefaults, MASTER_34_POLICY_TEMPLATES } from './utils/policyDefaults';
 import {
@@ -51,7 +52,8 @@ import {
   EmailLog,
   Notification,
   UserRole,
-  Employee
+  Employee,
+  SystemAccessReviewItem
 } from './types';
 
 import Sidebar from './components/Sidebar';
@@ -59,6 +61,7 @@ import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import ClientManagement from './components/ClientManagement';
 import EmployeeManagement from './components/EmployeeManagement';
+import SystemAccessReviewModule from './components/SystemAccessReviewModule';
 import PolicyManagement from './components/PolicyManagement';
 import PolicyFrameworksSetup from './components/PolicyFrameworksSetup';
 import PolicyProcedureView from './components/PolicyProcedureView';
@@ -403,6 +406,12 @@ export default function App() {
   const [employees, setEmployees] = useState<Employee[]>(() => {
     const saved = localStorage.getItem('sh_employees');
     return safeParseJSON(saved, INITIAL_EMPLOYEES);
+  });
+
+  const [accessReviews, setAccessReviews] = useState<SystemAccessReviewItem[]>(() => {
+    const saved = localStorage.getItem('sh_system_access_reviews');
+    const loaded = safeParseJSON(saved, INITIAL_SYSTEM_ACCESS_REVIEWS);
+    return sanitizeAndDeduplicate(loaded, 'sar');
   });
 
   // Active workspace states
@@ -800,6 +809,10 @@ export default function App() {
   useEffect(() => {
     safeSetItem('sh_employees', JSON.stringify(employees));
   }, [employees]);
+
+  useEffect(() => {
+    safeSetItem('sh_system_access_reviews', JSON.stringify(accessReviews));
+  }, [accessReviews]);
 
   useEffect(() => {
     safeSetItem('sh_active_client_id', activeClientId);
@@ -1300,6 +1313,27 @@ export default function App() {
     const u = users.find(user => user.id === userId);
     setUsers(prev => prev.filter(user => user.id !== userId));
     logAuditTrail('RBAC_MANAGEMENT', 'DELETED USER ACCOUNT FROM SYSTEM', u || { id: userId });
+  };
+
+  const handleAddAccessReview = (item: SystemAccessReviewItem) => {
+    setAccessReviews(prev => [item, ...prev]);
+    logAuditTrail('ACCESS_MANAGEMENT', `CREATED SYSTEM ACCESS REVIEW FOR ${item.employee_name} (${item.system_application})`, item);
+  };
+
+  const handleUpdateAccessReview = (updated: SystemAccessReviewItem) => {
+    setAccessReviews(prev => prev.map(r => r.id === updated.id ? updated : r));
+    logAuditTrail('ACCESS_MANAGEMENT', `UPDATED SYSTEM ACCESS REVIEW FOR ${updated.employee_name} (${updated.system_application})`, updated);
+  };
+
+  const handleDeleteAccessReview = (id: string) => {
+    const target = accessReviews.find(r => r.id === id);
+    setAccessReviews(prev => prev.filter(r => r.id !== id));
+    logAuditTrail('ACCESS_MANAGEMENT', `DELETED SYSTEM ACCESS REVIEW`, { id, target });
+  };
+
+  const handleBulkAddAccessReviews = (items: SystemAccessReviewItem[]) => {
+    setAccessReviews(prev => [...items, ...prev]);
+    logAuditTrail('ACCESS_MANAGEMENT', `BULK IMPORTED ${items.length} SYSTEM ACCESS REVIEWS`, { count: items.length });
   };
 
   const handleMarkNotificationRead = (id: string) => {
@@ -2299,6 +2333,21 @@ export default function App() {
                 activeClientId={activeClientId}
                 client={currentClient}
                 onAddEmailLog={handleAddEmailLog}
+                onNavigateTab={(tab) => setCurrentTab(tab)}
+              />
+            )}
+
+            {currentTab === 'system-access-review' && (
+              <SystemAccessReviewModule
+                accessReviews={accessReviews}
+                employees={employees}
+                client={currentClient}
+                currentUser={currentUser}
+                onAddAccessReview={handleAddAccessReview}
+                onUpdateAccessReview={handleUpdateAccessReview}
+                onDeleteAccessReview={handleDeleteAccessReview}
+                onBulkAddAccessReviews={handleBulkAddAccessReviews}
+                onNavigateTab={(tab) => setCurrentTab(tab)}
               />
             )}
 

@@ -28,7 +28,8 @@ import {
   Printer,
   Mail,
   File,
-  Filter
+  Filter,
+  ShieldCheck
 } from 'lucide-react';
 import { DocRefLoopSelector } from './DocRefLoopSelector';
 
@@ -41,6 +42,7 @@ interface EmployeeManagementProps {
   onDeleteEmployee: (id: string) => void;
   onBulkUploadEmployees: (emps: Employee[]) => void;
   onAddEmailLog?: (recipient: string, subject: string, type: string, status?: 'SENT' | 'FAILED') => void;
+  onNavigateTab?: (tab: string) => void;
 }
 
 export default function EmployeeManagement({
@@ -51,7 +53,8 @@ export default function EmployeeManagement({
   onUpdateEmployee,
   onDeleteEmployee,
   onBulkUploadEmployees,
-  onAddEmailLog
+  onAddEmailLog,
+  onNavigateTab
 }: EmployeeManagementProps) {
   // Filtering & search
   const [searchTerm, setSearchTerm] = useState('');
@@ -1141,6 +1144,33 @@ export default function EmployeeManagement({
 
   return (
     <div className="space-y-6">
+      {/* Module Sub-Navigation Bar */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+        <button
+          type="button"
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-50 border-b-2 border-indigo-600 text-indigo-900 font-bold text-xs rounded-t-lg transition-all"
+        >
+          <Users className="w-4 h-4 text-indigo-600" />
+          Employee HR Roster
+          <span className="bg-indigo-200/70 text-indigo-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
+            {clientEmployees.length}
+          </span>
+        </button>
+        {onNavigateTab && (
+          <button
+            type="button"
+            onClick={() => onNavigateTab('system-access-review')}
+            className="flex items-center gap-2 px-4 py-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 font-semibold text-xs rounded-t-lg transition-all cursor-pointer"
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            System Access Review Summary Report
+            <span className="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded-full">
+              ISO 27001 / ADHICS
+            </span>
+          </button>
+        )}
+      </div>
+
       {/* Tab Header Banner */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-2xl border border-slate-100 gap-4">
         <div>

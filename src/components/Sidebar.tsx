@@ -26,7 +26,9 @@ import {
   ChevronDown,
   ChevronRight,
   MonitorCheck,
-  LogOut
+  LogOut,
+  ShieldCheck,
+  UserCheck
 } from 'lucide-react';
 import { User } from '../types';
 import { getDefaultTabsForRole } from '../utils/rbac';
@@ -85,10 +87,11 @@ export default function Sidebar({ currentTab, onTabChange, appName = "SMARTHUB",
     },
     {
       id: 'human-resource',
-      title: 'Human Resource',
+      title: 'Employee & Operator Management',
       icon: Users,
       items: [
-        { id: 'employees', label: 'Employee HR Roster', icon: Users, color: 'text-indigo-400 font-bold' }
+        { id: 'employees', label: 'Employee HR Roster', icon: Users, color: 'text-indigo-400 font-bold' },
+        { id: 'system-access-review', label: 'System Access Review Summary Report', icon: ShieldCheck, color: 'text-emerald-500 font-bold' }
       ]
     },
     {

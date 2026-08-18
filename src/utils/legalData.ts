@@ -31,6 +31,8 @@ export interface CircularItem {
   evidence_file_name?: string;
   remarks?: string;
   target_date?: string;
+  license_number?: string; // e.g. "MF000", "PF000", "MF1042", "All Branches (Group)"
+  branch_name?: string;
 }
 
 export interface StandardItem {
@@ -46,6 +48,8 @@ export interface StandardItem {
   evidence_file_name?: string;
   remarks?: string;
   review_date?: string;
+  license_number?: string; // e.g. "MF000", "PF000", "MF1042", "All Branches (Group)"
+  branch_name?: string;
 }
 
 export interface ComplianceDoc {
@@ -288,7 +292,8 @@ export const INITIAL_CIRCULARS: CircularItem[] = [
     compliance_status: 'Fully Compliant',
     responsible_person: 'Medical Director',
     remarks: 'API bridges deployed, all active healthcare providers trained on electronic consent capture.',
-    target_date: '2026-06-30'
+    target_date: '2026-06-30',
+    license_number: 'MF000'
   },
   {
     id: 'c_2',
@@ -299,7 +304,8 @@ export const INITIAL_CIRCULARS: CircularItem[] = [
     compliance_status: 'Fully Compliant',
     responsible_person: 'Medical Director',
     remarks: 'Staff immunizations up to date. Annual flu and hepatitis booster records logged.',
-    target_date: '2026-05-15'
+    target_date: '2026-05-15',
+    license_number: 'MF000'
   },
   {
     id: 'c_3',
@@ -310,7 +316,8 @@ export const INITIAL_CIRCULARS: CircularItem[] = [
     compliance_status: 'Partially Compliant',
     responsible_person: 'Authorized Representative',
     remarks: 'Physical archive contract signed. Digital records migration under process.',
-    target_date: '2026-09-30'
+    target_date: '2026-09-30',
+    license_number: 'PF000'
   },
   {
     id: 'c_4',
@@ -321,7 +328,8 @@ export const INITIAL_CIRCULARS: CircularItem[] = [
     compliance_status: 'Non-Compliant',
     responsible_person: 'Authorized Representative',
     remarks: 'Reviewing policies for 3 newly joined visiting oral surgeons.',
-    target_date: '2026-08-15'
+    target_date: '2026-08-15',
+    license_number: 'All Branches (Group)'
   }
 ];
 
@@ -337,7 +345,8 @@ export const INITIAL_STANDARDS: StandardItem[] = [
     compliance_status: 'Fully Compliant',
     responsible_person: 'Medical Director',
     remarks: 'Forms updated in Arabic and English, displayed clearly in reception and treatment rooms.',
-    review_date: '2027-01-10'
+    review_date: '2027-01-10',
+    license_number: 'MF000'
   },
   {
     id: 's_2',
@@ -349,7 +358,8 @@ export const INITIAL_STANDARDS: StandardItem[] = [
     compliance_status: 'Fully Compliant',
     responsible_person: 'Medical Director',
     remarks: 'FANR shield report is active, lead partitions are calibrated, badges measured quarterly.',
-    review_date: '2026-08-15'
+    review_date: '2026-08-15',
+    license_number: 'MF000'
   },
   {
     id: 's_3',
@@ -361,7 +371,8 @@ export const INITIAL_STANDARDS: StandardItem[] = [
     compliance_status: 'Fully Compliant',
     responsible_person: 'Medical Director',
     remarks: 'Crash cart audit logs maintained daily by the head nurse. Defibrillator tested.',
-    review_date: '2026-03-20'
+    review_date: '2026-03-20',
+    license_number: 'PF000'
   },
   {
     id: 's_4',
@@ -373,7 +384,8 @@ export const INITIAL_STANDARDS: StandardItem[] = [
     compliance_status: 'Partially Compliant',
     responsible_person: 'Medical Director',
     remarks: 'In-house CAD-CAM milling machine calibration scheduled for Q3.',
-    review_date: '2026-05-11'
+    review_date: '2026-05-11',
+    license_number: 'All Branches (Group)'
   }
 ];
 

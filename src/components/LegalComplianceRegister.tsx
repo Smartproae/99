@@ -459,6 +459,8 @@ export default function LegalComplianceRegister({
             onUpdateCirculars={handleUpdateCirculars}
             currentUserRole={currentUser?.role || 'SUPER_ADMIN'}
             onLogAudit={logComplianceActivity}
+            client={client}
+            clients={clients}
           />
         )}
 
@@ -468,6 +470,8 @@ export default function LegalComplianceRegister({
             onUpdateStandards={handleUpdateStandards}
             currentUserRole={currentUser?.role || 'SUPER_ADMIN'}
             onLogAudit={logComplianceActivity}
+            client={client}
+            clients={clients}
           />
         )}
 

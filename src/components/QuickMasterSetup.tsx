@@ -52,6 +52,7 @@ import MetadataMappingModal, { MasterMetadataSource } from './MetadataMappingMod
 import { exportToSinglePagePDF } from '../utils/pdfExport';
 import BTATierSelector from './BTATierSelector';
 import { saveCustomGroupAssignment, FrameworkGroupTier } from '../utils/frameworkGroupUtils';
+import { DocRefLoopSelector, DocRefLoopData } from './DocRefLoopSelector';
 
 export interface DocumentReferenceItem {
   id: string;
@@ -750,6 +751,7 @@ export default function QuickMasterSetup({
         updated_at: new Date().toISOString()
       };
       localStorage.setItem(`sh_quick_master_setup_${clientKey}`, JSON.stringify(payload));
+      localStorage.setItem('sh_quick_master_setup', JSON.stringify(payload));
     } catch (e) {
       console.warn('Failed to save to localStorage', e);
     }
@@ -758,13 +760,86 @@ export default function QuickMasterSetup({
   // Auto-resolve Module Name from Reference Code or Document Name
   const deriveModuleName = (code: string, name: string): string => {
     const combined = `${code} ${name}`.toUpperCase();
+    if (combined.includes('ACC-') || combined.includes('ACCESS') || combined.includes('REVIEW') || combined.includes('SYSTEM ACCESS') || combined.includes('ANNIB-IT')) return 'Access Management';
+    if (combined.includes('HR-') || combined.includes('DUTY') || combined.includes('ROSTER') || combined.includes('CONFIDENTIALITY') || combined.includes('NDA') || combined.includes('ONB') || combined.includes('STAFF') || combined.includes('ORIENTATION')) return 'HR Compliance';
+    if (combined.includes('INC-') || combined.includes('INCIDENT')) return 'Incident Response';
+    if (combined.includes('AUDIT') || combined.includes('HLAR') || combined.includes('LEGAL')) return 'Compliance Audit';
     if (combined.includes('POL-') || combined.includes('POLICY')) return 'Policy';
     if (combined.includes('SOP-') || combined.includes('PRC-') || combined.includes('PROCEDURE') || combined.includes('SOP')) return 'SOP';
     if (combined.includes('FRM-') || combined.includes('FORM') || combined.includes('TEMPLATE')) return 'Forms';
-    if (combined.includes('REG-') || combined.includes('REGISTER') || combined.includes('INDEX')) return 'Register';
+    if (combined.includes('REG-') || combined.includes('REGISTER') || combined.includes('INDEX') || combined.includes('INV') || combined.includes('AST-')) return 'Register';
     if (combined.includes('GDL-') || combined.includes('GUIDELINE') || combined.includes('STANDARD')) return 'Guideline';
+    if (combined.includes('AGR-') || combined.includes('SLA') || combined.includes('AGREEMENT')) return 'Agreements';
+    if (combined.includes('REP-') || combined.includes('REPORT')) return 'Reports';
+    if (combined.includes('KEY') || combined.includes('VAULT')) return 'Key Register';
+    if (combined.includes('PHY') || combined.includes('CCTV') || combined.includes('PERIMETER') || combined.includes('SECURITY ZONE')) return 'Physical Security';
     return 'Record';
   };
+
+  // Listen for Loop synchronization events across modules
+  useEffect(() => {
+    const handleLoopAppliedEvent = (e: any) => {
+      const docItem = e?.detail;
+      if (docItem && docItem.ref_code) {
+        const resolvedModule = docItem.module_name || deriveModuleName(docItem.ref_code, docItem.doc_name || '');
+        
+        // 1. Update the active docForm in Step 2: Document Reference Details & Automatic Module Resolver
+        setDocForm({
+          ref_code: docItem.ref_code,
+          doc_name: docItem.doc_name || 'System Access Review Summary Report',
+          module_name: resolvedModule,
+          version_control: docItem.version_control || docItem.version || 'v2.0 (Master Loop)',
+          classification: docItem.classification || 'RESTRICTED / CONFIDENTIAL',
+          framework_group: docItem.framework_group || 'Basic',
+          prepared_by: docItem.prepared_by || 'Aseef Sulaiman (IT Manager)',
+          reviewed_by: docItem.reviewed_by || 'Sarah Jenkins (Compliance Officer)',
+          approved_by: docItem.approved_by || 'Dr. Faisal Al-Mansoori (Medical Director)',
+          issue_date: docItem.issue_date || new Date().toISOString().split('T')[0],
+          approval_date: docItem.approval_date || docItem.issue_date || new Date().toISOString().split('T')[0],
+          effective_date: docItem.effective_date || docItem.approval_date || new Date().toISOString().split('T')[0],
+          next_due_date: docItem.next_due_date || docItem.review_date || (() => {
+            const d = new Date(); d.setFullYear(d.getFullYear() + 1); return d.toISOString().split('T')[0];
+          })()
+        });
+
+        // 2. Upsert into the documents array
+        setDocuments(prevDocs => {
+          const idx = prevDocs.findIndex(d => d.ref_code === docItem.ref_code);
+          const newDocEntry: DocumentReferenceItem = {
+            id: idx >= 0 ? prevDocs[idx].id : `doc-ref-loop-${Date.now()}`,
+            ref_code: docItem.ref_code,
+            doc_name: docItem.doc_name || 'System Access Review Summary Report',
+            module_name: resolvedModule,
+            version_control: docItem.version_control || docItem.version || 'v2.0 (Master Loop)',
+            classification: docItem.classification || 'RESTRICTED / CONFIDENTIAL',
+            framework_group: docItem.framework_group || 'Basic',
+            prepared_by: docItem.prepared_by || 'Aseef Sulaiman (IT Manager)',
+            reviewed_by: docItem.reviewed_by || 'Sarah Jenkins (Compliance Officer)',
+            approved_by: docItem.approved_by || 'Dr. Faisal Al-Mansoori (Medical Director)',
+            issue_date: docItem.issue_date || new Date().toISOString().split('T')[0],
+            approval_date: docItem.approval_date || new Date().toISOString().split('T')[0],
+            effective_date: docItem.effective_date || docItem.approval_date || new Date().toISOString().split('T')[0],
+            next_due_date: docItem.next_due_date || docItem.review_date || '2027-08-01'
+          };
+          const updated = idx >= 0 ? prevDocs.map(d => d.ref_code === docItem.ref_code ? newDocEntry : d) : [newDocEntry, ...prevDocs];
+          
+          saveAllToLocalStorage(facilityInfo, updated);
+          return updated;
+        });
+
+        setToastMsg(`✓ Quick Master Setup Loop updated [${docItem.ref_code}] -> Resolved Module: [${resolvedModule}]`);
+        setTimeout(() => setToastMsg(null), 4500);
+      }
+    };
+
+    window.addEventListener('sh_doc_ref_loop_applied', handleLoopAppliedEvent);
+    window.addEventListener('sh_doc_ref_updated', handleLoopAppliedEvent);
+
+    return () => {
+      window.removeEventListener('sh_doc_ref_loop_applied', handleLoopAppliedEvent);
+      window.removeEventListener('sh_doc_ref_updated', handleLoopAppliedEvent);
+    };
+  }, [facilityInfo, clientKey]);
 
   // Handle Ref Code or Doc Name Change in Form
   const handleDocCodeOrNameChange = (code: string, name: string) => {
@@ -1904,6 +1979,61 @@ export default function QuickMasterSetup({
               {isExportingIndexPdf ? 'Exporting Index PDF...' : 'Download Document Index Report (.pdf)'}
             </button>
           </div>
+        </div>
+
+        {/* Quick Master Setup Loop Connection Banner */}
+        <div className="bg-slate-50 p-3.5 rounded-2xl border border-indigo-200">
+          <DocRefLoopSelector
+            currentRefCode={docForm.ref_code}
+            onApplyLoop={(data: DocRefLoopData) => {
+              const resolvedModule = data.module_name || deriveModuleName(data.ref_code, data.doc_name || '');
+              
+              setDocForm({
+                ref_code: data.ref_code,
+                doc_name: data.doc_name || 'System Access Review Summary Report',
+                module_name: resolvedModule,
+                version_control: data.version || 'v2.0 (Master Loop)',
+                classification: data.classification || 'RESTRICTED / CONFIDENTIAL',
+                framework_group: data.framework_group || 'Basic',
+                prepared_by: data.prepared_by || 'Aseef Sulaiman (IT Manager)',
+                reviewed_by: data.reviewed_by || 'Sarah Jenkins (Compliance Officer)',
+                approved_by: data.approved_by || 'Dr. Faisal Al-Mansoori (Medical Director)',
+                issue_date: data.issue_date || new Date().toISOString().split('T')[0],
+                approval_date: data.approval_date || data.issue_date || new Date().toISOString().split('T')[0],
+                effective_date: data.approval_date || data.issue_date || new Date().toISOString().split('T')[0],
+                next_due_date: data.review_date || (() => {
+                  const d = new Date(); d.setFullYear(d.getFullYear() + 1); return d.toISOString().split('T')[0];
+                })()
+              });
+
+              // Upsert into master document records table
+              setDocuments(prevDocs => {
+                const idx = prevDocs.findIndex(d => d.ref_code === data.ref_code);
+                const newDocEntry: DocumentReferenceItem = {
+                  id: idx >= 0 ? prevDocs[idx].id : `doc-ref-loop-${Date.now()}`,
+                  ref_code: data.ref_code,
+                  doc_name: data.doc_name || 'System Access Review Summary Report',
+                  module_name: resolvedModule,
+                  version_control: data.version || 'v2.0 (Master Loop)',
+                  classification: data.classification || 'RESTRICTED / CONFIDENTIAL',
+                  framework_group: data.framework_group || 'Basic',
+                  prepared_by: data.prepared_by || 'Aseef Sulaiman (IT Manager)',
+                  reviewed_by: data.reviewed_by || 'Sarah Jenkins (Compliance Officer)',
+                  approved_by: data.approved_by || 'Dr. Faisal Al-Mansoori (Medical Director)',
+                  issue_date: data.issue_date || new Date().toISOString().split('T')[0],
+                  approval_date: data.approval_date || new Date().toISOString().split('T')[0],
+                  effective_date: data.approval_date || new Date().toISOString().split('T')[0],
+                  next_due_date: data.review_date || '2027-08-01'
+                };
+                const updated = idx >= 0 ? prevDocs.map(d => d.ref_code === data.ref_code ? newDocEntry : d) : [newDocEntry, ...prevDocs];
+                saveAllToLocalStorage(facilityInfo, updated);
+                return updated;
+              });
+
+              setToastMsg(`✓ Auto-Resolved Module: [${resolvedModule}] for Reference Code [${data.ref_code}]`);
+              setTimeout(() => setToastMsg(null), 3500);
+            }}
+          />
         </div>
 
         {/* Add / Edit Form Row */}
